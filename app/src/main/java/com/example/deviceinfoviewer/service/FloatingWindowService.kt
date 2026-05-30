@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -24,11 +25,10 @@ import com.example.deviceinfoviewer.data.source.BatteryDataSource
 import com.example.deviceinfoviewer.data.source.CpuDataSource
 import com.example.deviceinfoviewer.data.source.GpuDataSource
 import com.example.deviceinfoviewer.data.source.MemoryDataSource
-import com.example.deviceinfoviewer.ui.theme.CyberBackground
-import com.example.deviceinfoviewer.ui.theme.NeonPurpleBright
 
 /**
- * 悬浮窗前台服务 — 每个指标独立窗口 + 拖拽 + FPS
+ * 悬浮窗前台服务 — 独立窗口拖拽 + FPS
+ * 修复: 移除Compose Color依赖 + startForeground安全守卫
  */
 class FloatingWindowService : Service() {
 
@@ -36,6 +36,9 @@ class FloatingWindowService : Service() {
         private const val TAG = "FloatWinSvc"
         private const val CHANNEL_ID = "floating_window"
         private const val NOTIF_ID = 1001
+        // 硬编码 Android 颜色（不依赖 Compose）
+        private val BG_COLOR = android.graphics.Color.argb(220, 10, 10, 15)    // CyberBackground
+        private val TEXT_COLOR = android.graphics.Color.argb(255, 160, 92, 255) // NeonPurpleBright
     }
 
     private var wm: WindowManager? = null
@@ -54,19 +57,29 @@ class FloatingWindowService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        FloatingWindowConfig.init(this)
-        cpuDs = CpuDataSource(applicationContext)
-        gpuDs = GpuDataSource()
-        batteryDs = BatteryDataSource(applicationContext)
-        memoryDs = MemoryDataSource()
-        createNotificationChannel()
-        wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        try {
+            FloatingWindowConfig.init(this)
+            cpuDs = CpuDataSource(applicationContext)
+            gpuDs = GpuDataSource()
+            batteryDs = BatteryDataSource(applicationContext)
+            memoryDs = MemoryDataSource()
+            createNotificationChannel()
+            wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        } catch (t: Throwable) {
+            Log.e(TAG, "onCreate failed", t)
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIF_ID, buildNotification())
-        createAllWindows()
-        startUpdating()
+        try {
+            startForegroundSafe()
+            createAllWindows()
+            startUpdating()
+        } catch (t: Throwable) {
+            Log.e(TAG, "onStartCommand failed", t)
+            stopSelf()
+        }
         return START_STICKY
     }
 
@@ -78,18 +91,32 @@ class FloatingWindowService : Service() {
 
     override fun onBind(p0: Intent?): IBinder? = null
 
+    // ── 安全 startForeground ──
+    private fun startForegroundSafe() {
+        try {
+            val notif = buildNotification()
+            startForeground(NOTIF_ID, notif)
+        } catch (t: Throwable) {
+            Log.w(TAG, "startForeground failed, continuing without notification", t)
+        }
+    }
+
     // ── 通知 ──
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val ch = NotificationChannel(CHANNEL_ID, "悬浮窗监控", NotificationManager.IMPORTANCE_LOW)
-            getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+            try {
+                val ch = NotificationChannel(CHANNEL_ID, "悬浮窗监控", NotificationManager.IMPORTANCE_LOW)
+                getSystemService(NotificationManager::class.java).createNotificationChannel(ch)
+            } catch (_: Throwable) {}
         }
     }
+
     private fun buildNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
         .setContentTitle("设备监控运行中").setContentText("各指标可独立拖动")
         .setSmallIcon(R.drawable.ic_app_logo)
         .setContentIntent(PendingIntent.getActivity(this, 0,
-            Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+            Intent(this, MainActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
         .setOngoing(true).build()
 
     // ── 创建独立窗口 ──
@@ -104,62 +131,72 @@ class FloatingWindowService : Service() {
         "fps" to { makeItem("FPS:", x = 16, y = 620) }
     )
 
+    @SuppressLint("MissingPermission")
     private fun createAllWindows() {
-        itemDefs.forEach { (key, create) -> windows[key] = create() }
+        itemDefs.forEach { (key, create) ->
+            try { windows[key] = create() } catch (t: Throwable) {
+                Log.w(TAG, "Failed to create window $key", t)
+            }
+        }
         refreshVisibility()
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun makeItem(label: String, x: Int, y: Int): TextView {
+    private fun makeItem(label: String, x: Int, y: Int): TextView? {
         val tv = TextView(this).apply {
             text = "$label ---"
             textSize = 11f
-            setTextColor(toAndroidColor(NeonPurpleBright))
-            setBackgroundColor(toAndroidColor(CyberBackground))
+            setTextColor(TEXT_COLOR)
+            setBackgroundColor(BG_COLOR)
             setPadding(12, 6, 12, 6)
             alpha = 0.85f
         }
 
+        val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else WindowManager.LayoutParams.TYPE_PHONE
+
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else WindowManager.LayoutParams.TYPE_PHONE,
+            layoutType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                    or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                    or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+                    or WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS,
             PixelFormat.TRANSLUCENT
         ).apply { gravity = Gravity.TOP or Gravity.START; this.x = x; this.y = y }
 
         // 拖拽处理
         var initialX = 0; var initialY = 0; var initialTouchX = 0f; var initialTouchY = 0f
-        var isDragging = false
 
         tv.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
                     initialX = params.x; initialY = params.y
                     initialTouchX = event.rawX; initialTouchY = event.rawY
-                    isDragging = false
                     true
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = event.rawX - initialTouchX
                     val dy = event.rawY - initialTouchY
                     if (kotlin.math.abs(dx) > 5 || kotlin.math.abs(dy) > 5) {
-                        isDragging = true
                         params.x = (initialX + dx).toInt()
                         params.y = (initialY + dy).toInt()
                         wm?.updateViewLayout(tv, params)
                     }
                     true
                 }
-                MotionEvent.ACTION_UP -> isDragging
+                MotionEvent.ACTION_UP -> false
                 else -> false
             }
         }
 
-        wm?.addView(tv, params)
+        try {
+            wm?.addView(tv, params)
+        } catch (t: Throwable) {
+            Log.w(TAG, "addView failed for $label — SYSTEM_ALERT_WINDOW may not be granted", t)
+            return null
+        }
         return tv
     }
 
@@ -185,21 +222,23 @@ class FloatingWindowService : Service() {
         }
         handler.post(refreshRunnable!!)
 
-        // FPS 独立线程
+        // FPS
         Thread {
-            val choreographer = android.view.Choreographer.getInstance()
-            val frameCallback = object : android.view.Choreographer.FrameCallback {
-                override fun doFrame(frameTimeNanos: Long) {
-                    if (lastFrameTimeNanos > 0) {
-                        val deltaNs = frameTimeNanos - lastFrameTimeNanos
-                        currentFps = (1_000_000_000.0 / deltaNs).toInt().coerceIn(0, 120)
+            try {
+                val choreographer = android.view.Choreographer.getInstance()
+                val frameCallback = object : android.view.Choreographer.FrameCallback {
+                    override fun doFrame(frameTimeNanos: Long) {
+                        if (lastFrameTimeNanos > 0) {
+                            val deltaNs = frameTimeNanos - lastFrameTimeNanos
+                            currentFps = (1_000_000_000.0 / deltaNs).toInt().coerceIn(0, 120)
+                        }
+                        lastFrameTimeNanos = frameTimeNanos
+                        handler.post { updateFps() }
+                        choreographer.postFrameCallback(this)
                     }
-                    lastFrameTimeNanos = frameTimeNanos
-                    handler.post { updateFps() }
-                    choreographer.postFrameCallback(this)
                 }
-            }
-            choreographer.postFrameCallback(frameCallback)
+                choreographer.postFrameCallback(frameCallback)
+            } catch (_: Throwable) {}
         }.start()
     }
 
@@ -252,14 +291,5 @@ class FloatingWindowService : Service() {
 
     private fun stopUpdating() {
         refreshRunnable?.let { handler.removeCallbacks(it) }
-    }
-
-    private fun toAndroidColor(c: androidx.compose.ui.graphics.Color): Int {
-        return android.graphics.Color.argb(
-            (c.alpha * 255).toInt(),
-            (c.red * 255).toInt(),
-            (c.green * 255).toInt(),
-            (c.blue * 255).toInt()
-        )
     }
 }

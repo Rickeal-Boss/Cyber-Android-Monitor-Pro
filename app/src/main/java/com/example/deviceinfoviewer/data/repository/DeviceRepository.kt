@@ -155,13 +155,10 @@ class DeviceRepository(context: Context) {
         }
         runCatching { networkInterfacesLiveData.postValue(networkInterfaceDataSource.getNetworkInterfaces()) }
 
-        // 定期检查 GPS 启用状态（解决"有权限但显示未启用"问题）
+        // 定期检查 GPS 启用状态 — 始终推送以更新 UI 状态
         runCatching {
             gpsDataSource.checkGpsStatus()?.let { status ->
-                if (!status.gpsEnabled) {
-                    // GPS 被系统禁用时通知 UI
-                    gpsLiveData.postValue(status)
-                }
+                gpsLiveData.postValue(status)
             }
         }
 

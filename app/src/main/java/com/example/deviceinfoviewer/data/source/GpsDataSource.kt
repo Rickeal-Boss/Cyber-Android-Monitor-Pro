@@ -43,6 +43,13 @@ class GpsDataSource(private val context: Context) {
                 info.gpsEnabled = false
                 callback.onGpsStatusUpdate(info)
                 lastKnownEnabled = false
+            } else {
+                // GPS 已启用，发送初始状态（解决 UI 显示"未启用"问题）
+                val info = GpsStatusInfo()
+                info.gpsEnabled = true
+                info.fixAcquired = false
+                callback.onGpsStatusUpdate(info)
+                lastKnownEnabled = true
             }
 
             locationListener = object : LocationListener {
