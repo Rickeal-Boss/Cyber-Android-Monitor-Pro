@@ -1,6 +1,8 @@
 package com.example.deviceinfoviewer.data.source
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.location.GpsSatellite
 import android.location.GpsStatus
 import android.location.Location
@@ -9,6 +11,8 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Looper
+import android.util.Log
+import androidx.core.content.ContextCompat
 import com.example.deviceinfoviewer.data.model.GpsSatelliteInfo
 import com.example.deviceinfoviewer.data.model.GpsStatusInfo
 
@@ -18,9 +22,12 @@ class GpsDataSource(private val context: Context) {
     private val locationManager: LocationManager? = appContext.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
     private var listening = false
     private var locationListener: LocationListener? = null
-    private var gnssCallback: Any? = null  // GnssStatus.Callback via reflection
+    private var gnssCallback: Any? = null
     private var gpsListener: GpsStatus.Listener? = null
     private var lastKnownEnabled: Boolean? = null
+
+    // 保存最近一次真实数据用于恢复
+    private var lastRealStatus: GpsStatusInfo? = null
 
     fun interface GpsCallback {
         fun onGpsStatusUpdate(statusInfo: GpsStatusInfo)
@@ -32,115 +39,156 @@ class GpsDataSource(private val context: Context) {
         if (listening) return
         listening = true
 
+        // 检查定位权限
+        val hasLocationPermission = ContextCompat.checkSelfPermission(appContext,
+            Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        Log.d("GpsDS", "startListening, hasLocationPermission=$hasLocationPermission")
+
         try {
-            // 立即检查 GPS 是否在系统级别启用
             val providerEnabled = try {
                 lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
             } catch (_: Throwable) { false }
 
-            if (!providerEnabled) {
-                val info = GpsStatusInfo()
-                info.gpsEnabled = false
-                callback.onGpsStatusUpdate(info)
-                lastKnownEnabled = false
-            } else {
-                // GPS 已启用，发送初始状态（解决 UI 显示"未启用"问题）
-                val info = GpsStatusInfo()
-                info.gpsEnabled = true
-                info.fixAcquired = false
-                callback.onGpsStatusUpdate(info)
-                lastKnownEnabled = true
+            // 发送初始状态
+            val info = GpsStatusInfo()
+            info.gpsEnabled = providerEnabled && hasLocationPermission
+            info.fixAcquired = false
+            callback.onGpsStatusUpdate(info)
+            lastKnownEnabled = info.gpsEnabled
+
+            if (!info.gpsEnabled) {
+                Log.w("GpsDS", "GPS disabled or no permission")
+                return
             }
 
+            // 尝试获取被动定位（快速获取最后一次已知位置）
+            try {
+                val lastLoc = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+                    ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+                    ?: lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+                if (lastLoc != null) {
+                    val li = GpsStatusInfo()
+                    li.gpsEnabled = true
+                    li.fixAcquired = true
+                    li.latitude = lastLoc.latitude
+                    li.longitude = lastLoc.longitude
+                    li.accuracy = lastLoc.accuracy
+                    callback.onGpsStatusUpdate(li)
+                    lastRealStatus = li
+                    Log.d("GpsDS", "Got last known location")
+                }
+            } catch (_: Throwable) {}
+
+            // 位置监听器
             locationListener = object : LocationListener {
                 override fun onLocationChanged(location: Location) {
-                    val info = GpsStatusInfo()
-                    info.gpsEnabled = true
-                    info.fixAcquired = true
-                    info.latitude = location.latitude
-                    info.longitude = location.longitude
-                    info.accuracy = location.accuracy
+                    val li = GpsStatusInfo()
+                    li.gpsEnabled = true
+                    li.fixAcquired = true
+                    li.latitude = location.latitude
+                    li.longitude = location.longitude
+                    li.accuracy = location.accuracy
+                    // 保留卫星数据
+                    lastRealStatus?.satellites?.let { li.satellites = it }
+                    lastRealStatus?.satelliteCount?.let { li.satelliteCount = it }
+                    lastRealStatus = li
                     lastKnownEnabled = true
-                    callback.onGpsStatusUpdate(info)
+                    Log.d("GpsDS", "onLocationChanged: ${location.latitude},${location.longitude}")
+                    callback.onGpsStatusUpdate(li)
                 }
                 override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
                 override fun onProviderEnabled(provider: String) {
-                    // GPS 被系统启用时通知 UI
                     lastKnownEnabled = true
-                    val info = GpsStatusInfo()
-                    info.gpsEnabled = true
-                    callback.onGpsStatusUpdate(info)
+                    val ei = GpsStatusInfo()
+                    ei.gpsEnabled = true
+                    callback.onGpsStatusUpdate(ei)
                 }
                 override fun onProviderDisabled(provider: String) {
-                    // GPS 被系统禁用时通知 UI
                     lastKnownEnabled = false
-                    val info = GpsStatusInfo()
-                    info.gpsEnabled = false
-                    callback.onGpsStatusUpdate(info)
+                    val di = GpsStatusInfo()
+                    di.gpsEnabled = false
+                    callback.onGpsStatusUpdate(di)
                 }
             }
 
+            // 策略 1: GNSS Callback (API 24+，反射)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && tryGnssCallback(lm, callback)) {
-                // GNSS callback set via reflection
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener!!, Looper.getMainLooper())
-            } else {
-                // API 21-23 fallback
+                Log.d("GpsDS", "Using GNSS callback")
+            }
+            // 策略 2: GpsStatus.Listener (API 21-23 或 GNSS 反射失败)
+            else {
+                Log.d("GpsDS", "Using GpsStatus.Listener")
                 gpsListener = GpsStatus.Listener { event ->
                     try {
                         @Suppress("DEPRECATION")
                         val gpsStatus = lm.getGpsStatus(null) ?: return@Listener
-                        val info = GpsStatusInfo()
-                        info.gpsEnabled = true
-                        info.satelliteCount = gpsStatus.maxSatellites
+                        val si = GpsStatusInfo()
+                        si.gpsEnabled = true
+                        si.satelliteCount = gpsStatus.maxSatellites
                         val satellites = mutableListOf<GpsSatelliteInfo>()
                         var usedCount = 0
                         @Suppress("DEPRECATION")
                         for (sat in gpsStatus.satellites) {
-                            val si = GpsSatelliteInfo()
-                            si.prn = sat.prn
-                            si.snr = sat.snr
-                            si.elevation = sat.elevation
-                            si.azimuth = sat.azimuth
-                            si.usedInFix = sat.usedInFix()
+                            val s = GpsSatelliteInfo()
+                            s.prn = sat.prn
+                            s.snr = sat.snr
+                            s.elevation = sat.elevation
+                            s.azimuth = sat.azimuth
+                            s.usedInFix = sat.usedInFix()
                             if (sat.usedInFix()) usedCount++
-                            satellites.add(si)
+                            satellites.add(s)
                         }
-                        info.satellites = satellites
-                        info.fixAcquired = usedCount > 0
+                        si.satellites = satellites
+                        si.fixAcquired = usedCount > 0
+                        // 保留坐标
+                        lastRealStatus?.let { r ->
+                            if (!r.latitude.isNaN()) { si.latitude = r.latitude; si.longitude = r.longitude }
+                        }
+                        lastRealStatus = si
                         lastKnownEnabled = true
-                        callback.onGpsStatusUpdate(info)
-                    } catch (_: Exception) {}
+                        Log.d("GpsDS", "GpsStatus.Listener: ${satellites.size} sats, fix=$usedCount")
+                        callback.onGpsStatusUpdate(si)
+                    } catch (_: Throwable) {}
                 }
                 lm.addGpsStatusListener(gpsListener!!)
-                lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener!!, Looper.getMainLooper())
             }
+
+            // 始终请求位置更新（两种策略都需要）
+            lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000L, 0f, locationListener!!, Looper.getMainLooper())
+            // 额外 PASSIVE 更新源
+            try {
+                lm.requestLocationUpdates(LocationManager.PASSIVE_PROVIDER, 2000L, 0f, locationListener!!, Looper.getMainLooper())
+            } catch (_: Throwable) {}
+
         } catch (_: SecurityException) {
-            val info = GpsStatusInfo()
-            info.gpsEnabled = false
-            callback.onGpsStatusUpdate(info)
-        } catch (_: Throwable) {
-            // 某些设备上 LocationManager 可能直接抛异常
+            Log.w("GpsDS", "SecurityException - permission denied")
+            val si = GpsStatusInfo()
+            si.gpsEnabled = false
+            callback.onGpsStatusUpdate(si)
+        } catch (t: Throwable) {
+            Log.e("GpsDS", "startListening failed", t)
         }
     }
 
     /**
      * 检查 GPS 启用状态（供 Repository 定期轮询）
+     * 仅在 GPS 被禁用时返回非 null（避免空白数据覆盖真实卫星信息）
      */
     fun checkGpsStatus(): GpsStatusInfo? {
         val lm = locationManager ?: return null
-        val info = GpsStatusInfo()
         return try {
-            info.gpsEnabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
-            // 保留上次已知的卫星数据
-            if (!info.gpsEnabled) {
+            val enabled = lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+            if (!enabled) {
                 lastKnownEnabled = false
+                GpsStatusInfo().apply { gpsEnabled = false }
+            } else {
+                null
             }
-            info
         } catch (_: Throwable) { null }
     }
 
     /**
-     * 通过反射设置 GnssStatus.Callback，避免直接引用 GnssStatus 导致 API<24 类加载崩溃
+     * 通过反射设置 GnssStatus.Callback
      */
     private fun tryGnssCallback(lm: LocationManager, callback: GpsCallback): Boolean {
         return try {
@@ -151,13 +199,12 @@ class GpsDataSource(private val context: Context) {
             ) { _, method, args ->
                 if (method.name == "onSatelliteStatusChanged" && args != null && args.isNotEmpty()) {
                     val status = args[0]
-                    val info = GpsStatusInfo()
-                    info.gpsEnabled = true
+                    val si = GpsStatusInfo()
+                    si.gpsEnabled = true
                     try {
                         val getSatelliteCount = gnssStatusClass.getMethod("getSatelliteCount")
-                        info.satelliteCount = getSatelliteCount.invoke(status) as Int
+                        si.satelliteCount = getSatelliteCount.invoke(status) as Int
                         val getSvid = gnssStatusClass.getMethod("getSvid", Int::class.java)
-                        val getConstellationType = gnssStatusClass.getMethod("getConstellationType", Int::class.java)
                         val getCn0DbHz = gnssStatusClass.getMethod("getCn0DbHz", Int::class.java)
                         val getElevation = gnssStatusClass.getMethod("getElevationDegrees", Int::class.java)
                         val getAzimuth = gnssStatusClass.getMethod("getAzimuthDegrees", Int::class.java)
@@ -174,11 +221,17 @@ class GpsDataSource(private val context: Context) {
                             if (sat.usedInFix) usedCount++
                             satellites.add(sat)
                         }
-                        info.satellites = satellites
-                        info.fixAcquired = usedCount > 0
+                        si.satellites = satellites
+                        si.fixAcquired = usedCount > 0
+                        // 保留坐标
+                        lastRealStatus?.let { r ->
+                            if (!r.latitude.isNaN()) { si.latitude = r.latitude; si.longitude = r.longitude }
+                        }
+                        lastRealStatus = si
+                        lastKnownEnabled = true
+                        Log.d("GpsDS", "GNSS callback: ${satellites.size} sats, fix=$usedCount")
                     } catch (_: Throwable) {}
-                    lastKnownEnabled = true
-                    callback.onGpsStatusUpdate(info)
+                    callback.onGpsStatusUpdate(si)
                 }
                 null
             }
@@ -187,7 +240,10 @@ class GpsDataSource(private val context: Context) {
                 callbackClass, android.os.Handler::class.java)
             registerMethod.invoke(lm, gnssCallbackInstance, null)
             true
-        } catch (_: Throwable) { false }
+        } catch (t: Throwable) {
+            Log.w("GpsDS", "tryGnssCallback failed: ${t.message}")
+            false
+        }
     }
 
     fun stopListening() {

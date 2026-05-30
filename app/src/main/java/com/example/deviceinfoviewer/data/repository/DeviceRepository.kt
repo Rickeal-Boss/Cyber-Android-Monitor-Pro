@@ -155,7 +155,7 @@ class DeviceRepository(context: Context) {
         }
         runCatching { networkInterfacesLiveData.postValue(networkInterfaceDataSource.getNetworkInterfaces()) }
 
-        // 定期检查 GPS 启用状态 — 始终推送以更新 UI 状态
+        // 定期检查 GPS 启用状态（只在 GPS 被禁用时通知 UI）
         runCatching {
             gpsDataSource.checkGpsStatus()?.let { status ->
                 gpsLiveData.postValue(status)
