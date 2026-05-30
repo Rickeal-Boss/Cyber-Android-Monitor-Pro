@@ -1,0 +1,483 @@
+classDiagram
+    direction TB
+
+    %% ── 数据模型 ──
+    class CpuInfo {
+        +String architecture
+        +int coreCount
+        +List~CpuCoreInfo~ cores
+        +float temperatureCelsius
+        +long timestamp
+    }
+
+    class CpuCoreInfo {
+        +int coreIndex
+        +long currentFreqKHz
+        +long maxFreqKHz
+        +long minFreqKHz
+        +String governor
+    }
+
+    class GpuInfo {
+        +String model
+        +String vendor
+        +long frequencyKHz
+        +float temperatureCelsius
+        +long timestamp
+    }
+
+    class BatteryInfo {
+        +float temperatureCelsius
+        +float powerMilliwatts
+        +int cycleCount
+        +int capacityNowMAh
+        +int capacityDesignMAh
+        +int levelPercent
+        +String chargeStatus
+        +String health
+        +String technology
+        +float voltage
+        +long timestamp
+    }
+
+    class MemoryInfo {
+        +long totalKB
+        +long availableKB
+        +long usedKB
+        +long swapTotalKB
+        +long swapUsedKB
+        +long zramOriginalKB
+        +long zramCompressedKB
+        +float compressionRatio
+        +long timestamp
+    }
+
+    class StorageInfo {
+        +long internalTotalBytes
+        +long internalUsedBytes
+        +long internalAvailableBytes
+        +List~PartitionInfo~ partitions
+    }
+
+    class PartitionInfo {
+        +String mountPoint
+        +long totalBytes
+        +long usedBytes
+        +long availableBytes
+    }
+
+    class NetworkInterfaceInfo {
+        +String name
+        +String ipAddress
+        +String macAddress
+        +int mtu
+        +long rxBytes
+        +long txBytes
+    }
+
+    class WifiDetailInfo {
+        +String ssid
+        +String bssid
+        +int signalDbm
+        +int linkSpeedMbps
+        +String ipv4
+        +String ipv6
+        +String macAddress
+        +String gateway
+        +String dns
+        +String subnetMask
+    }
+
+    class MobileNetworkInfo {
+        +String networkType
+        +String operatorName
+        +String mccMnc
+        +int signalStrengthDbm
+        +boolean isRoaming
+    }
+
+    class GpsSatelliteInfo {
+        +int prn
+        +String constellation
+        +float snr
+        +float elevation
+        +float azimuth
+        +boolean usedInFix
+    }
+
+    class GpsStatusInfo {
+        +boolean gpsEnabled
+        +boolean fixAcquired
+        +double latitude
+        +double longitude
+        +float accuracy
+        +int satelliteCount
+        +List~GpsSatelliteInfo~ satellites
+    }
+
+    class SensorItemInfo {
+        +String name
+        +int type
+        +String vendor
+        +float powerMa
+        +float maxRange
+        +float resolution
+        +int minDelay
+    }
+
+    class SystemInfo {
+        +Map~String,String~ buildFields
+        +String androidVersion
+        +String kernelVersion
+        +String javaVmVersion
+        +String javaRuntimeName
+        +String bootloader
+        +String securityPatch
+    }
+
+    class HistoryDataPoint {
+        +long timestampMillis
+        +float value
+        +String seriesName
+    }
+
+    %% ── DataSource 层 ──
+    class SysFsReader {
+        <<utility>>
+        +static String readLine(String path)
+        +static List~String~ readLines(String path)
+        +static long readLong(String path)
+        +static float readFloat(String path)
+        +static boolean fileExists(String path)
+        +static List~String~ listDir(String path)
+        +static String readProp(String key)
+    }
+
+    class CpuDataSource {
+        -SysFsReader sysFsReader
+        +CpuInfo getCpuInfo()
+        +List~CpuCoreInfo~ getCoreFreqs()
+        +float getCpuTemperature()
+        -String findThermalZone()
+    }
+
+    class GpuDataSource {
+        -SysFsReader sysFsReader
+        +GpuInfo getGpuInfo()
+        -String findGpuPath()
+        -float findGpuThermalZone()
+    }
+
+    class BatteryDataSource {
+        -Context context
+        -SysFsReader sysFsReader
+        +BatteryInfo getBatteryInfo()
+        +int getBatteryCycleCount()
+        -int tryChargeCounter()
+        -int tryCycleCount()
+        -int tryVendorProp()
+    }
+
+    class MemoryDataSource {
+        -SysFsReader sysFsReader
+        +MemoryInfo getMemoryInfo()
+        -long[] parseMeminfo()
+        -ZramStats getZramStats()
+    }
+
+    class StorageDataSource {
+        +StorageInfo getStorageInfo()
+        -List~PartitionInfo~ getPartitions()
+    }
+
+    class NetworkInterfaceDataSource {
+        +List~NetworkInterfaceInfo~ getNetworkInterfaces()
+    }
+
+    class WifiDataSource {
+        -Context context
+        +WifiDetailInfo getWifiDetail()
+    }
+
+    class MobileNetworkDataSource {
+        -Context context
+        +MobileNetworkInfo getMobileNetworkInfo()
+    }
+
+    class GpsDataSource {
+        -Context context
+        +void startListening(GpsCallback callback)
+        +void stopListening()
+        +GpsStatusInfo getCurrentStatus()
+    }
+
+    class SensorDataSource {
+        -Context context
+        +List~SensorItemInfo~ getAllSensors()
+    }
+
+    class SystemDataSource {
+        +SystemInfo getSystemInfo()
+        -Map~String,String~ collectBuildFields()
+    }
+
+    %% ── Repository 层 ──
+    class DeviceRepository {
+        -CpuDataSource cpuSource
+        -GpuDataSource gpuSource
+        -BatteryDataSource batterySource
+        -MemoryDataSource memorySource
+        -StorageDataSource storageSource
+        -WifiDataSource wifiSource
+        -MobileNetworkDataSource mobileSource
+        -NetworkInterfaceDataSource netIfSource
+        -GpsDataSource gpsSource
+        -SensorDataSource sensorSource
+        -SystemDataSource systemSource
+        -HistoryCache historyCache
+        -ScheduledExecutorService scheduler
+        +LiveData~CpuInfo~ getCpuLiveData()
+        +LiveData~BatteryInfo~ getBatteryLiveData()
+        +LiveData~MemoryInfo~ getMemoryLiveData()
+        +LiveData~List~NetworkInterfaceInfo~~ getNetworkInterfacesLiveData()
+        +LiveData~WifiDetailInfo~ getWifiLiveData()
+        +LiveData~MobileNetworkInfo~ getMobileNetworkLiveData()
+        +LiveData~GpsStatusInfo~ getGpsLiveData()
+        +LiveData~List~SensorItemInfo~~ getSensorsLiveData()
+        +LiveData~SystemInfo~ getSystemLiveData()
+        +LiveData~StorageInfo~ getStorageLiveData()
+        +LiveData~GpuInfo~ getGpuLiveData()
+        +void startMonitoring(int intervalMs)
+        +void stopMonitoring()
+        +List~HistoryDataPoint~ getHistory(String series, long from, long to)
+    }
+
+    class HistoryCache {
+        -Map~String,LinkedList~HistoryDataPoint~~ seriesMap
+        -long maxAgeMillis
+        +void addPoint(String series, float value)
+        +List~HistoryDataPoint~ getSeries(String series, long from, long to)
+        +List~String~ getAvailableSeries()
+        +void pruneOldData()
+    }
+
+    %% ── ViewModel 层 ──
+    class DashboardViewModel {
+        -DeviceRepository repository
+        +LiveData~CpuInfo~ cpuInfo
+        +LiveData~BatteryInfo~ batteryInfo
+        +LiveData~MemoryInfo~ memoryInfo
+        +LiveData~StorageInfo~ storageInfo
+        +void startRefresh(int intervalMs)
+        +void stopRefresh()
+    }
+
+    class HardwareViewModel {
+        -DeviceRepository repository
+        +LiveData~CpuInfo~ cpuInfo
+        +LiveData~GpuInfo~ gpuInfo
+        +LiveData~List~SensorItemInfo~~ sensors
+        +void startRefresh(int intervalMs)
+        +void stopRefresh()
+    }
+
+    class SystemViewModel {
+        -DeviceRepository repository
+        +LiveData~SystemInfo~ systemInfo
+        +LiveData~StorageInfo~ storageInfo
+        +void loadOnce()
+    }
+
+    class NetworkViewModel {
+        -DeviceRepository repository
+        +LiveData~WifiDetailInfo~ wifiInfo
+        +LiveData~MobileNetworkInfo~ mobileInfo
+        +LiveData~List~NetworkInterfaceInfo~~ interfaces
+        +LiveData~GpsStatusInfo~ gpsStatus
+        +void startRefresh(int intervalMs)
+        +void stopRefresh()
+    }
+
+    class BatteryViewModel {
+        -DeviceRepository repository
+        +LiveData~BatteryInfo~ batteryInfo
+        +List~HistoryDataPoint~ tempHistory
+        +List~HistoryDataPoint~ powerHistory
+        +List~HistoryDataPoint~ levelHistory
+        +void startRefresh(int intervalMs)
+        +void stopRefresh()
+    }
+
+    %% ── View / Service 层 ──
+    class MainActivity {
+        -TabLayout tabLayout
+        -ViewPager2 viewPager
+        -TabPagerAdapter adapter
+        -AppSettings settings
+        +onCreate()
+        +onOptionsItemSelected()
+    }
+
+    class TabPagerAdapter {
+        -List~Fragment~ fragments
+        -List~String~ titles
+        +getItemCount()
+        +createFragment(position)
+    }
+
+    class DashboardFragment {
+        -DashboardViewModel viewModel
+        -TextView cpuTemp, cpuFreq
+        -TextView batteryLevel, batteryTemp
+        -TextView ramUsage
+        -TextView storageUsage
+    }
+
+    class HardwareFragment {
+        -HardwareViewModel viewModel
+        -CpuBarChartView cpuBars
+        -RecyclerView sensorList
+        -SensorListAdapter sensorAdapter
+    }
+
+    class SystemFragment {
+        -SystemViewModel viewModel
+        -RecyclerView buildParamsList
+        -SearchView searchView
+    }
+
+    class NetworkFragment {
+        -NetworkViewModel viewModel
+        -RecyclerView netIfList
+        -NetworkInterfaceAdapter netIfAdapter
+    }
+
+    class BatteryFragment {
+        -BatteryViewModel viewModel
+        -HistoryChartView tempChart
+        -HistoryChartView powerChart
+        -HistoryChartView levelChart
+    }
+
+    class CpuBarChartView {
+        +void setCoreData(List~CpuCoreInfo~ cores)
+        +void updateFreqs(List~CpuCoreInfo~ cores)
+    }
+
+    class HistoryChartView {
+        -LineChart lineChart
+        +void addDataPoint(float value, long timestamp)
+        +void setData(List~HistoryDataPoint~ data)
+        +void setYAxisLabel(String label)
+        +void clear()
+    }
+
+    class SensorListAdapter {
+        -List~SensorItemInfo~ items
+    }
+
+    class NetworkInterfaceAdapter {
+        -List~NetworkInterfaceInfo~ items
+    }
+
+    class FloatingWindowService {
+        -WindowManager windowManager
+        -View floatingView
+        -DeviceRepository repository
+        -ScheduledExecutorService scheduler
+        +onCreate()
+        +onStartCommand()
+        +onDestroy()
+        -updateView()
+        -setupDragListener()
+    }
+
+    class DeviceMonitorService {
+        -DeviceRepository repository
+        +onStartCommand()
+        +onDestroy()
+    }
+
+    class AppSettings {
+        -SharedPreferences prefs
+        +int getRefreshIntervalMs()
+        +boolean isFloatingWindowEnabled()
+        +float getFloatingWindowAlpha()
+        +boolean isDarkModeEnabled()
+        +String getDarkModeMode()
+    }
+
+    class PermissionHelper {
+        +static String[] getRequiredPermissions()
+        +static boolean checkAllGranted(Context ctx)
+        +static void requestPermissions(Activity act, int step)
+    }
+
+    class ExportHelper {
+        +static String exportToText(DeviceRepository repo)
+        +static String exportToJson(DeviceRepository repo)
+        +static void shareReport(Context ctx, String content)
+    }
+
+    class FormatUtils {
+        +static String formatFreq(long khz)
+        +static String formatBytes(long bytes)
+        +static String formatTempCelsius(float temp)
+        +static String formatDbm(int dbm)
+        +static String formatPercent(int pct)
+    }
+
+    %% ── 关系 ──
+    DeviceRepository ..> CpuDataSource : uses
+    DeviceRepository ..> GpuDataSource : uses
+    DeviceRepository ..> BatteryDataSource : uses
+    DeviceRepository ..> MemoryDataSource : uses
+    DeviceRepository ..> StorageDataSource : uses
+    DeviceRepository ..> WifiDataSource : uses
+    DeviceRepository ..> MobileNetworkDataSource : uses
+    DeviceRepository ..> NetworkInterfaceDataSource : uses
+    DeviceRepository ..> GpsDataSource : uses
+    DeviceRepository ..> SensorDataSource : uses
+    DeviceRepository ..> SystemDataSource : uses
+    DeviceRepository --> HistoryCache : owns
+
+    CpuDataSource ..> SysFsReader : uses
+    GpuDataSource ..> SysFsReader : uses
+    BatteryDataSource ..> SysFsReader : uses
+    MemoryDataSource ..> SysFsReader : uses
+
+    DashboardViewModel --> DeviceRepository : observes
+    HardwareViewModel --> DeviceRepository : observes
+    SystemViewModel --> DeviceRepository : observes
+    NetworkViewModel --> DeviceRepository : observes
+    BatteryViewModel --> DeviceRepository : observes
+
+    DashboardFragment --> DashboardViewModel : observes
+    HardwareFragment --> HardwareViewModel : observes
+    HardwareFragment --> CpuBarChartView : contains
+    HardwareFragment --> SensorListAdapter : uses
+    SystemFragment --> SystemViewModel : observes
+    NetworkFragment --> NetworkViewModel : observes
+    NetworkFragment --> NetworkInterfaceAdapter : uses
+    BatteryFragment --> BatteryViewModel : observes
+    BatteryFragment --> HistoryChartView : contains
+
+    MainActivity --> TabPagerAdapter : owns
+    TabPagerAdapter ..> DashboardFragment : creates
+    TabPagerAdapter ..> HardwareFragment : creates
+    TabPagerAdapter ..> SystemFragment : creates
+    TabPagerAdapter ..> NetworkFragment : creates
+    TabPagerAdapter ..> BatteryFragment : creates
+
+    FloatingWindowService --> DeviceRepository : observes
+    DeviceMonitorService --> DeviceRepository : owns
+
+    CpuInfo *-- CpuCoreInfo : contains
+    GpsStatusInfo *-- GpsSatelliteInfo : contains
+    StorageInfo *-- PartitionInfo : contains
+
+    MainActivity ..> AppSettings : uses
+    MainActivity ..> PermissionHelper : uses
+    MainActivity ..> ExportHelper : uses
+
+    BatteryViewModel ..> HistoryDataPoint : uses

@@ -1,0 +1,165 @@
+sequenceDiagram
+    participant User
+    participant MainActivity
+    participant DashboardFragment
+    participant DashboardViewModel
+    participant DeviceRepository
+    participant CpuDataSource
+    participant SysFsReader
+    participant /sys/fs as /sys/devices/system/cpu
+
+    User->>MainActivity: 启动 App
+    MainActivity->>MainActivity: onCreate()
+    MainActivity->>MainActivity: 检查权限 → PermissionHelper.checkAllGranted()
+    alt 权限未授权
+        MainActivity->>User: 分步引导权限
+    end
+    MainActivity->>MainActivity: setupViewPager()
+    MainActivity->>TabPagerAdapter: createFragment(0) → DashboardFragment
+
+    DashboardFragment->>DashboardFragment: onCreateView()
+    DashboardFragment->>DashboardViewModel: new ViewModelProvider().get()
+
+    DashboardFragment->>DashboardFragment: onResume()
+    DashboardFragment->>DashboardViewModel: startRefresh(2000ms)
+
+    DashboardViewModel->>DeviceRepository: startMonitoring(2000ms)
+    DeviceRepository->>DeviceRepository: scheduler.scheduleAtFixedRate(...)
+
+    loop 每 2 秒
+        DeviceRepository->>CpuDataSource: getCpuInfo()
+        CpuDataSource->>SysFsReader: readLine("/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq")
+        SysFsReader->>/sys/fs: cat 读取
+        /sys/fs-->>SysFsReader: "1800000"
+        SysFsReader-->>CpuDataSource: "1800000"
+
+        CpuDataSource->>SysFsReader: 遍历 cpu0..cpuN
+        CpuDataSource->>SysFsReader: findThermalZone()
+
+        CpuDataSource-->>DeviceRepository: CpuInfo {cores, temp}
+
+        DeviceRepository-->>DashboardViewModel: cpuLiveData.postValue(cpuInfo)
+        DashboardViewModel-->>DashboardFragment: LiveData onChange
+        DashboardFragment->>DashboardFragment: updateUI()
+    end
+
+    DashboardFragment->>DashboardFragment: onPause()
+    DashboardFragment->>DashboardViewModel: stopRefresh()
+    DashboardViewModel->>DeviceRepository: stopMonitoring()
+
+---
+
+sequenceDiagram
+    participant User
+    participant MainActivity
+    participant FloatingWindowService
+    participant WindowManager
+    participant DeviceRepository
+    participant System
+
+    User->>MainActivity: 开启悬浮窗开关
+    MainActivity->>MainActivity: 检查 SYSTEM_ALERT_WINDOW 权限
+    alt 未授权
+        MainActivity->>System: ACTION_MANAGE_OVERLAY_PERMISSION
+        System-->>User: 权限设置页
+        User->>System: 授予权限
+    end
+
+    MainActivity->>FloatingWindowService: startService(intent)
+    FloatingWindowService->>FloatingWindowService: onCreate()
+    FloatingWindowService->>FloatingWindowService: startForeground(notification)
+    FloatingWindowService->>WindowManager: addView(floatingView, params)
+
+    FloatingWindowService->>DeviceRepository: startMonitoring(1000ms)
+
+    loop 每 1 秒
+        DeviceRepository-->>FloatingWindowService: cpuInfo, batteryInfo, memoryInfo
+        FloatingWindowService->>FloatingWindowService: updateView()
+        FloatingWindowService->>WindowManager: updateViewLayout()
+    end
+
+    User->>FloatingWindowService: 手指拖动悬浮窗
+    FloatingWindowService->>FloatingWindowService: onTouch ACTION_MOVE
+    FloatingWindowService->>WindowManager: updateViewLayout(newX, newY)
+
+    User->>FloatingWindowService: 长按悬浮窗
+    FloatingWindowService->>FloatingWindowService: 弹出设置 Dialog
+    User->>FloatingWindowService: 调节透明度 0.5
+    FloatingWindowService->>FloatingWindowService: view.setAlpha(0.5f)
+    FloatingWindowService->>AppSettings: setFloatingWindowAlpha(0.5f)
+
+    User->>MainActivity: 关闭悬浮窗开关
+    MainActivity->>FloatingWindowService: stopService(intent)
+    FloatingWindowService->>DeviceRepository: stopMonitoring()
+    FloatingWindowService->>WindowManager: removeView(floatingView)
+    FloatingWindowService->>FloatingWindowService: stopSelf()
+
+---
+
+sequenceDiagram
+    participant BatteryDataSource
+    participant SysFsReader
+    participant BatteryManager
+    participant Sysfs as /sys/class/power_supply/battery
+    participant VendorProp
+
+    BatteryDataSource->>BatteryDataSource: getBatteryCycleCount()
+
+    BatteryDataSource->>SysFsReader: readLong("/sys/class/power_supply/battery/charge_counter")
+    Sysfs-->>BatteryDataSource: 250000 (有效值)
+
+    alt charge_counter 返回有效值
+        BatteryDataSource-->>BatteryDataSource: return 250000 / 设计容量 → 估算循环次数
+    else charge_counter 不可用
+        BatteryDataSource->>SysFsReader: readLong("/sys/class/power_supply/battery/cycle_count")
+        alt cycle_count 有效
+            Sysfs-->>BatteryDataSource: 123
+            BatteryDataSource-->>BatteryDataSource: return 123
+        else cycle_count 不可用
+            BatteryDataSource->>SysFsReader: readProp("ro.vendor.battery.cycle")
+            alt 厂商属性存在
+                VendorProp-->>BatteryDataSource: "89"
+                BatteryDataSource-->>BatteryDataSource: return 89
+            else 全部失败
+                BatteryDataSource-->>BatteryDataSource: return -1 (显示 N/A)
+            end
+        end
+    end
+
+    Note over BatteryDataSource: 同时通过 BatteryManager 获取温度/电量/充电状态/功率
+    BatteryDataSource->>BatteryManager: BATTERY_PROPERTY_CAPACITY
+    BatteryManager-->>BatteryDataSource: 85
+    BatteryDataSource->>BatteryManager: BATTERY_PROPERTY_CURRENT_NOW
+    BatteryManager-->>BatteryDataSource: -450 (放电)
+    BatteryDataSource->>BatteryManager: EXTRA_TEMPERATURE
+    BatteryManager-->>BatteryDataSource: 320 (32.0°C)
+
+---
+
+sequenceDiagram
+    participant GpsDataSource
+    participant LocationManager
+    participant GnssCallback as GnssStatusCallback (API24+)
+    participant GpsListener as GpsStatus.Listener (API21-23)
+
+    GpsDataSource->>GpsDataSource: startListening()
+
+    alt Build.VERSION.SDK_INT >= 24
+        GpsDataSource->>LocationManager: registerGnssStatusCallback(gnssCallback)
+        LocationManager->>GnssCallback: onSatelliteStatusChanged(status)
+        GnssCallback->>GnssCallback: status.getSatellites() → GnssStatus
+        loop 遍历卫星
+            GnssCallback->>GnssCallback: getSvid(), getConstellationType()
+            GnssCallback->>GnssCallback: getCn0DbHz(), getAzimuthDegrees(), getElevationDegrees()
+        end
+        GnssCallback-->>GpsDataSource: GpsStatusInfo {satellites}
+    else API 21-23
+        GpsDataSource->>LocationManager: addGpsStatusListener(gpsListener)
+        LocationManager->>GpsListener: onGpsStatusChanged(event)
+        GpsListener->>GpsListener: locationManager.getGpsStatus(gpsStatus)
+        loop 遍历卫星
+            GpsListener->>GpsListener: gpsStatus.getSatellites() → GpsSatellite
+            GpsListener->>GpsListener: getPrn(), getSnr(), getAzimuth(), getElevation()
+        end
+        GpsListener-->>GpsDataSource: GpsStatusInfo {satellites}
+    end
