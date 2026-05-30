@@ -95,19 +95,24 @@ private fun DrawScope.drawSkyPlot(satellites: List<GpsSatelliteInfo>, canvasSize
     // ── 仰角标注 ──
     for (angle in listOf(0f, 30f, 60f)) {
         val r = radius * (1f - angle / 90f)
-        val labelX = cx + r * cos(-PI / 2 + PI / 4) * 0.7f  // 右下45°位置
-        drawSkyText("${angle.toInt()}°", labelX, cy + r * sin(-PI / 2 + PI / 4) * 0.7f, textColor, 10.sp)
+        val offsetAngle = (-PI / 2 + PI / 4).toFloat()
+        val labelX = cx + r * cos(offsetAngle) * 0.7f  // 右下45°位置
+        val labelY = cy + r * sin(offsetAngle) * 0.7f
+        drawSkyText("${angle.toInt()}°", labelX, labelY, textColor, 10.sp)
     }
 
     // ── 方位线（十字线 N/S/E/W）──
+    data class Direction(val azimuth: Float, val label: String)
     val directions = listOf(
-        Triple(0f, "N"),   // 上方 (azimuth 0° = North)
-        Triple(90f, "E"),  // 右侧
-        Triple(180f, "S"), // 下方
-        Triple(270f, "W")  // 左侧
+        Direction(0f, "N"),   // 上方 (azimuth 0° = North)
+        Direction(90f, "E"),  // 右侧
+        Direction(180f, "S"), // 下方
+        Direction(270f, "W")  // 左侧
     )
 
-    for ((az, label) in directions) {
+    for (dir in directions) {
+        val az = dir.azimuth
+        val label = dir.label
         val angleRad = Math.toRadians((90.0 - az).toDouble()).toFloat()
         val endX = cx + radius * cos(angleRad)
         val endY = cy - radius * sin(angleRad)
