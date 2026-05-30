@@ -42,7 +42,7 @@ class FloatingWindowService : Service() {
     }
 
     private var wm: WindowManager? = null
-    private val windows = mutableMapOf<String, View>()
+    private val windows = mutableMapOf<String, View?>()
     private val handler = Handler(Looper.getMainLooper())
     private var refreshRunnable: Runnable? = null
 
@@ -201,7 +201,7 @@ class FloatingWindowService : Service() {
     }
 
     private fun removeAllWindows() {
-        windows.values.forEach { try { wm?.removeView(it) } catch (_: Throwable) {} }
+        windows.values.filterNotNull().forEach { try { wm?.removeView(it) } catch (_: Throwable) {} }
         windows.clear()
     }
 
