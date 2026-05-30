@@ -26,6 +26,9 @@ class GpsDataSource(private val context: Context) {
     private var gpsListener: GpsStatus.Listener? = null
     private var lastKnownEnabled: Boolean? = null
 
+    // 反射缓存 — GnssStatus 方法
+    private var reflectGetConstellationType: java.lang.reflect.Method? = null  // API 26+
+
     // 保存最近一次真实数据用于恢复
     private var lastRealStatus: GpsStatusInfo? = null
 
@@ -91,6 +94,7 @@ class GpsDataSource(private val context: Context) {
                     // 保留卫星数据
                     lastRealStatus?.satellites?.let { li.satellites = it }
                     lastRealStatus?.satelliteCount?.let { li.satelliteCount = it }
+                    li.fixSatelliteCount = lastRealStatus?.fixSatelliteCount ?: 0
                     lastRealStatus = li
                     lastKnownEnabled = true
                     Log.d("GpsDS", "onLocationChanged: ${location.latitude},${location.longitude}")
@@ -124,25 +128,30 @@ class GpsDataSource(private val context: Context) {
                         val gpsStatus = lm.getGpsStatus(null) ?: return@Listener
                         val si = GpsStatusInfo()
                         si.gpsEnabled = true
-                        si.satelliteCount = gpsStatus.maxSatellites
                         val satellites = mutableListOf<GpsSatelliteInfo>()
                         var usedCount = 0
                         @Suppress("DEPRECATION")
                         for (sat in gpsStatus.satellites) {
-                            val s = GpsSatelliteInfo()
-                            s.prn = sat.prn
-                            s.snr = sat.snr
-                            s.elevation = sat.elevation
-                            s.azimuth = sat.azimuth
-                            s.usedInFix = sat.usedInFix()
+                            val (conName, conType) = GpsSatelliteInfo.constellationFromPrn(sat.prn)
+                            val s = GpsSatelliteInfo(
+                                prn = sat.prn,
+                                constellation = conName,
+                                constellationType = conType,
+                                snr = sat.snr,
+                                elevation = sat.elevation,
+                                azimuth = sat.azimuth,
+                                usedInFix = sat.usedInFix()
+                            )
                             if (sat.usedInFix()) usedCount++
                             satellites.add(s)
                         }
                         si.satellites = satellites
+                        si.satelliteCount = satellites.size
+                        si.fixSatelliteCount = usedCount
                         si.fixAcquired = usedCount > 0
                         // 保留坐标
                         lastRealStatus?.let { r ->
-                            if (!r.latitude.isNaN()) { si.latitude = r.latitude; si.longitude = r.longitude }
+                            if (!r.latitude.isNaN()) { si.latitude = r.latitude; si.longitude = r.longitude; si.accuracy = r.accuracy }
                         }
                         lastRealStatus = si
                         lastKnownEnabled = true
@@ -188,12 +197,29 @@ class GpsDataSource(private val context: Context) {
     }
 
     /**
-     * 通过反射设置 GnssStatus.Callback
+     * 通过反射设置 GnssStatus.Callback（完整版，含星座类型检测）
      */
     private fun tryGnssCallback(lm: LocationManager, callback: GpsCallback): Boolean {
         return try {
             val gnssStatusClass = Class.forName("android.location.GnssStatus")
             val callbackClass = Class.forName("android.location.GnssStatus\$Callback")
+
+            // 预取反射方法
+            val getSatelliteCount = gnssStatusClass.getMethod("getSatelliteCount")
+            val getSvid = gnssStatusClass.getMethod("getSvid", Int::class.java)
+            val getCn0DbHz = gnssStatusClass.getMethod("getCn0DbHz", Int::class.java)
+            val getElevation = gnssStatusClass.getMethod("getElevationDegrees", Int::class.java)
+            val getAzimuth = gnssStatusClass.getMethod("getAzimuthDegrees", Int::class.java)
+            val usedInFix = gnssStatusClass.getMethod("usedInFix", Int::class.java)
+
+            // getConstellationType 是 API 26+ 才有的
+            try {
+                reflectGetConstellationType = gnssStatusClass.getMethod("getConstellationType", Int::class.java)
+            } catch (_: Throwable) {
+                reflectGetConstellationType = null
+                Log.d("GpsDS", "getConstellationType not available (API<26)")
+            }
+
             val gnssCallbackInstance = java.lang.reflect.Proxy.newProxyInstance(
                 callbackClass.classLoader, arrayOf(callbackClass)
             ) { _, method, args ->
@@ -202,30 +228,52 @@ class GpsDataSource(private val context: Context) {
                     val si = GpsStatusInfo()
                     si.gpsEnabled = true
                     try {
-                        val getSatelliteCount = gnssStatusClass.getMethod("getSatelliteCount")
-                        si.satelliteCount = getSatelliteCount.invoke(status) as Int
-                        val getSvid = gnssStatusClass.getMethod("getSvid", Int::class.java)
-                        val getCn0DbHz = gnssStatusClass.getMethod("getCn0DbHz", Int::class.java)
-                        val getElevation = gnssStatusClass.getMethod("getElevationDegrees", Int::class.java)
-                        val getAzimuth = gnssStatusClass.getMethod("getAzimuthDegrees", Int::class.java)
-                        val usedInFix = gnssStatusClass.getMethod("usedInFix", Int::class.java)
+                        val count = getSatelliteCount.invoke(status) as Int
+                        si.satelliteCount = count
                         val satellites = mutableListOf<GpsSatelliteInfo>()
                         var usedCount = 0
-                        val count = getSatelliteCount.invoke(status) as Int
+
                         for (i in 0 until count) {
-                            val sat = GpsSatelliteInfo()
-                            sat.snr = (getCn0DbHz.invoke(status, i) as? Float) ?: 0f
-                            sat.elevation = (getElevation.invoke(status, i) as? Float) ?: 0f
-                            sat.azimuth = (getAzimuth.invoke(status, i) as? Float) ?: 0f
-                            sat.usedInFix = (usedInFix.invoke(status, i) as? Boolean) ?: false
+                            val svid = (getSvid.invoke(status, i) as? Int) ?: -1
+                            var conType = -1
+                            var conName = "?"
+
+                            // 尝试通过 getConstellationType 获取星座类型（API 26+）
+                            if (reflectGetConstellationType != null) {
+                                try {
+                                    conType = reflectGetConstellationType!!.invoke(status, i) as? Int ?: -1
+                                    conName = GpsSatelliteInfo.constellationLabel(conType)
+                                } catch (_: Throwable) {}
+                            }
+
+                            // 从 SVID + 星座类型推算 PRN
+                            val prn = if (conType > 0) svidToPrn(svid, conType) else svid
+
+                            // 回退到 PRN 范围检测
+                            if (conType < 0) {
+                                val (fallbackName, fallbackType) = GpsSatelliteInfo.constellationFromPrn(prn)
+                                conType = fallbackType
+                                conName = fallbackName
+                            }
+
+                            val sat = GpsSatelliteInfo(
+                                prn = prn,
+                                constellation = conName,
+                                constellationType = conType,
+                                snr = (getCn0DbHz.invoke(status, i) as? Float) ?: 0f,
+                                elevation = (getElevation.invoke(status, i) as? Float) ?: 0f,
+                                azimuth = (getAzimuth.invoke(status, i) as? Float) ?: 0f,
+                                usedInFix = (usedInFix.invoke(status, i) as? Boolean) ?: false
+                            )
                             if (sat.usedInFix) usedCount++
                             satellites.add(sat)
                         }
                         si.satellites = satellites
+                        si.fixSatelliteCount = usedCount
                         si.fixAcquired = usedCount > 0
                         // 保留坐标
                         lastRealStatus?.let { r ->
-                            if (!r.latitude.isNaN()) { si.latitude = r.latitude; si.longitude = r.longitude }
+                            if (!r.latitude.isNaN()) { si.latitude = r.latitude; si.longitude = r.longitude; si.accuracy = r.accuracy }
                         }
                         lastRealStatus = si
                         lastKnownEnabled = true
@@ -244,6 +292,20 @@ class GpsDataSource(private val context: Context) {
             Log.w("GpsDS", "tryGnssCallback failed: ${t.message}")
             false
         }
+    }
+
+    /**
+     * SVID + 星座类型 → 标准 PRN 编号
+     */
+    private fun svidToPrn(svid: Int, constellationType: Int): Int = when (constellationType) {
+        GpsSatelliteInfo.CONSTELLATION_GPS     -> svid
+        GpsSatelliteInfo.CONSTELLATION_SBAS    -> svid + 119
+        GpsSatelliteInfo.CONSTELLATION_GLONASS -> svid + 64
+        GpsSatelliteInfo.CONSTELLATION_QZSS    -> svid + 192
+        GpsSatelliteInfo.CONSTELLATION_BEIDOU  -> svid + 200
+        GpsSatelliteInfo.CONSTELLATION_GALILEO -> svid + 300
+        GpsSatelliteInfo.CONSTELLATION_IRNSS   -> svid + 400
+        else -> svid
     }
 
     fun stopListening() {

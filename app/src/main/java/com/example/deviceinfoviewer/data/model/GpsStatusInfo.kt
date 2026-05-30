@@ -7,5 +7,6 @@ data class GpsStatusInfo(
     var longitude: Double = Double.NaN,
     var accuracy: Float = Float.NaN,
     var satelliteCount: Int = 0,
+    var fixSatelliteCount: Int = 0,
     var satellites: MutableList<GpsSatelliteInfo> = mutableListOf()
 )
