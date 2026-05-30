@@ -97,13 +97,11 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
             }
         )
 
-        // ── 卫星分布天空图 ──
-        if (satellites.isNotEmpty()) {
-            SatelliteSkyView(
-                satellites = satellites,
-                title = "卫星分布图"
-            )
-        }
+        // ── 卫星分布天空图（始终显示，用于确认新代码已部署）──
+        SatelliteSkyView(
+            satellites = satellites,
+            title = if (satellites.isEmpty()) "卫星分布图 · 无卫星信号" else "卫星分布图"
+        )
 
         // ── 卫星列表 ──
         if (satellites.isNotEmpty()) {
