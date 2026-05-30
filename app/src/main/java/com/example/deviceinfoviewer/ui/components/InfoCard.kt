@@ -40,7 +40,7 @@ fun InfoCard(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Box(Modifier.fillMaxWidth().background(CardGradient, RoundedCornerShape(12.dp))) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CardGradient)) {
             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))
@@ -74,7 +74,7 @@ fun MetricCard(
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Box(Modifier.background(CardGradient, RoundedCornerShape(12.dp)).fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CardGradient)) {
             Column(Modifier.padding(14.dp)) {
                 Text(title, fontSize = 11.sp, color = TextSecondary, letterSpacing = 0.5.sp)
                 Spacer(Modifier.height(4.dp))

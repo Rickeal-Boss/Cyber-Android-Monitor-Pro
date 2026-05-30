@@ -254,7 +254,7 @@ private fun FloatingPillBottomBar(currentPage: Int, onTabSelected: (Int) -> Unit
             modifier = Modifier
                 .fillMaxWidth()
                 .height(62.dp)
-                .shadow(20.dp, PurpleGlowStrong, RoundedCornerShape(36.dp))
+                .shadow(elevation = 20.dp, shape = RoundedCornerShape(36.dp), ambientColor = PurpleGlowStrong)
                 .clip(RoundedCornerShape(36.dp))
                 .background(CyberPill)
                 .padding(4.dp),
