@@ -178,7 +178,12 @@ private fun DrawScope.drawSkyPlot(satellites: List<GpsSatelliteInfo>, canvasSize
  */
 private fun DrawScope.drawSkyText(text: String, x: Float, y: Float, color: Color, size: androidx.compose.ui.unit.TextUnit) {
     val paint = android.graphics.Paint().apply {
-        this.color = color.toArgb()
+        this.color = android.graphics.Color.argb(
+            (color.alpha * 255 + 0.5f).toInt(),
+            (color.red * 255 + 0.5f).toInt(),
+            (color.green * 255 + 0.5f).toInt(),
+            (color.blue * 255 + 0.5f).toInt()
+        )
         this.textSize = size.toPx()
         this.textAlign = android.graphics.Paint.Align.CENTER
         this.isAntiAlias = true
