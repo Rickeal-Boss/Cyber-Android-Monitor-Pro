@@ -28,6 +28,9 @@ import com.example.deviceinfoviewer.ui.theme.*
 // 卡片渐变 (匹配 Ardot 设计稿)
 private val CardGradient = Brush.linearGradient(listOf(CyberCardStart, CyberCardEnd))
 
+// 空图表 sentinel — 用于判断是否显示 fillMaxWidth
+private val NoChart: @Composable () -> Unit = {}
+
 @Composable
 fun InfoCard(
     title: String, subtitle: String, icon: ImageVector,
@@ -35,7 +38,7 @@ fun InfoCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth()
-            .shadow(12.dp, PurpleGlow, RoundedCornerShape(12.dp)),
+            .shadow(elevation = 12.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlow),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -64,12 +67,12 @@ fun MetricCard(
     title: String, value: String, modifier: Modifier = Modifier,
     valueColor: Color = NeonPurpleBright, subtitle: String = "",
     progress: Float = -1f, showProgress: Boolean = false,
-    chart: @Composable () -> Unit = {}
+    chart: @Composable () -> Unit = NoChart
 ) {
     Card(
         modifier = modifier
-            .then(if (chart == {}) Modifier.fillMaxWidth() else Modifier)
-            .shadow(10.dp, PurpleGlowLight, RoundedCornerShape(12.dp)),
+            .then(if (chart === NoChart) Modifier.fillMaxWidth() else Modifier)
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
