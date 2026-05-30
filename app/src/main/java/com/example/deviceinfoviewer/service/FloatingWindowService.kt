@@ -142,7 +142,7 @@ class FloatingWindowService : Service() {
     }
 
     @SuppressLint("ClickableViewAccessibility")
-    private fun makeItem(label: String, x: Int, y: Int): TextView? {
+    private fun makeItem(label: String, x: Int, y: Int): View? {
         val tv = TextView(this).apply {
             text = "$label ---"
             textSize = 11f
