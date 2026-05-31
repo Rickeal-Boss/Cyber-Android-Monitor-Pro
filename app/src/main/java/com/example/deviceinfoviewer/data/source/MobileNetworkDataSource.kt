@@ -97,77 +97,64 @@ class MobileNetworkDataSource(private val context: Context) {
 
     private fun parseNr(nr: CellInfoNr, info: MobileNetworkInfo): Boolean {
         try {
-            val identity = nr.cellIdentity as? android.telephony.CellIdentityNr ?: return false
-            val signal = nr.cellSignalStrength as? android.telephony.CellSignalStrengthNr ?: return false
+            val identity = nr.cellIdentity
+            val signal = nr.cellSignalStrength
 
-            // 小区身份
-            info.cellId = identity.nci
-            info.pci = identity.pci
+            info.cellId = try { (identity.javaClass.getMethod("getNci").invoke(identity) as? Number)?.toLong() ?: -1L } catch (_: Throwable) { -1L }
+            info.pci = try { identity.javaClass.getMethod("getPci").invoke(identity) as? Int ?: -1 } catch (_: Throwable) { -1 }
+            info.arfcn = try { identity.javaClass.getMethod("getNrarfcn").invoke(identity) as? Int ?: -1 } catch (_: Throwable) { -1 }
 
-            // 频段
+            // 频段 (API 33+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 try {
-                    val bands = identity.bands
+                    val bands = identity.javaClass.getMethod("getBands").invoke(identity) as? IntArray
                     if (bands != null && bands.isNotEmpty()) {
                         info.band = bands.joinToString("/") { nrBandToString(it) }
                     }
                 } catch (_: Throwable) {}
             }
-            // ARFCN
-            info.arfcn = identity.nrarfcn
 
-            // 带宽 — 用 ARFCN 推算更可靠
-            if (info.dlBandwidth.isEmpty()) {
-                estimateNrBandwidth(info.arfcn, info)
-            }
+            // 带宽用 ARFCN 推算
+            if (info.dlBandwidth.isEmpty()) estimateNrBandwidth(info.arfcn, info)
 
             // 信号参数
-            info.rsrp = signal.csiRsrp
-            info.rsrq = signal.csiRsrq
-            info.sinr = signal.csiSinr
-
-            // UL 状态
-            info.ulConfigured = if (signal.csiRsrp != CellInfo.UNAVAILABLE) "Configured" else "Unknown"
-
-            return signal.csiRsrp != CellInfo.UNAVAILABLE
-        } catch (_: Throwable) {
-            return false
-        }
+            info.rsrp = try { signal.javaClass.getMethod("getCsiRsrp").invoke(signal) as? Int ?: Int.MIN_VALUE } catch (_: Throwable) { Int.MIN_VALUE }
+            info.rsrq = try { signal.javaClass.getMethod("getCsiRsrq").invoke(signal) as? Int ?: Int.MIN_VALUE } catch (_: Throwable) { Int.MIN_VALUE }
+            info.sinr = try { signal.javaClass.getMethod("getCsiSinr").invoke(signal) as? Int ?: Int.MIN_VALUE } catch (_: Throwable) { Int.MIN_VALUE }
+            info.ulConfigured = if (info.rsrp != Int.MIN_VALUE) "Configured" else "Unknown"
+            return info.rsrp != Int.MIN_VALUE
+        } catch (_: Throwable) { return false }
     }
 
     // ───────── LTE ─────────
 
     private fun parseLte(lte: CellInfoLte, info: MobileNetworkInfo): Boolean {
         try {
-            val identity = lte.cellIdentity as? android.telephony.CellIdentityLte ?: return false
-            val signal = lte.cellSignalStrength as? android.telephony.CellSignalStrengthLte ?: return false
+            val identity = lte.cellIdentity
+            val signal = lte.cellSignalStrength
 
-            info.cellId = identity.ci.toLong()
-            info.pci = identity.pci
-            info.band = lteBandToString(identity.band)
-            info.arfcn = identity.earfcn
+            info.cellId = try { (identity.javaClass.getMethod("getCi").invoke(identity) as? Number)?.toLong() ?: -1L } catch (_: Throwable) { -1L }
+            info.pci = try { identity.javaClass.getMethod("getPci").invoke(identity) as? Int ?: -1 } catch (_: Throwable) { -1 }
+            info.band = lteBandToString(reflectBand(identity))
+            info.arfcn = try { identity.javaClass.getMethod("getEarfcn").invoke(identity) as? Int ?: -1 } catch (_: Throwable) { -1 }
 
-            // 带宽 (API 28+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                val bw = identity.bandwidth
-                if (bw != CellInfo.UNAVAILABLE) {
-                    info.dlBandwidth = "${bw} MHz"
-                }
+            val bw = try { identity.javaClass.getMethod("getBandwidth").invoke(identity) as? Int ?: -1 } catch (_: Throwable) { -1 }
+            if (bw != CellInfo.UNAVAILABLE && bw > 0) info.dlBandwidth = "${bw} MHz"
+            if (info.dlBandwidth.isEmpty()) estimateLteBandwidth(info.arfcn, reflectBand(identity), info)
+
+            info.rsrp = try { signal.javaClass.getMethod("getRsrp").invoke(signal) as? Int ?: Int.MIN_VALUE } catch (_: Throwable) { Int.MIN_VALUE }
+            info.rsrq = try { signal.javaClass.getMethod("getRsrq").invoke(signal) as? Int ?: Int.MIN_VALUE } catch (_: Throwable) { Int.MIN_VALUE }
+            info.rssi = try { signal.javaClass.getMethod("getRssi").invoke(signal) as? Int ?: Int.MIN_VALUE } catch (_: Throwable) { Int.MIN_VALUE }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                info.sinr = try { signal.javaClass.getMethod("getRssnr").invoke(signal) as? Int ?: Int.MIN_VALUE } catch (_: Throwable) { Int.MIN_VALUE }
             }
-            if (info.dlBandwidth.isEmpty()) {
-                estimateLteBandwidth(info.arfcn, identity.band, info)
-            }
+            info.ulConfigured = if (info.rsrp != Int.MIN_VALUE) "Configured" else "Unknown"
+            return info.rsrp != Int.MIN_VALUE
+        } catch (_: Throwable) { return false }
+    }
 
-            info.rsrp = signal.rsrp
-            info.rsrq = signal.rsrq
-            info.rssi = signal.rssi
-            info.sinr = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) signal.rssnr else Int.MIN_VALUE
-            info.ulConfigured = if (signal.rsrp != CellInfo.UNAVAILABLE) "Configured" else "Unknown"
-
-            return signal.rsrp != CellInfo.UNAVAILABLE
-        } catch (_: Throwable) {
-            return false
-        }
+    private fun reflectBand(identity: Any): Int {
+        return try { identity.javaClass.getMethod("getBand").invoke(identity) as? Int ?: -1 } catch (_: Throwable) { -1 }
     }
 
     // ───────── WCDMA ─────────
