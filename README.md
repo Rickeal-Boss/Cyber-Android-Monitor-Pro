@@ -1,6 +1,6 @@
 # 设备性能监控工具
 
-![System Monitor Pro](screenshot.jpg)
+![Device](1.png)
 
 > **⚠️ 重要声明 / License Notice**  
 > 本项目采用 **Source-Available (源码可见)** 许可。  
