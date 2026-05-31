@@ -124,11 +124,11 @@ class FloatingWindowService : Service() {
         "gpu_usage"    to { makeItem("GPU: --%", 16, 260) },
         "cpu_temp"     to { makeItem("CPU: --°C", 16, 320) },
         "gpu_temp"     to { makeItem("GPU: --°C", 16, 380) },
-        "cpu_freq"     to { makeItem("频率: --MHz", 16, 440) },
-        "ram"          to { makeItem("内存: --%", 16, 500) },
-        "battery_temp" to { makeItem("电池: --°C", 16, 560) },
-        "battery_cur"  to { makeItem("电流: --mA", 16, 620) },
-        "fps"          to { makeItem("FPS: --", 16, 680) }
+        "cpu_freq"     to { makeItem("C0: --MHz\nC1: --MHz\nC2: --MHz\nC3: --MHz", 16, 440) },
+        "ram"          to { makeItem("内存: --%", 16, 620) },
+        "battery_temp" to { makeItem("电池: --°C", 16, 680) },
+        "battery_cur"  to { makeItem("电流: --mA", 16, 740) },
+        "fps"          to { makeItem("FPS: --", 16, 800) }
     )
 
     @SuppressLint("MissingPermission")
@@ -244,10 +244,13 @@ class FloatingWindowService : Service() {
         val gpuTemp = if (!gpu.temperatureCelsius.isNaN()) gpu.temperatureCelsius.toInt() else -1
         setText("gpu_temp", if (gpuTemp > 0) "GPU: ${gpuTemp}°C" else "GPU: --°C")
 
-        // CPU 频率 — 显示全部核心频率 (MHz)
-        val allFreqs = cpu.cores.map { it.currentFreqKHz / 1000 }.take(8)
-        setText("cpu_freq", if (allFreqs.isNotEmpty() && allFreqs.any { it > 0 }) {
-            "频率: ${allFreqs.joinToString(" ")} MHz" } else "频率: --MHz")
+        // CPU 频率 — 显示全部核心频率，竖向排布
+        val allFreqs = cpu.cores.mapIndexed { idx, core ->
+            val freqMHz = core.currentFreqKHz / 1000
+            if (freqMHz > 0) "C$idx: ${freqMHz}MHz" else "C$idx: --MHz"
+        }.take(8)
+        setText("cpu_freq", if (allFreqs.isNotEmpty()) {
+            allFreqs.joinToString("\n") } else "频率: --MHz")
 
         // 内存
         val ramPct = if (mem.totalKB > 0) (mem.usedKB * 100 / mem.totalKB).toInt() else -1
