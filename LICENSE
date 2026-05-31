@@ -1,21 +1,26 @@
-MIT License
+Source-Available Non-Commercial License
+Copyright (c) [2026] [RB Station]
 
-Copyright (c) 2026 RB Station
+1. Grant of License
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "app-debug.apk"), to use, copy, modify, merge, publish, and distribute the Software, subject to the following conditions.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+2. Non-Commercial Restriction
+The Software may NOT be used for any "Commercial Purpose." 
+"Commercial Purpose" means any use that is intended for or directed toward commercial advantage or monetary compensation. This includes, but is not limited to:
+- Selling the Software, or any modified/derivative versions of it.
+- Using the Software as part of a paid service, SaaS, or hosted solution.
+- Integrating the Software into a commercial, closed-source product.
+- Using the Software in any enterprise or business environment for profit-generating activities.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+3. Permitted Uses
+You are free to use, modify, and distribute the Software for:
+- Personal and hobby projects.
+- Educational purposes and academic research.
+- Open-source non-profit projects.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+4. Commercial Licensing
+If you wish to use this Software for any Commercial Purpose, you must obtain a separate commercial license from the copyright holder. 
+Please contact me
+
+5. Disclaimer
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
