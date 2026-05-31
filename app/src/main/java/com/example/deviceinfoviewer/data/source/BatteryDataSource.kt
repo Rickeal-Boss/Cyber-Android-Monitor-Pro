@@ -494,8 +494,7 @@ class BatteryDataSource(private val context: Context) {
         // === Level 8: HealthManager (Android 14+, API 34+) ===
         if (Build.VERSION.SDK_INT >= 34) {
             try {
-                val healthManager = appContext.getSystemService("healthconnect") 
-                    ?: appContext.getSystemService(Context.HEALTH_SERVICE)
+                val healthManager = appContext.getSystemService("healthconnect")
                 if (healthManager != null) {
                     // 反射调用 getHealthData 或类似方法
                     try {

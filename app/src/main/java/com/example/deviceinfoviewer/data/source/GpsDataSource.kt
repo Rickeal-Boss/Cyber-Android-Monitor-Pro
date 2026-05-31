@@ -321,10 +321,11 @@ class GpsDataSource(private val context: Context) {
             }
             directGnssCallback = gnssCallback
 
-            // API 30+ 使用主线程 Handler 分发
+            // API 30+ 使用 Handler 重载（已被标记 @Deprecated，但仍然可用且兼容）
+            // 避免 Executor SAM 转换的编译问题
             val handler = Handler(Looper.getMainLooper())
-            val executor = android.os.Executor { command -> handler.post(command) }
-            lm.registerGnssStatusCallback(executor, gnssCallback)
+            @Suppress("DEPRECATION")
+            lm.registerGnssStatusCallback(gnssCallback, handler)
             true
         } catch (t: Throwable) {
             Log.w("GpsDS", "tryDirectGnssCallback failed: ${t.message}")
