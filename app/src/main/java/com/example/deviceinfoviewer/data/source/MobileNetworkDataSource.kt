@@ -139,8 +139,8 @@ class MobileNetworkDataSource(private val context: Context) {
 
     private fun parseLte(lte: CellInfoLte, info: MobileNetworkInfo): Boolean {
         try {
-            val identity = lte.cellIdentity
-            val signal = lte.cellSignalStrength
+            val identity = lte.cellIdentity as? android.telephony.CellIdentityLte ?: return false
+            val signal = lte.cellSignalStrength as? android.telephony.CellSignalStrengthLte ?: return false
 
             info.cellId = identity.ci.toLong()
             info.pci = identity.pci
