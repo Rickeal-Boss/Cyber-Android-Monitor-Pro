@@ -275,9 +275,8 @@ class BatteryDataSource(private val context: Context) {
                         return Pair(cycle, "BatteryManager hidden API (cycle_count)")
                     }
                 } catch (_: Throwable) {
-                    // 字段不存在则尝试常量 10
                     try {
-                        val cycle = bm.getIntProperty(10) // BATTERY_PROPERTY_CYCLE_COUNT = 10
+                        val cycle = bm.getIntProperty(10)
                         if (cycle > 0 && cycle < 10000) {
                             Log.d(TAG, "cycle_count via BatteryManager.getIntProperty(10): $cycle")
                             return Pair(cycle, "BatteryManager intProperty(10)")
@@ -287,6 +286,86 @@ class BatteryDataSource(private val context: Context) {
             }
         } catch (_: Throwable) {}
 
+        // === Level 0.2: dmesg 内核环形缓冲区 — 很多 OEM BMS 驱动在启动时打印循环计数 ===
+        try {
+            val dmesgProc = Runtime.getRuntime().exec(arrayOf("dmesg"))
+            val dmesgOutput = dmesgProc.inputStream.bufferedReader().readText()
+            dmesgProc.waitFor()
+            // 匹配电池循环相关日志: "bms: cycle=123", "charge_cycle: 456", "battery_cycle=789" 等
+            val dmesgPatterns = listOf(
+                Regex("""(?i)(?:bms|battery|fuel).*?(?:cycle|loop).*?[=: ](\d{1,4})"""),
+                Regex("""(?i)(?:cycle_count|charge_cycle|battery_cycle|batt_cycle)[=: ](\d{1,4})"""),
+                Regex("""(?i)soh.*?cycle.*?[=: ](\d{1,4})"""),
+                Regex("""(?i)fg_cycle[=: ](\d{1,4})"""),
+                Regex("""(?i)cc_cycle[=: ](\d{1,4})"""),
+            )
+            for (regex in dmesgPatterns) {
+                val match = regex.find(dmesgOutput)
+                match?.let {
+                    val cnt = it.groupValues[1].toIntOrNull()
+                    if (cnt != null && cnt > 0 && cnt < 10000) {
+                        Log.d(TAG, "cycle_count via dmesg: $cnt")
+                        return Pair(cnt, "dmesg kernel log")
+                    }
+                }
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
+        // === Level 0.3: /proc/ 下电池芯片驱动暴露的节点 ===
+        val procPaths = listOf(
+            "/proc/mtk_battery_cmd/current_cmd" to "MTK battery proc",
+            "/proc/qcom_battery/cycle_count" to "Qcom battery proc",
+            "/proc/battery/cycle_count" to "Generic battery proc",
+            "/proc/charge_cycle" to "Generic charge_cycle",
+            "/proc/fg/cycle_count" to "Fuel Gauge proc/fg",
+            "/proc/bq27z00/cycle_count" to "TI Fuel Gauge",
+            "/proc/max170xx/cycle_count" to "Maxim Fuel Gauge",
+        )
+        for ((path, desc) in procPaths) {
+            try {
+                val content = java.io.File(path).readText()
+                val patterns = listOf(
+                    Regex("""cycle.*?(\d{1,4})""", RegexOption.IGNORE_CASE),
+                    Regex("""(\d{1,4})"""),
+                )
+                for (regex in patterns) {
+                    val match = regex.find(content)
+                    match?.let {
+                        val cnt = it.groupValues[1].toIntOrNull()
+                        if (cnt != null && cnt > 0 && cnt < 10000) {
+                            Log.d(TAG, "cycle_count via $desc: $cnt")
+                            return Pair(cnt, desc)
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
+        // === Level 0.4: logcat 系统日志扫描 — 很多 OEM 在 Health HAL 中打印循环计数 ===
+        try {
+            // 只读取 system buffer 最近100行，避免超时
+            val logcatProc = Runtime.getRuntime().exec(
+                arrayOf("logcat", "-d", "-b", "system", "-t", "100")
+            )
+            val logcatOutput = logcatProc.inputStream.bufferedReader().readText()
+            logcatProc.waitFor()
+            val logcatPatterns = listOf(
+                Regex("""(?i)(?:health|battery|bms|charge).*?cycle.*?[=: ](\d{2,4})"""),
+                Regex("""(?i)cycle_count[=: ](\d{2,4})"""),
+                Regex("""(?i)charge_cycle[=: ](\d{2,4})"""),
+            )
+            for (regex in logcatPatterns) {
+                val match = regex.find(logcatOutput)
+                match?.let {
+                    val cnt = it.groupValues[1].toIntOrNull()
+                    if (cnt != null && cnt > 0 && cnt < 10000) {
+                        Log.d(TAG, "cycle_count via logcat system: $cnt")
+                        return Pair(cnt, "logcat system buffer")
+                    }
+                }
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
         // === Level 0.5: 新增 sysfs 路径（覆盖 vivo/iQOO 和新型号） ===
         val extraSysfsPaths = listOf(
             "/sys/class/power_supply/battery/cycle_counts" to "battery/cycle_counts",
@@ -294,6 +373,15 @@ class BatteryDataSource(private val context: Context) {
             "/sys/class/power_supply/battery/charge_done" to "battery/charge_done_cycle",
             "/sys/class/power_supply/battery/total_cycle_count" to "battery/total_cycle_count",
             "/sys/class/power_supply/battery/capacity_level" to "battery/capacity_level_cycle",
+            // 新增: 高通 PMIC FG (Fuel Gauge) 循环计数
+            "/sys/class/power_supply/bms/cycle_counts" to "bms/cycle_counts",
+            "/sys/class/power_supply/battery/fg_cycle" to "battery/fg_cycle",
+            "/sys/class/power_supply/battery/fg_fullcapnom" to "battery/fg_fullcapnom",
+            "/sys/devices/platform/soc/soc:qcom,fg-memif/cycle_count" to "qcom fg-memif",
+            "/sys/devices/platform/soc/soc:battery/cycle_count" to "qcom soc:battery",
+            // OPPO/OnePlus MTK 新路径
+            "/sys/devices/platform/battery/cycle_count" to "MTK platform battery",
+            "/sys/devices/platform/mt-battery/cycle_count" to "MTK mt-battery",
         )
         for ((path, desc) in extraSysfsPaths) {
             val cnt = SysFsReader.readInt(path)
@@ -428,6 +516,33 @@ class BatteryDataSource(private val context: Context) {
             "ro.battery.charge.times" to "通用 charge.times",
             "ro.vendor.battery.health" to "通用 ro.vendor.health",
             "persist.vendor.battery.health" to "通用 persist.vendor.health",
+
+            // === Android 16 新增属性（国产 ROM） ===
+            // OPPO ColorOS 16
+            "ro.oplus.health.battery_cycle" to "OPPO ColorOS 16 health",
+            "persist.oplus.health.battery_cycle" to "OPPO ColorOS 16 persist",
+            "vendor.oplus.battery.cycle.count" to "OPPO vendor cycle",
+            "ro.vendor.oplus.health.cycle" to "OPPO health cycle",
+            // Xiaomi HyperOS 3.0
+            "ro.vendor.miui.battery_cycle" to "HyperOS 3.0 cycle",
+            "persist.vendor.miui.battery_cycle" to "HyperOS 3.0 persist",
+            "ro.miui.battery.health.cycle" to "HyperOS health cycle",
+            "persist.vendor.battery.health.cycle" to "HyperOS health persist",
+            // Vivo OriginOS 6
+            "ro.vendor.vivo.battery_cycle" to "OriginOS 6 cycle",
+            "persist.vendor.vivo.battery_cycle" to "OriginOS 6 persist",
+            "ro.vivo.battery.health.cycle" to "OriginOS health cycle",
+            // 通用新属性
+            "ro.boot.battery.cycle_count" to "boot battery cycle",
+            "ro.boot.battery.charge_cycle" to "boot charge cycle",
+            "persist.vendor.battery.cycle_count" to "vendor persist",
+            "ro.vendor.battery.health.capacity" to "vendor health capacity",
+            // /sys 可能映射为系统属性的一些路径
+            "ro.battery.health.cycle_count" to "ro health cycle_count",
+            "persist.battery.health.cycle_count" to "persist health cycle_count",
+            // 高通 BCL 代理属性
+            "persist.vendor.bms.cycle_count" to "vendor bms cycle",
+            "ro.vendor.bms.cycle_count" to "ro vendor bms cycle",
         )
         for ((prop, desc) in props) {
             val value = SysFsReader.readPropInt(prop)
@@ -470,7 +585,7 @@ class BatteryDataSource(private val context: Context) {
             proc.waitFor()
 
             // 匹配 "Cycle count: 123" 或类似格式
-            val dumpsysCycleRegex = Regex("""(?i)(?:cycle\s*count|cycle_cnt|battery_cycle)[=:：]\s*(\d+)""")
+            val dumpsysCycleRegex = Regex("""(?i)(?:cycle\s*count|cycle_cnt|battery_cycle|charge_cycle)[=:：]\s*(\d+)""")
             val match = dumpsysCycleRegex.find(output)
             match?.let {
                 val cnt = it.groupValues[1].toIntOrNull()
@@ -487,6 +602,43 @@ class BatteryDataSource(private val context: Context) {
                 val cnt = it.groupValues[1].toIntOrNull()
                 if (cnt != null && cnt > 0 && cnt < 10000) {
                     return Pair(cnt, "dumpsys battery (alt)")
+                }
+            }
+
+            // 通用数值型：任意包含 cycle 的行中提取首个 >= 2 位的数字
+            for (line in output.split("\n")) {
+                if (Regex("""(?i)cycle""").containsMatchIn(line)) {
+                    val numMatch = Regex("""(\d{2,4})""").find(line)
+                    numMatch?.let {
+                        val cnt = it.groupValues[1].toIntOrNull()
+                        if (cnt != null && cnt > 1 && cnt < 10000) {
+                            // 排除明显不是循环数的值（如电压、电流值）
+                            if (cnt != 100 && cnt != 500 && cnt != 1000) {
+                                Log.d(TAG, "cycle_count via dumpsys battery generic: $cnt (line: ${line.trim()})")
+                                return Pair(cnt, "dumpsys battery (generic)")
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
+        // === Level 7.5: dumpsys batterystats --checkin 格式（结构化输出） ===
+        try {
+            val proc = Runtime.getRuntime().exec(arrayOf("dumpsys", "batterystats", "--checkin"))
+            val reader = proc.inputStream.bufferedReader()
+            val output = reader.readText()
+            reader.close()
+            proc.waitFor()
+
+            // checkin 格式: "9,p,电池,0,0,0,0,cycle:123,..."
+            val checkinCycleRegex = Regex("""cycle[:=](\d{1,4})""", RegexOption.IGNORE_CASE)
+            val match = checkinCycleRegex.find(output)
+            match?.let {
+                val cnt = it.groupValues[1].toIntOrNull()
+                if (cnt != null && cnt > 0 && cnt < 10000) {
+                    Log.d(TAG, "cycle_count via dumpsys batterystats --checkin: $cnt")
+                    return Pair(cnt, "dumpsys batterystats --checkin")
                 }
             }
         } catch (_: Throwable) { /* fall through */ }
