@@ -245,13 +245,8 @@ object ShellCommandDataSource {
             Regex("""(?i)temp(?:erature)?[=: ]+(\d+)\s*(?:C|c)"""),
         )
         for (regex in patterns) {
-            val match = regex.find(wifiOutput)
-            match?.let {
-                val temp = it.groupValues[1].toFloatOrNull() ?: continue
-                if (temp in 10f..150f) return temp
-                if (temp > 1000f) return temp / 1000f
-            }
-        }
+            val match = regex.find(wifiOutput) ?: continue
+            val temp = match.groupValues[1].toFloatOrNull() ?: continue
         return Float.NaN
     }
 

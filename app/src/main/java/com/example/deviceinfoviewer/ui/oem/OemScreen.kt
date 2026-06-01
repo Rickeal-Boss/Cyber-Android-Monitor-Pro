@@ -324,6 +324,7 @@ private fun keyValueItem(key: String, value: String) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TagFlow(tags: List<String>) {
     FlowRow(

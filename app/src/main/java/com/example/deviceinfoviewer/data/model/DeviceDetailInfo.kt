@@ -138,7 +138,7 @@ data class DeviceDetailInfo(
  */
 data class CameraSensorInfo(
     val id: String = "",
-    val facing: String = "",
+    var facing: String = "",
     val sensorModel: String = "",
     var aperture: String = "",
     var focalLength: String = "",
