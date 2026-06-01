@@ -11,9 +11,9 @@ import java.io.File
 import java.lang.reflect.Method
 
 /**
- * OEM 信息数据源 v3 — Android 16 三大 ROM 深度识别 + 硬件增强
+ * OEM 信息数据源 v3 - Android 16 三大 ROM 深度识别 + 硬件增强
  *
- * 覆盖: Xiaomi HyperOS 2.0/3.0 · OPPO ColorOS 13~16 · Vivo OriginOS 5/6
+ * 覆盖: Xiaomi HyperOS 2.0/3.0 / OPPO ColorOS 13-16 / Vivo OriginOS 5/6
  * v3 新增:
  *   - 相机传感器 (Camera2 API): 型号/光圈/传感器尺寸/OIS/变焦
  *   - 充电协议增强: SUPERVOOC/QC5/PD3.0 + 双电芯 + 无线充电

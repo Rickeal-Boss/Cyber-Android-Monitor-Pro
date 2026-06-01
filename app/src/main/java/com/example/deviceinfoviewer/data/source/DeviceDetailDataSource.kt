@@ -25,9 +25,9 @@ import java.io.File
 import java.util.UUID
 
 /**
- * 设备详细信息数据源 — v3 全面增强
+ * 设备详细信息数据源 - v3 全面增强
  *
- * 基于学术检索 (Sciverse) + Android 官方 API + sysfs/procfs：
+ * 基于学术检索 (Sciverse) + Android 官方 API + sysfs/procfs:
  * - CPU 缓存架构: /sys/devices/system/cpu/cpu*/cache/ + /proc/cpuinfo
  * - 内存类型: SystemProperties (ro.boot.ddr_type / ro.ddr_type)
  * - 存储类型: /sys/block/sda/ + SystemProperties
