@@ -161,15 +161,34 @@ class DeviceRepository(context: Context) {
             }
         }
 
+        // GPS 不再在此无条件启动，改为由 UI 层按 Tab 智能控制
+        // 仅在 GPS/网络 Tab 时调用 enableGps()，离开时调用 disableGps()
+    }
+
+    // GPS 状态 — 由 UI 层按 Tab 控制
+    @Volatile
+    private var gpsEnabled = false
+
+    fun enableGps() {
+        if (gpsEnabled) return
+        gpsEnabled = true
         try {
             gpsDataSource.startListening { gpsLiveData.postValue(it) }
         } catch (e: Throwable) { Log.w(TAG, "GPS监听启动失败", e) }
     }
 
+    fun disableGps() {
+        if (!gpsEnabled) return
+        gpsEnabled = false
+        try {
+            gpsDataSource.stopListening()
+        } catch (e: Throwable) { Log.w(TAG, "GPS监听停止失败", e) }
+    }
+
     fun stopMonitoring() {
         monitoring = false
         monitoringJob?.cancel()
-        gpsDataSource.stopListening()
+        disableGps()
     }
 
     /**

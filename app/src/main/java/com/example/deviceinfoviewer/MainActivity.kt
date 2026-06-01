@@ -84,11 +84,19 @@ fun SystemMonitorApp(appViewModel: AppViewModel = koinViewModel()) {
     var showFloatConfig by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // GPS 智能开关状态 — 仅在需要时请求定位权限
+    var gpsTabActive by remember { mutableStateOf(false) }
+
     BackHandler(enabled = showSettings || showFloatConfig) {
         when {
             showSettings -> showSettings = false
             showFloatConfig -> showFloatConfig = false
         }
+    }
+
+    // GPS 开关观察 — 离开 GPS/网络 Tab 时自动关闭定位
+    LaunchedEffect(gpsTabActive) {
+        appViewModel.setGpsEnabled(gpsTabActive)
     }
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
@@ -116,7 +124,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel = koinViewModel()) {
                 }
                 else -> MainTabs(
                     onOpenSettings = { showSettings = true },
-                    onOpenFloat = { showFloatConfig = true }
+                    onOpenFloat = { showFloatConfig = true },
+                    onGpsTabChanged = { active -> gpsTabActive = active }
                 )
             }
         }
@@ -125,9 +134,20 @@ fun SystemMonitorApp(appViewModel: AppViewModel = koinViewModel()) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainTabs(onOpenSettings: () -> Unit, onOpenFloat: () -> Unit) {
+private fun MainTabs(
+    onOpenSettings: () -> Unit,
+    onOpenFloat: () -> Unit,
+    onGpsTabChanged: (Boolean) -> Unit = {}
+) {
     val pagerState = rememberPagerState(pageCount = { topTabs.size })
     val scope = rememberCoroutineScope()
+
+    // 智能 GPS: 仅"网络" (index 5) 和 "GPS" (index 6) Tab 启用定位
+    val currentPage = pagerState.currentPage
+    LaunchedEffect(currentPage) {
+        val isGpsRelated = currentPage == 5 || currentPage == 6
+        onGpsTabChanged(isGpsRelated)
+    }
 
     Column(Modifier.fillMaxSize()) {
         // 紧凑型顶部栏：TabRow + 操作按钮在同一行

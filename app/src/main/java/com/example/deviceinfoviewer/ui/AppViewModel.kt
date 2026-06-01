@@ -22,6 +22,11 @@ class AppViewModel(
         repo.stopMonitoring()
     }
 
+    // 按 Tab 智能控制 GPS — 仅在 GPS/网络页面启用，离开时关闭以省电
+    fun setGpsEnabled(enabled: Boolean) {
+        if (enabled) repo.enableGps() else repo.disableGps()
+    }
+
     override fun onCleared() {
         super.onCleared()
         repo.stopMonitoring()
