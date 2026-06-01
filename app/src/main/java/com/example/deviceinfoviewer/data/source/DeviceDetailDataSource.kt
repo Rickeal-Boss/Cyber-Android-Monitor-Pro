@@ -24,21 +24,8 @@ import com.example.deviceinfoviewer.data.model.DeviceDetailInfo
 import java.io.File
 import java.util.UUID
 
-/**
- * 设备详细信息数据源 - v3 全面增强
- *
- * 基于学术检索 (Sciverse) + Android 官方 API + sysfs/procfs:
- * - CPU 缓存架构: /sys/devices/system/cpu/cpu*/cache/ + /proc/cpuinfo
- * - 内存类型: SystemProperties (ro.boot.ddr_type / ro.ddr_type)
- * - 存储类型: /sys/block/sda/ + SystemProperties
- * - USB 版本: PackageManager + UsbManager
- * - 蓝牙版本: PackageManager features + SystemProperties
- * - Wi-Fi 标准: WifiInfo.getWifiStandard() (API 33+) + features
- * - SoC 制程: 查表 (CpuCache.KnownChip 映射)
- * - 热区统计: /sys/class/thermal/
- * - 显示色深: /sys/class/graphics/fb0/bits_per_pixel
- * - GPU 显存: /sys/class/kgsl/kgsl-3d0/gmem (高通)
- */
+// 设备详细信息数据源 - v3 (Sciverse + Android API + sysfs/procfs)
+// 覆盖: CPU缓存/内存/存储/USB/蓝牙/WiFi/SoC制程/GPU显存/色深/热区
 class DeviceDetailDataSource(private val context: Context) {
 
     companion object {

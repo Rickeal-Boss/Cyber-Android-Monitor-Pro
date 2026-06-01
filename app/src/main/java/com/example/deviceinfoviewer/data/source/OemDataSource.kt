@@ -10,25 +10,8 @@ import com.example.deviceinfoviewer.data.model.OemInfo
 import java.io.File
 import java.lang.reflect.Method
 
-/**
- * OEM 信息数据源 v3 - Android 16 三大 ROM 深度识别 + 硬件增强
- *
- * 覆盖: Xiaomi HyperOS 2.0/3.0 / OPPO ColorOS 13-16 / Vivo OriginOS 5/6
- * v3 新增:
- *   - 相机传感器 (Camera2 API): 型号/光圈/传感器尺寸/OIS/变焦
- *   - 充电协议增强: SUPERVOOC/QC5/PD3.0 + 双电芯 + 无线充电
- *   - 显示面板: AMOLED/LTPO/面板厂/亮度/HDR
- *   - 性能调度器: CPU governor / GPU governor / thermal governor
- *   - 安全芯片: Titan M / TrustZone / verified boot
- *   - OPPO: MariSilicon / DCE / Truco / RAM+
- *   - Vivo: V3 影像芯片 / 内存融合 / OriginOS 精确版本
- *   - Xiaomi: Surge 澎湃 / HyperMind / HyperConnect
- *
- * 参考:
- *   - Same App Different Behaviors (NDSS 2024): OEM定制属性 ro.vendor.vivo.serialno 等
- *   - Camera2 API (API 21+): SENSOR_INFO_PHYSICAL_SIZE, LENS_INFO_AVAILABLE_APERTURES
- *   - BLAST (ICST 2015): /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
- */
+// OEM v3 - 三大ROM深度识别 + 硬件增强 (相机/充电/显示/调度器/安全)
+// Xiaomi HyperOS / OPPO ColorOS / Vivo OriginOS
 class OemDataSource(private val context: Context? = null) {
 
     companion object {
