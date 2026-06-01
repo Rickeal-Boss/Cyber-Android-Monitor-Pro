@@ -2,9 +2,9 @@ name: Android Build
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ DLC, master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ DLC, master ]
   workflow_dispatch:
 
 jobs:
