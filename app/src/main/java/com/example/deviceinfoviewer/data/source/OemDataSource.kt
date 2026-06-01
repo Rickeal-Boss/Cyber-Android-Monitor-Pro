@@ -134,12 +134,26 @@ class OemDataSource(private val context: Context? = null) {
         info.miuiHardware = prop("ro.product.mod_device")
             .ifEmpty { prop("ro.product.board") }
 
-        // → Surge 澎湃芯片检测 (新增)
-        val surgeP1 = prop("ro.boot.pmic_charger", "")
-        val surgeS1 = prop("ro.boot.pmic_charger_type", "")
-        if (surgeP1.contains("surge", ignoreCase = true) || surgeS1.contains("surge", ignoreCase = true)) {
-            info.xiaomiSurgeChip = "Surge P1 快充芯片"
+        // → Surge 澎湃芯片检测 (P1 / P2 快充 + G1 电池管理)
+        val surgeChips = mutableListOf<String>()
+        val surgePmic = prop("ro.boot.pmic_charger", "")
+        val surgeType = prop("ro.boot.pmic_charger_type", "")
+        val surgeP2 = prop("ro.vendor.surge.p2", "0")
+        val surgeG1 = prop("ro.vendor.surge.g1", "0")
+
+        if (surgePmic.contains("surge", ignoreCase = true) || surgeType.contains("surge", ignoreCase = true)) {
+            when {
+                surgeP2 == "1" || surgePmic.contains("p2", ignoreCase = true) -> {
+                    surgeChips.add("Surge P2 快充芯片")
+                    if (surgePmic.contains("p1", ignoreCase = true)) surgeChips.add("Surge P1")
+                }
+                else -> surgeChips.add("Surge P1 快充芯片")
+            }
         }
+        if (surgeG1 == "1" || prop("ro.vendor.surge.g1.available", "0") == "1") {
+            surgeChips.add("Surge G1 电池管理芯片")
+        }
+        info.xiaomiSurgeChip = surgeChips.joinToString(" + ")
         if (prop("ro.vendor.surge.isp", "0") == "1") {
             info.xiaomiPengpaiISP = "澎湃 C1 ISP"
         }
@@ -152,8 +166,13 @@ class OemDataSource(private val context: Context? = null) {
         if (secChip.isNotEmpty()) info.xiaomiSecurityChip = secChip
         else if (prop("persist.sys.security_chip", "0") == "1") info.xiaomiSecurityChip = "内置安全芯片"
 
-        // HyperOS 3.0 特性
+        // HyperOS 3.0 特性 (级联 AI 检测: MiClaw > HyperMind > 小爱AI)
         info.hyperOsAIModel = when {
+            prop("persist.sys.miclaw.enable", "0") == "1"
+                || prop("ro.miui.miclaw", "0") == "1" -> {
+                val v = prop("ro.miui.miclaw.version", "")
+                if (v.isNotEmpty()) "MiClaw v$v" else "MiClaw (已启用)"
+            }
             prop("persist.sys.hypermind.enable", "0") == "1" -> {
                 val v = prop("ro.miui.ai.version", "")
                 if (v.isNotEmpty()) "HyperMind v$v" else "HyperMind (已启用)"
@@ -168,8 +187,20 @@ class OemDataSource(private val context: Context? = null) {
             else -> ""
         }
 
-        // 性能评级
+        // 性能评级 (含 Redmi 狂暴引擎 / 小米性能模式)
+        val isRedmi = Build.BRAND.contains("redmi", ignoreCase = true)
+            || Build.MODEL.contains("Redmi", ignoreCase = true)
+            || prop("ro.product.brand", "").contains("redmi", ignoreCase = true)
+
+        // Redmi 狂暴模式: persist.sys.redmi_fury / persist.vendor.godzilla_mode / persist.sys.fury_engine
+        val furyMode = prop("persist.sys.redmi_fury", "0") == "1"
+            || prop("persist.vendor.godzilla_mode", "0") == "1"
+            || prop("persist.sys.fury_engine", "0") == "1"
+            || prop("persist.vendor.redmi.fury", "0") == "1"
+
         info.hyperOsPerformanceGrade = when {
+            isRedmi && furyMode -> "Redmi 狂暴引擎"
+            isRedmi && prop("persist.sys.performance_mode", "0") == "1" -> "Redmi 性能模式"
             prop("persist.sys.performance_mode", "0") == "1" -> "性能模式"
             prop("persist.sys.battery_saver", "0") == "1" -> "省电模式"
             else -> "均衡模式"
@@ -720,9 +751,14 @@ class OemDataSource(private val context: Context? = null) {
     private fun detectAiEngine(info: OemInfo) {
         info.aiEngineInfo = when (info.oem) {
             OEM_XIAOMI -> {
+                val miclawEnabled = prop("persist.sys.miclaw.enable", "0") == "1"
+                    || prop("ro.miui.miclaw", "0") == "1"
+                val miclawVer = prop("ro.miui.miclaw.version", "")
                 val hyperMind = prop("persist.sys.hypermind.enable", "0")
                 val aiVersion = prop("ro.miui.ai.version", "")
                 when {
+                    miclawEnabled && miclawVer.isNotEmpty() -> "MiClaw v$miclawVer"
+                    miclawEnabled -> "MiClaw (已启用)"
                     hyperMind == "1" && aiVersion.isNotEmpty() -> "HyperMind $aiVersion"
                     hyperMind == "1" -> "HyperMind (已启用)"
                     aiVersion.isNotEmpty() -> "小爱AI v$aiVersion"
@@ -857,11 +893,17 @@ class OemDataSource(private val context: Context? = null) {
                     || prop("persist.vendor.game_mode", "0") == "1"
                     || prop("persist.sys.miui_game_mode", "0") == "1"
                     || prop("sys.game_mode", "0") == "1"
+                    || prop("persist.sys.redmi_fury", "0") == "1"      // Redmi 狂暴引擎
+                    || prop("persist.vendor.godzilla_mode", "0") == "1"
+                    || prop("persist.sys.fury_engine", "0") == "1"
                 val powerMode = prop("persist.sys.power_mode", "0")
                 val vendorPm = prop("persist.vendor.power_mode", "0")
                 info.highPerformanceMode = powerMode == "1" || vendorPm == "1"
                     || prop("sys.power_mode", "0") == "1"
                     || prop("persist.sys.performance_mode", "0") == "1"
+                    || prop("persist.sys.redmi_fury", "0") == "1"      // Redmi 狂暴模式=高性能
+                    || prop("persist.vendor.godzilla_mode", "0") == "1"
+                    || prop("persist.sys.fury_engine", "0") == "1"
             }
             OEM_OPPO -> {
                 info.gameModeSupported = prop("persist.sys.oplus_gamemode", "0") == "1"
@@ -912,8 +954,12 @@ class OemDataSource(private val context: Context? = null) {
                 "ro.vendor.hyperos.advanced_textures",
                 "persist.sys.memory_extension.size",
                 "ro.boot.pmic_charger", "ro.vendor.surge.isp",
+                "ro.vendor.surge.p2", "ro.vendor.surge.g1",
                 "ro.vendor.pengpai.c2", "ro.boot.security_chip",
                 "ro.miui.casta.support",
+                "persist.sys.miclaw.enable", "ro.miui.miclaw",
+                "persist.sys.redmi_fury", "persist.vendor.godzilla_mode",
+                "persist.sys.fury_engine",
             )
             OEM_OPPO -> listOf(
                 "ro.build.version.opporom", "ro.oplus.display.oplusrom",

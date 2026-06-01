@@ -247,12 +247,12 @@ object ShellCommandDataSource {
         for (regex in patterns) {
             val match = regex.find(wifiOutput) ?: continue
             val temp = match.groupValues[1].toFloatOrNull() ?: continue
+            if (temp in 10f..150f) return temp
+            if (temp > 1000f) return temp / 1000f
+        }
         return Float.NaN
     }
-
-    /**
-     * 从 dumpsys wifi 提取省电模式状态
-     */
+    // 从 dumpsys wifi 提取省电模式状态
     @JvmStatic
     fun extractWifiPowerSave(wifiOutput: String?): String {
         if (wifiOutput.isNullOrEmpty()) return ""
