@@ -197,7 +197,7 @@ class DeviceDetailDataSource(private val context: Context) {
 
     private fun detectMaxBrightness(): Int {
         return try {
-            ShellCommandDataSource.executeCommand("dumpsys display")
+            ShellCommandDataSource.getDumpsysDisplay()
                 .lines()
                 .firstOrNull { it.contains("brightness", ignoreCase = true) && it.contains("nit") }
                 ?.let { line ->
@@ -570,7 +570,7 @@ class DeviceDetailDataSource(private val context: Context) {
 
             // 策略3: dumpsys (间接推断)
             if (info.memoryType.isEmpty()) {
-                val memInfo = ShellCommandDataSource.executeCommand("dumpsys meminfo")
+                val memInfo = ShellCommandDataSource.getDumpsysMeminfo()
                 if (memInfo.contains("LPDDR5", ignoreCase = true)) {
                     info.memoryType = "LPDDR5"
                     info.memoryTypeSource = "dumpsys"
