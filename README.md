@@ -14,8 +14,8 @@
 ## 📱 项目
 
 System Monitor(deviceinfoviewer)提供实时、精准的硬件状态数据可视化。通过简洁直观的深色界面，帮助开发者、硬件爱好者和普通用户全面掌握设备运行状态，优化性能体验。
-![Device](2.png)
-![Device](3.png)
+![](2.png)
+![](3.png)
 ![Device](4.png)
 ![Device](5.png)
 ![Device](6.png)
