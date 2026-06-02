@@ -261,7 +261,7 @@ class GpuDataSource {
         return false
     }
 
-    /** 动态系统属性 — sys.*/vendor.* 可能在运行时更新 */
+    /** 动态系统属性 — sys./vendor./debug. 开头，可能运行时更新 */
     private fun tryDynamicProperty(info: GpuInfo): Boolean {
         // 这些属性名以 sys./vendor./debug. 开头，可能是动态更新
         val props = arrayOf(
