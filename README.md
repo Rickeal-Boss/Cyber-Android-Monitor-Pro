@@ -100,7 +100,7 @@ compileSdk = 35 (锁定，不与 Material 1.12.0 冲突) targetSdk = 35 minSdk =
 
 ## 🛡️ 异常防护体系
 
-```kotlin
+###```kotlin
 // ✅ 正确：catch Throwable（覆盖 OEM ROM 的 Error 子类）
 try {
     val result = riskyOperation()
@@ -114,17 +114,17 @@ try {
 } catch (e: Exception) {
     // 抓不住 NoSuchMethodError / NoSuchFieldError
 }
-数据源健康监控
+### 数据源健康监控
 SourceHealth 数据类跟踪 13 个数据源状态
 DataSourceHealthBar 组件实时展示错误数量
 多级 fallback 链的 catch 保持静默（预期失败路径）
 仅 Repository 级别记录异常
-📊 图表系统
+### 📊 图表系统
 LineChart：贝塞尔曲线平滑 + 渐变填充 + 动画
 DualLineChart：双折线图（下载/上传对比）
 实时数据：DeviceRepository.historyData LiveData 推送
 normalizeChartData()：自适应 Y 轴范围
-🌐 OEM ROM 深度识别
+### 🌐 OEM ROM 深度识别
 OEM	系统	专属属性（15+）
 小米	HyperOS/MIUI	miui.ui.version / miui.region / has_real_blur
 OPPO	ColorOS	version.opporom / oplus.display / oplus_chg battery
@@ -132,20 +132,20 @@ Vivo	OriginOS	vivo.os.version / product.solution / hardware.version
 SoC 制造商 + 型号识别
 游戏模式 / 高性能模式检测
 30+ 条厂商原始属性导出
-🔧 充电协议自动识别
+### 🔧 充电协议自动识别
 PD (Power Delivery)
 QC 3.0 (Quick Charge)
 SuperVOOC (OPPO)
 VOOC (OPPO)
 Mi Turbo Charge (小米)
-📄 权限说明
+### 📄 权限说明
 权限	用途	必需
 ACCESS_FINE_LOCATION	GPS 卫星检测	是
 ACCESS_BACKGROUND_LOCATION	后台 GPS	是
 SYSTEM_ALERT_WINDOW	悬浮窗	是
 BLUETOOTH	蓝牙信息	否
 READ_PHONE_STATE	SIM 信息	否
-🏆 竞品对比
+### 🏆 竞品对比
 功能	My Application	
 电池循环次数	✅ 50+ 路径
 GPU 动态频率	✅ 5 层 fallback
@@ -153,7 +153,7 @@ GPU 动态频率	✅ 5 层 fallback
 悬浮窗 FPS	✅	
 OEM ROM 识别	✅ 3 大厂商	
 隐私（零网络）	✅	
-📚 学术验证
+### 📚 学术验证
 通过 Sciverse 学术论文检索 验证架构设计：
 
 "Rancid: Reliable Benchmarking on Android Platforms" → ✅ sysfs 是标准方法
