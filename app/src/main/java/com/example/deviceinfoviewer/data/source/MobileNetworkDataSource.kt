@@ -47,12 +47,16 @@ class MobileNetworkDataSource(private val context: Context) {
                     ss.javaClass.getMethod("getCellSignalStrengths").invoke(ss) as? List<*>
                 } catch (_: Throwable) { null }
                 if (cellSigs != null && cellSigs.isNotEmpty()) {
-                    val first = cellSigs.firstOrNull() ?: return@let
-                    try {
-                        val dbmMethod = first.javaClass.getMethod("getDbm")
-                        val dbmVal = dbmMethod.invoke(first) as Int
-                        info.signalStrengthDbm = if (dbmVal in -130..-30) dbmVal else Int.MIN_VALUE
-                    } catch (_: Throwable) {
+                    val first = cellSigs.firstOrNull()
+                    if (first != null) {
+                        try {
+                            val dbmMethod = first.javaClass.getMethod("getDbm")
+                            val dbmVal = dbmMethod.invoke(first) as Int
+                            info.signalStrengthDbm = if (dbmVal in -130..-30) dbmVal else Int.MIN_VALUE
+                        } catch (_: Throwable) {
+                            info.signalStrengthDbm = Int.MIN_VALUE
+                        }
+                    } else {
                         info.signalStrengthDbm = Int.MIN_VALUE
                     }
                 } else {
