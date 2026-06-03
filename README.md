@@ -136,13 +136,14 @@ SYSTEM_ALERT_WINDOW	悬浮窗	是
 BLUETOOTH	蓝牙信息	否
 READ_PHONE_STATE	SIM 信息	否
 ### 🏆 竞品对比
-功能	            My Application	
-电池循环次数	          ✅ 50+ 路径
-GPU 动态频率	          ✅ 5 层 fallback
-充电协议识别	          ✅	
-悬浮窗 FPS	          ✅	
-OEM ROM 识别	      ✅ 3 大厂商	
-隐私（零网络）	      ✅	
+|  功能	            | My Application   |
+|-------------------|------------------|
+|  电池循环次数	    | ✅ 50+ 路径      |
+|  GPU 动态频率	    | ✅ 5 层 fallback |
+|  充电协议识别	    | ✅	           |
+|  悬浮窗 FPS	    | ✅	           |   
+|  OEM ROM 识别	    | ✅ 3 大厂商      |	
+|  隐私（零网络）    | ✅	           |
 ### 📚 学术验证
 通过 Sciverse 学术论文检索 验证架构设计：
 
