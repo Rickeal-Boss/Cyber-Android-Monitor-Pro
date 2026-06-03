@@ -203,3 +203,4 @@ normalizeChartData()：自适应 Y 轴范围
 ![](IMG_20260602_231742.jpg)
 ![](IMG_20260602_231806.jpg)
 ---
+### 参与开发的模型： DeepSeek V4 Pro为主力开发模型 DeepSeek V4 Flash、GLM5.1、GLM5.0 Turbo为辅助开发模型
