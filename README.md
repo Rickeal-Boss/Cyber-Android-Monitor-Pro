@@ -163,4 +163,4 @@ OEM ROM 识别	      ✅ 3 大厂商
 "A COMPARATIVE STUDY OF SOFTWARE ARCHITECTURES" → ✅ MVVM 是学界推荐
 
 ### AI测评：GLM5.1自动化解析
-![](device-info-viewer-review.html)
+(device-info-viewer-review.html)
