@@ -14,16 +14,16 @@
 ## 📱 项目
 
 System Monitor(deviceinfoviewer)提供实时、精准的硬件状态数据可视化。通过简洁直观的深色界面，帮助开发者、硬件爱好者和普通用户全面掌握设备运行状态，优化性能体验。
-![](2.png)
+![](2.jpg)
 ![](3.png)
-![Device](4.png)
-![Device](5.png)
-![Device](6.png)
-![Device](7.png)
-![Device](8.png)
-![Device](9.png)
-![Device](10.png)
-![Device](11.png)
+![](4.png)
+![](5.png)
+![](6.png)
+![](7.png)
+![](8.png)
+![](9.png)
+![](10.jpg)
+![](11.png)
 ---
 
 ## ✨ 核心功能
@@ -48,7 +48,7 @@ System Monitor(deviceinfoviewer)提供实时、精准的硬件状态数据可视
 - 扫描 `thermal_message/` 直接温度文件（HyperOS 专用）
 - 高通 `qcom-battery/` 电池循环计数路径
 
-### 🎨 Batman 赛博朋克主题
+### 🎨 Batman 未来科技赛博朋克主题
 - 纯紫霓虹配色（NeonPurple/Bright/Pale/Deep）
 - 脉冲指示器（PulseDot）实时监测标志
 - 矩阵数字字体 + 扫描线动画
@@ -59,7 +59,7 @@ System Monitor(deviceinfoviewer)提供实时、精准的硬件状态数据可视
 ## 📱 功能模块（9 大 Tab）
 
 ### ⚙️ 设置页（Android 15 预测性返回）
-- 刷新频率：0.5s / 1s / 2s
+- 刷新频率多项可选：0.5s / 1s / 2s
 - 覆盖层动画进入/退出
 - `BackHandler` 支持手势返回
 
@@ -72,10 +72,10 @@ System Monitor(deviceinfoviewer)提供实时、精准的硬件状态数据可视
 - 实时 FPS 监控（Choreographer 帧回调）
 - SharedPreferences 持久化配置
 - 前台服务保活（foregroundServiceType = "specialUse"）
-
+- 全新加入悬浮窗位置记忆系统
 ---
 
-## 🔒 隐私安全
+## 🔒 隐私安全（完全本地运行）
 
 | 安全项 | 状态 |
 |-------|------|
@@ -94,7 +94,7 @@ System Monitor(deviceinfoviewer)提供实时、精准的硬件状态数据可视
 
 ### 技术栈
 compileSdk = 35 (锁定，不与 Material 1.12.0 冲突) targetSdk = 35 minSdk = 21 Kotlin = 2.1.0 Compose = BOM 2024.12.01 Koin DI = 3.5.6 Java = 17
-
+由于Sdk16出现旧设备不兼容问题，所以降级
 
 ---
 
@@ -146,13 +146,13 @@ SYSTEM_ALERT_WINDOW	悬浮窗	是
 BLUETOOTH	蓝牙信息	否
 READ_PHONE_STATE	SIM 信息	否
 ### 🏆 竞品对比
-功能	My Application	
-电池循环次数	✅ 50+ 路径
-GPU 动态频率	✅ 5 层 fallback
-充电协议识别	✅	
-悬浮窗 FPS	✅	
-OEM ROM 识别	✅ 3 大厂商	
-隐私（零网络）	✅	
+功能	            My Application	
+电池循环次数	          ✅ 50+ 路径
+GPU 动态频率	          ✅ 5 层 fallback
+充电协议识别	          ✅	
+悬浮窗 FPS	          ✅	
+OEM ROM 识别	      ✅ 3 大厂商	
+隐私（零网络）	      ✅	
 ### 📚 学术验证
 通过 Sciverse 学术论文检索 验证架构设计：
 
@@ -161,3 +161,6 @@ OEM ROM 识别	✅ 3 大厂商
 "User-centric Joint Power and Thermal Management" → ✅ hwmon 是 Linux 标准
 "Android Security Internals" (SELinux) → ✅ 解释 Android 11+ 限制
 "A COMPARATIVE STUDY OF SOFTWARE ARCHITECTURES" → ✅ MVVM 是学界推荐
+
+### AI测评：GLM5.1自动化解析
+![](device-info-viewer-review.html)
