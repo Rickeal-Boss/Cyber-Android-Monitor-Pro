@@ -1,4 +1,4 @@
-# 设备性能监控工具System Monitor(deviceinfoviewer\Device Info Viewer)
+# Cyber-Android-Monitor-Pro-By-RB 设备性能监控工具System Monitor(deviceinfoviewer\Device Info Viewer)
 
 ![Device](1.png)
 
@@ -13,6 +13,7 @@
 
 ## 📱 项目
 
+Cyber-Android-Monitor-Pro-By-RB
 System Monitor(deviceinfoviewer)提供实时、精准的硬件状态数据可视化。通过简洁直观的深色界面，帮助开发者、硬件爱好者和普通用户全面掌握设备运行状态，优化性能体验。
 
 
@@ -38,7 +39,7 @@ System Monitor(deviceinfoviewer)提供实时、精准的硬件状态数据可视
 - 扫描 `thermal_message/` 直接温度文件（HyperOS 专用）
 - 高通 `qcom-battery/` 电池循环计数路径
 
-### 🎨 Batman 未来科技赛博朋克主题
+### 🎨 Batman为灵感的未来科技赛博朋克主题
 - 纯紫霓虹配色（NeonPurple/Bright/Pale/Deep）
 - 脉冲指示器（PulseDot）实时监测标志
 - 矩阵数字字体 + 扫描线动画
