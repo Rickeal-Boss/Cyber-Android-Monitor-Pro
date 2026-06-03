@@ -155,7 +155,7 @@ normalizeChartData()：自适应 Y 轴范围
 "Android Security Internals" (SELinux) → ✅ 解释 Android 11+ 限制
 "A COMPARATIVE STUDY OF SOFTWARE ARCHITECTURES" → ✅ MVVM 是学界推荐
 
-### Recent：
+### Recent Update：
 - 在内存页加入了运行内存各方面占用
 - 加入了悬浮窗位置记忆
 - 优化了GPU频率检测
@@ -182,7 +182,7 @@ normalizeChartData()：自适应 Y 轴范围
 - 基于之前的JAVA语言转换为Kotlin······
 
 ### AI测评：GLM5.1自动化解析
-(device-info-viewer-review.html)
+详情见(device-info-viewer-review.html)
 
 ### APP图示
 ![](2.jpg)
