@@ -115,13 +115,14 @@ DualLineChart：双折线图（下载/上传对比）
 实时数据：DeviceRepository.historyData LiveData 推送
 normalizeChartData()：自适应 Y 轴范围
 ### 🌐 OEM ROM 深度识别
-OEM	系统	专属属性（15+）
-小米	HyperOS/MIUI	miui.ui.version / miui.region / has_real_blur
-OPPO	ColorOS	version.opporom / oplus.display / oplus_chg battery
-Vivo	OriginOS	vivo.os.version / product.solution / hardware.version
-SoC 制造商 + 型号识别
-游戏模式 / 高性能模式检测
-30+ 条厂商原始属性导出
+|OEM	|系统	|专属属性（15+）|
+|-------|-------|--------------|
+|小米	|HyperOS/MIUI	|miui.ui.version / miui.region / has_real_blur|
+|OPPO	|ColorOS	|version.opporom / oplus.display / oplus_chg battery|
+|Vivo	|OriginOS	|vivo.os.version / product.solution / hardware.version|
+|SoC 制造商 + 型号识别|
+|游戏模式 / 高性能模式检测|
+|30+ 条厂商原始属性导出|
 ### 🔧 充电协议自动识别
 PD (Power Delivery)
 QC 3.0 (Quick Charge)
@@ -129,12 +130,13 @@ SuperVOOC (OPPO)
 VOOC (OPPO)
 Mi Turbo Charge (小米)
 ### 📄 权限说明
-权限	用途	必需
-ACCESS_FINE_LOCATION	GPS 卫星检测	是
-ACCESS_BACKGROUND_LOCATION	后台 GPS	是
-SYSTEM_ALERT_WINDOW	悬浮窗	是
-BLUETOOTH	蓝牙信息	否
-READ_PHONE_STATE	SIM 信息	否
+|权限	|用途	|必需|
+|-------|-------|----|
+|ACCESS_FINE_LOCATION|	GPS 卫星检测	|是|
+|ACCESS_BACKGROUND_LOCATION|	后台 GPS	|是|
+|SYSTEM_ALERT_WINDOW	|悬浮窗|	是|
+|BLUETOOTH|	蓝牙信息|	否|
+|READ_PHONE_STATE|	SIM 信息|	否|
 ### 🏆 竞品对比
 |  功能	            | My Application   |
 |-------------------|------------------|
