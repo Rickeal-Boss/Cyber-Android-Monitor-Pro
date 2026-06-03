@@ -2,9 +2,9 @@ name: Android Build
 
 on:
   push:
-    branches: [ DLC, master ]
+    branches: [ yingai, master ]
   pull_request:
-    branches: [ DLC, master ]
+    branches: [ yingai, master ]
   workflow_dispatch:
 
 jobs:
