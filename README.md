@@ -122,13 +122,13 @@ normalizeChartData()：自适应 Y 轴范围
 |Vivo	|OriginOS	|vivo.os.version / product.solution / hardware.version|
 |SoC 制造商 + 型号识别|
 |游戏模式 / 高性能模式检测|
-|30+ 条厂商原始属性导出|
+|30+ 条厂商原始属性检测|
 ### 🔧 充电协议自动识别
-PD (Power Delivery)
-QC 3.0 (Quick Charge)
-SuperVOOC (OPPO)
-VOOC (OPPO)
-Mi Turbo Charge (小米)
+•PD (Power Delivery)
+•QC 3.0 (Quick Charge)
+•SuperVOOC (OPPO)
+•VOOC (OPPO)
+•Mi Turbo Charge (小米)
 ### 📄 权限说明
 |权限	|用途	|必需|
 |-------|-------|----|
