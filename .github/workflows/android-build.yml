@@ -1,15 +1,13 @@
-name: Android Build
+name: Android Release Build
 
 on:
   push:
-    branches: [ yingai, master ]
-  pull_request:
-    branches: [ yingai, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build APK
+    name: Build Signed Release APK
     runs-on: ubuntu-latest
 
     steps:
@@ -25,10 +23,7 @@ jobs:
           done
           if [ "$MISSING" = "1" ]; then
             echo ""
-            echo "🚨 FATAL: Required files missing. Please commit ALL project files:"
-            echo "   git add build.gradle app/"
-            echo "   git commit -m 'Add app source code and root build.gradle'"
-            echo "   git push"
+            echo "🚨 FATAL: Required files missing."
             exit 1
           fi
 
@@ -58,26 +53,28 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+      - name: Verify signing secrets
+        run: |
+          if [ -z "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "🚨 KEYSTORE_BASE64 secret is not set!"
+            echo "→ Create a keystore: keytool -genkey -v -keystore release.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000"
+            echo "→ Encode it:    base64 -w0 release.keystore"
+            echo "→ Add to GitHub: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
+          fi
 
-      - name: Build Release APK
+      - name: Build Signed Release APK
         run: ./gradlew assembleRelease
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: device-info-viewer-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 7
-
-      - name: Upload Release APK
+      - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
           name: device-info-viewer-release
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          path: app/build/outputs/apk/release/app-release.apk
           retention-days: 30
