@@ -17,10 +17,45 @@ android {
         versionName "2.0.0"
     }
 
+    // ================================================================
+    //  签名配置 (通过环境变量注入，CI 友好)
+    //  本地构建时若无环境变量则跳过签名，产出 unsigned APK
+    // ================================================================
+    def keystoreBase64 = System.getenv("KEYSTORE_BASE64")
+    def keystorePassword = System.getenv("KEYSTORE_PASSWORD")
+    def keyAlias = System.getenv("KEY_ALIAS")
+    def keyPassword = System.getenv("KEY_PASSWORD")
+
+    // 将 keystore 解码写入 build 目录 (保证目录存在、不会被提交)
+    def hasSecrets = keystoreBase64 != null && !keystoreBase64.isEmpty()
+            && keystorePassword != null && !keystorePassword.isEmpty()
+            && keyAlias != null && !keyAlias.isEmpty()
+            && keyPassword != null && !keyPassword.isEmpty()
+
+    if (hasSecrets) {
+        def keystoreFile = rootProject.file("release.keystore")
+        keystoreFile.bytes = keystoreBase64.decodeBase64()
+
+        signingConfigs {
+            create("ciRelease") {
+                storeFile keystoreFile
+                storePassword keystorePassword
+                keyAlias keyAlias
+                keyPassword keyPassword
+                v1SigningEnabled true
+                v2SigningEnabled true
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // 有签名配置时自动使用；无则产出 unsigned (本地开发)
+            if (hasSecrets) {
+                signingConfig signingConfigs.ciRelease
+            }
         }
     }
 
