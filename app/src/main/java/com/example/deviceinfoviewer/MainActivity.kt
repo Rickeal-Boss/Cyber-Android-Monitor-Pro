@@ -149,6 +149,11 @@ private fun MainTabs(
         onGpsTabChanged(isGpsRelated)
     }
 
+    // 两步返回键退出: 不在概览页 → 回到概览页; 已在概览页 → 退出应用
+    BackHandler(enabled = currentPage != 0) {
+        scope.launch { pagerState.animateScrollToPage(0) }
+    }
+
     Column(Modifier.fillMaxSize()) {
         // 紧凑型顶部栏：TabRow + 操作按钮在同一行
         Row(
