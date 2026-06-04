@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ yingai, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -72,9 +72,12 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+      - name: Debug — list APK outputs
+        run: find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "(no APK files found)"
+
       - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
           name: device-info-viewer-release
-          path: app/build/outputs/apk/release/app-release.apk
+          path: app/build/outputs/apk/release/*.apk
           retention-days: 30
