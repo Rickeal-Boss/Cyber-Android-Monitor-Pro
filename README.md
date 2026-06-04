@@ -157,6 +157,7 @@ normalizeChartData()：自适应 Y 轴范围
 "A COMPARATIVE STUDY OF SOFTWARE ARCHITECTURES" → ✅ MVVM 是学界推荐
 
 ### Recent Update：
+- 更新了先返回主页再退出APP
 - 在内存页加入了运行内存各方面占用
 - 加入了悬浮窗位置记忆
 - 优化了GPU频率检测
