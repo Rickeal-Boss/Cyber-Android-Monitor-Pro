@@ -1,4 +1,4 @@
-# Cyber-Android-Monitor-Pro-By-RB 设备性能监控工具System Monitor(deviceinfoviewer\Device Info Viewer)
+# Cyber-Android-Monitor-Pro-By-RB 设备性能监控工具 System Monitor(deviceinfoviewer\Device Info Viewer)
 
 ![Device](1.png)
 
@@ -14,7 +14,7 @@
 ## 📱 项目
 
 Cyber-Android-Monitor-Pro-By-RB
-System Monitor(deviceinfoviewer)提供实时、精准的硬件状态数据可视化。通过简洁直观的深色界面，帮助开发者、硬件爱好者和普通用户全面掌握设备运行状态，优化性能体验。
+ System Monitor(deviceinfoviewer) 提供实时、精准的硬件状态数据可视化。通过简洁直观的深色界面，帮助开发者、硬件爱好者和普通用户全面掌握设备运行状态，优化性能体验。
 
 
 ## ✨ 核心功能
@@ -183,7 +183,7 @@ normalizeChartData()：自适应 Y 轴范围
 - 全面软件重构及图标重构，删除冗余代码
 - 基于之前的JAVA语言转换为Kotlin······
 
-### AI测评：GLM5.1自动化解析
+### AI评测：GLM5.1自动化解析代码测试报告
 详情见(device-info-viewer-review.html)
 
 ### APP图示
