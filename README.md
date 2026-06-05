@@ -3,9 +3,10 @@
 ![Device](1.png)
 
 > **⚠️ 重要声明 / License Notice**  
-> 本项目采用 **Source-Available (源码可见)** 许可。  
+> 本项目采用 [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) 许可证。完整法律文本请查阅项目根目录下的 `LICENSE` 文件。  
 > **源码公开，仅供个人学习、研究和非商业用途**。  
-> 严禁任何形式的商业使用（包括但不限于整合到商业产品、SaaS服务或企业内部盈利项目）。  
+> 严禁将本软件打包出售，或作为付费服务、SaaS 托管服务的一部分。  
+> 严禁在本软件的衍生作品中接入广告以获取直接或间接的商业收益。
 > 
 > *This project is source-available and free for **personal, educational, and non-commercial use only**. Commercial use is strictly prohibited without a separate license.*
 
