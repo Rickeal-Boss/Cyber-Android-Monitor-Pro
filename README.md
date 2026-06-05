@@ -187,6 +187,7 @@ normalizeChartData()：自适应 Y 轴范围
 详情见(device-info-viewer-review.html)
 
 ### APP图示
+![](Screenshot_2026-06-05-01-30-52-49_d4274fc9b1acc32b00f6101b44d19eaa_cr.jpg)
 ![](2.jpg)
 ![](3.png)
 ![](4.png)
