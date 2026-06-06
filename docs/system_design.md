@@ -1,4 +1,4 @@
-# 系统架构设计
+# 系统架构设计（旧版）
 
 > **技术栈**: Java + Android SDK, Material Design 3, minAPI 21, targetAPI 36(something wrong)  
 > **架构模式**: MVVM (ViewModel + LiveData + Repository)
@@ -1113,4 +1113,4 @@ graph TD
 
 ---
 
-> **文档版本**: v1.0 | **日期**: 2026-05-20 | AI编辑
+> **文档版本**: v1.0 | **日期**: 2026-05-20 | AI编辑版本报告
