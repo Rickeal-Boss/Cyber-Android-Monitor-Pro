@@ -1,4 +1,4 @@
-# Device Info Viewer — 架构现状分析
+# Device Info Viewer — 架构现状分析（AI代码审查文档,可能会不准确）
 
 > **日期**: 2026-05-27
 > **版本**: 2.0 (Kotlin 迁移后)
