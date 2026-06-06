@@ -1,11 +1,8 @@
-# 架构决策记录 (ADR)
+# 架构决策记录 (ADR)之AI建议
 
 ## ADR-001: 采用 MVVM + UseCase 分层架构
 
 ### 状态
-Accepted
-
-### 上下文
 当前架构虽标榜 "MVVM"，但 ViewModel 层完全不存在。Fragments 直接与 God Repository 通信，导致：
 - 业务逻辑散落 Fragments
 - 无 UI 状态管理
@@ -43,9 +40,6 @@ Data Layer      → Repository + DataSource（按领域拆分）
 ## ADR-002: 使用 Koin 作为依赖注入框架
 
 ### 状态
-Accepted
-
-### 上下文
 当前使用 `DeviceApplication.getDeviceRepository()` 手动单例模式：
 - Fragment 中 `repo!!` 强制非空调用
 - 全局可变状态，无法隔离测试
@@ -97,9 +91,6 @@ class CpuFragment : Fragment() {
 ## ADR-003: UI 状态使用 Sealed Class + LiveData
 
 ### 状态
-Accepted
-
-### 上下文
 当前 Fragment 无状态建模，直接操作 View：
 - 无 Loading 状态
 - 无 Error 状态
@@ -136,10 +127,7 @@ sealed class CpuUiState {
 ## ADR-004: 锁定 compileSdk = 35
 
 ### 状态
-Accepted
-
-### 上下文
-2026-05-26 的 4 轮闪退修复最终根因：`compileSdk 36` 与 `Material Components 1.12.0` (针对 SDK 34/35) 以及 `MPAndroidChart 3.1.0` (2020年，SDK 29) 存在内部 API 不兼容。
+4 轮闪退修复最终根因：`compileSdk 36` 与 `Material Components 1.12.0` (针对 SDK 34/35) 以及 `MPAndroidChart 3.1.0` (2020年，SDK 29) 存在内部 API 不兼容。
 
 ### 决策
 锁定 `compileSdk = 35` + `targetSdk = 35`，直到以下条件全部满足再升级：
@@ -156,10 +144,7 @@ Accepted
 ## ADR-005: 异常处理策略：Repository 层必须捕获 Throwable
 
 ### 状态
-Accepted
-
-### 上下文
-2026-05-26 第二次闪退：`CellSignalStrength.getDbm()` 在部分 OEM ROM 抛 `NoSuchMethodError`（Error 子类，非 Exception），两层 `catch(Exception)` 全部漏过。
+第二次闪退：`CellSignalStrength.getDbm()` 在部分 OEM ROM 抛 `NoSuchMethodError`（Error 子类，非 Exception），两层 `catch(Exception)` 全部漏过。
 
 ### 决策
 所有 DataSource 和 Repository 层的采集代码：
@@ -183,9 +168,6 @@ try { getCpuInfo() } catch (e: Exception) { /* 漏掉 Error */ }
 ## ADR-006: 图表组件由数据驱动而非轮询更新
 
 ### 状态
-Accepted
-
-### 上下文
 CpuFragment + DashboardFragment 各有一套 `Handler.postDelayed(3000ms)` 轮询 `historyCache.getSeries()` 更新图表。这导致：
 - 图表更新频率不一致（采集 2s vs 图表 3s）
 - 内存泄漏风险（Handler 需手动清理）
