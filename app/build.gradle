@@ -1,18 +1,8 @@
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.5.0'
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.1.0'
-        classpath 'org.jetbrains.kotlin:kotlin-compose-compiler-plugin:2.1.0'
-    }
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
 }
-
-apply plugin: 'com.android.application'
-apply plugin: 'org.jetbrains.kotlin.android'
-apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 android {
     namespace 'com.example.deviceinfoviewer'
