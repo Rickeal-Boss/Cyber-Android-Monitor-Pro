@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ API, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -83,7 +83,7 @@ jobs:
           ls -la $ANDROID_HOME/platforms/android-35/ 2>/dev/null || echo "(platform not found)"
 
       - name: Build Signed Release APK (verbose)
-        run: ./gradlew assembleRelease --stacktrace --info 2>&1 | head -200 || true
+        run: ./gradlew assembleRelease --stacktrace --info 2>&1 || true
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
