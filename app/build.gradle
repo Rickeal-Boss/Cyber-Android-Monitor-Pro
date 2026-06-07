@@ -1,8 +1,8 @@
 plugins {
-    id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
+    id 'com.android.application' version '8.5.0'
+    id 'org.jetbrains.kotlin.android' version '2.1.0'
     // Kotlin 2.0+ 强制要求 Compose Compiler 插件
-    id 'org.jetbrains.kotlin.plugin.compose'
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.1.0'
 }
 
 android {
