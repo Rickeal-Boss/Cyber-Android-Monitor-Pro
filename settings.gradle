@@ -1,0 +1,30 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == "com.android.application") {
+                useVersion("8.5.0")
+            }
+            if (requested.id.id == "org.jetbrains.kotlin.android") {
+                useVersion("2.1.0")
+            }
+            if (requested.id.id == "org.jetbrains.kotlin.plugin.compose") {
+                useVersion("2.1.0")
+            }
+        }
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = "DeviceInfoViewer"
+include ':app'
