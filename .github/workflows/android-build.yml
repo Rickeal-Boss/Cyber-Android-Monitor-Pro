@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ API, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -63,14 +63,41 @@ jobs:
             exit 1
           fi
 
-      - name: Build Signed Release APK
-        run: ./gradlew assembleRelease
+      - name: Debug — print app/build.gradle
+        run: |
+          echo "=== app/build.gradle content (line 1-20) ==="
+          head -20 app/build.gradle
+          echo ""
+          echo "=== root build.gradle ==="
+          head -15 build.gradle
+          echo ""
+          echo "=== settings.gradle ==="
+          cat settings.gradle
+          echo ""
+          echo "=== gradle-wrapper.properties ==="
+          cat gradle/wrapper/gradle-wrapper.properties
+          echo ""
+          echo "=== Gradle version ==="
+          ./gradlew --version 2>&1 | head -5 || echo "(gradlew not available yet)"
+          echo "=== ANDROID_HOME ==="
+          ls -la $ANDROID_HOME/platforms/android-35/ 2>/dev/null || echo "(platform not found)"
+
+      - name: Build Signed Release APK (verbose)
+        run: ./gradlew assembleRelease --stacktrace --info 2>&1 | head -200 || true
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Debug — full Gradle output (if build failed)
+        if: failure()
+        run: |
+          echo "=== .gradle log ==="
+          find ~/.gradle -name "*.log" -newer /tmp -exec cat {} \; 2>/dev/null || echo "(no logs)"
+          echo "=== daemon log ==="
+          ls -la ~/.gradle/daemon/ 2>/dev/null || echo "(no daemon dir)"
 
       - name: Debug — list APK outputs
         run: find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "(no APK files found)"
