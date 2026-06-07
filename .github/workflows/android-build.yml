@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ API, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -82,8 +82,16 @@ jobs:
           echo "=== ANDROID_HOME ==="
           ls -la $ANDROID_HOME/platforms/android-35/ 2>/dev/null || echo "(platform not found)"
 
+      - name: Gradle tasks list (diagnose)
+        run: ./gradlew tasks --group="build" --all 2>&1 | head -30 || true
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
       - name: Build Signed Release APK (verbose)
-        run: ./gradlew assembleRelease --stacktrace --info 2>&1 || true
+        run: |
+          echo "=== Running assembleRelease ==="
+          ./gradlew assembleRelease --stacktrace --info 2>&1 || true
+          echo "=== Exit code: $? ==="
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
@@ -101,20 +109,19 @@ jobs:
 
       - name: Debug — list ALL build outputs
         run: |
-          echo "=== APK search ==="
-          find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "(no APK)"
-          echo "=== AAB search ==="
-          find app/build/outputs -name "*.aab" -type f 2>/dev/null || echo "(no AAB)"
-          echo "=== Outputs tree ==="
-          find app/build/outputs -type f 2>/dev/null | head -20 || echo "(empty)"
-          echo "=== Intermediates APK ==="
-          find app/build/intermediates/apk -name "*.apk" -type f 2>/dev/null || echo "(no intermediate APK)"
+          echo "=== Outputs tree (full) ==="
+          find app/build -type f -name "*.apk" -o -name "*.aab" 2>/dev/null | head -20 || echo "(empty)"
+          echo "=== Intermediates ==="
+          ls app/build/intermediates/apk/ 2>/dev/null || echo "(no apk intermediates)"
+          echo "=== Bundles ==="
+          ls app/build/outputs/bundle/ 2>/dev/null || echo "(no bundle dir)"
+          echo "=== outputs dir ==="
+          find app/build/outputs -type d 2>/dev/null | head -20 || echo "(no outputs dir)"
 
       - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
           name: device-info-viewer-release
-          path: |
-            app/build/outputs/**/*.apk
-            app/build/outputs/**/*.aab
+          path: app/build/outputs/**/*.apk
+          if-no-files-found: warn
           retention-days: 30
