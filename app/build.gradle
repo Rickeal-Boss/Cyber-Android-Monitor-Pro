@@ -108,9 +108,8 @@ dependencies {
     implementation 'io.insert-koin:koin-android:3.5.6'
     implementation 'io.insert-koin:koin-androidx-compose:3.5.6'
 
-    // ========== Hidden API Bypass (LSPosed) ==========
-    // 在 Android 14+ 上恢复 SystemProperties 反射和 BatteryManager 隐藏属性访问
-    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
+    // ========== Hidden API Bypass (LSPosed) — 注释掉以排查 CI 问题 ==========
+    // implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
 
     // ========== Jetpack Compose ==========
     // BOM 2024.12.01 与 Kotlin 2.1.0 兼容
