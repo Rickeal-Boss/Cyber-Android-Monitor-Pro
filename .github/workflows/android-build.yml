@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ API, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -45,11 +45,20 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Normalize line endings (CRLF → LF for Groovy)
+      - name: Normalize line endings + verify files
         run: |
           find . \( -name "*.gradle" -o -name "*.kt" -o -name "*.kts" -o -name "settings.gradle" \) \
                -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
-          echo "Line endings normalized"
+          echo "=== cat -A app/build.gradle ==="
+          head -15 app/build.gradle | cat -A
+          echo "=== sha256sum ==="
+          sha256sum app/build.gradle settings.gradle build.gradle
+          echo "=== Git log ==="
+          git log --oneline -3
+          echo "=== Git status ==="
+          git status --short
+          echo "=== Diff of build files ==="
+          git diff HEAD~1 -- build.gradle app/build.gradle settings.gradle 2>/dev/null | head -60 || echo "(single commit)"
 
       - name: Verify signing secrets
         run: |
@@ -62,7 +71,7 @@ jobs:
           fi
 
       - name: Build Signed Release APK
-        run: ./gradlew assembleRelease 2>&1 || true
+        run: ./gradlew assembleRelease --info 2>&1 || true
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
