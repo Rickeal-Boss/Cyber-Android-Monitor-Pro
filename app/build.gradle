@@ -22,14 +22,16 @@ android {
     //  本地构建时若无环境变量则跳过签名，产出 unsigned APK
     // ================================================================
     def ksBase64       = System.getenv("KEYSTORE_BASE64")
-    def ksPassword     = System.getenv("KEYSTORE_PASSWORD") ?: ""
-    def ksAlias        = System.getenv("KEY_ALIAS") ?: ""
-    def ksKeyPassword  = System.getenv("KEY_PASSWORD") ?: ""
+    def ksPassword     = System.getenv("KEYSTORE_PASSWORD")
+    def ksAlias        = System.getenv("KEY_ALIAS")
+    def ksKeyPassword  = System.getenv("KEY_PASSWORD")
 
-    def doSign = ksBase64 != null && !ksBase64.isBlank()
+    def allSet(String s) { s != null && !s.isBlank() }
+
+    def doSign = allSet(ksBase64) && allSet(ksPassword)
+               && allSet(ksAlias) && allSet(ksKeyPassword)
 
     if (doSign) {
-        // 解码写入临时目录 (跨平台可靠，CI 和本地都能写)
         def tmpDir = System.getProperty("java.io.tmpdir")
         def ksFile = new File(tmpDir, "device-info-viewer-release.keystore")
         ksFile.bytes = ksBase64.decodeBase64()
@@ -106,6 +108,10 @@ dependencies {
     // 不要单独添加 koin-androidx-viewmodel（Maven Central 只有 2.x 版本）
     implementation 'io.insert-koin:koin-android:3.5.6'
     implementation 'io.insert-koin:koin-androidx-compose:3.5.6'
+
+    // ========== Hidden API Bypass (LSPosed) ==========
+    // 在 Android 14+ 上恢复 SystemProperties 反射和 BatteryManager 隐藏属性访问
+    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:4.3'
 
     // ========== Jetpack Compose ==========
     // BOM 2024.12.01 与 Kotlin 2.1.0 兼容
