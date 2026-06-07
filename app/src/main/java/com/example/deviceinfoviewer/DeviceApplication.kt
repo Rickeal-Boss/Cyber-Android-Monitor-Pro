@@ -9,7 +9,6 @@ import com.example.deviceinfoviewer.service.FloatingWindowConfig
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.context.startKoin
-import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -28,14 +27,6 @@ class DeviceApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-
-        // Android 14+ 隐藏 API 豁免 (恢复 SystemProperties 反射等)
-        try {
-            HiddenApiBypass.addHiddenApiExemptions("L")
-            Log.d(TAG, "HiddenApiBypass: exemptions added")
-        } catch (e: Throwable) {
-            Log.w(TAG, "HiddenApiBypass: failed — ${e.message}")
-        }
 
         // Koin DI 初始化
         startKoin {
