@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ API, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -52,6 +52,12 @@ jobs:
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
+
+      - name: Normalize line endings (CRLF → LF for Groovy)
+        run: |
+          find . \( -name "*.gradle" -o -name "*.kt" -o -name "*.kts" -o -name "settings.gradle" \) \
+               -exec sed -i 's/\r$//' {} \; 2>/dev/null || true
+          echo "Line endings normalized"
 
       - name: Verify signing secrets
         run: |
