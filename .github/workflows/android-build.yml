@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ API, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -83,7 +83,13 @@ jobs:
           ls -la $ANDROID_HOME/platforms/android-35/ 2>/dev/null || echo "(platform not found)"
 
       - name: Gradle tasks list (diagnose)
-        run: ./gradlew tasks --group="build" --all 2>&1 | head -30 || true
+        run: |
+          echo "=== AGP version ==="
+          ./gradlew -q :app:androidDependencies 2>&1 | head -20 || true
+          echo "=== All assemble tasks ==="
+          ./gradlew tasks --all 2>&1 | grep -i assemble || echo "(no assemble tasks)"
+          echo "=== build/tasks ==="
+          ./gradlew :app:tasks --all 2>&1 | grep -i package || echo "(no package tasks)"
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
