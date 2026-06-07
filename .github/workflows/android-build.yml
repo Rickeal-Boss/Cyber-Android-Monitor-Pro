@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ API, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -99,12 +99,22 @@ jobs:
           echo "=== daemon log ==="
           ls -la ~/.gradle/daemon/ 2>/dev/null || echo "(no daemon dir)"
 
-      - name: Debug — list APK outputs
-        run: find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "(no APK files found)"
+      - name: Debug — list ALL build outputs
+        run: |
+          echo "=== APK search ==="
+          find app/build/outputs -name "*.apk" -type f 2>/dev/null || echo "(no APK)"
+          echo "=== AAB search ==="
+          find app/build/outputs -name "*.aab" -type f 2>/dev/null || echo "(no AAB)"
+          echo "=== Outputs tree ==="
+          find app/build/outputs -type f 2>/dev/null | head -20 || echo "(empty)"
+          echo "=== Intermediates APK ==="
+          find app/build/intermediates/apk -name "*.apk" -type f 2>/dev/null || echo "(no intermediate APK)"
 
       - name: Upload Signed Release APK
         uses: actions/upload-artifact@v4
         with:
           name: device-info-viewer-release
-          path: app/build/outputs/apk/release/*.apk
+          path: |
+            app/build/outputs/**/*.apk
+            app/build/outputs/**/*.aab
           retention-days: 30
