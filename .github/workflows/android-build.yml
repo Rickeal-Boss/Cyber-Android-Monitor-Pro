@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ API, master ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -71,7 +71,12 @@ jobs:
           fi
 
       - name: Build Signed Release APK
-        run: ./gradlew assembleRelease --info 2>&1 || true
+        run: |
+          # 强制 Gradle 使用 /tmp 为缓存目录，排除 noexec 可能性
+          export GRADLE_USER_HOME=/tmp/.gradle-${GITHUB_RUN_ID}
+          mkdir -p $GRADLE_USER_HOME
+          echo "GRADLE_USER_HOME=$GRADLE_USER_HOME"
+          ./gradlew assembleRelease --info --recompile-scripts --no-build-cache --rerun-tasks 2>&1 || true
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
