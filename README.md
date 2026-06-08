@@ -158,6 +158,8 @@ normalizeChartData()：自适应 Y 轴范围
 "A COMPARATIVE STUDY OF SOFTWARE ARCHITECTURES" → ✅ MVVM 是学界推荐
 
 ### Recent Update：
+- 
+- 参考部分开源代码源以及开源学术加入了API分支，但是由于起不到实质性提升所以遗弃
 - 更新了先返回主页再退出APP
 - 在内存页加入了运行内存各方面占用
 - 加入了悬浮窗位置记忆
