@@ -19,6 +19,26 @@ class SensorDataSource(private val context: Context) {
 
     companion object {
         private const val TAG = "SensorDS"
+
+        /**
+         * 反射调用 Sensor.getId() — API 24+，安全兼容 minSdk 21
+         */
+        fun safeGetSensorId(sensor: Sensor): Int {
+            return try {
+                val m = Sensor::class.java.getMethod("getId")
+                m.invoke(sensor) as? Int ?: -1
+            } catch (_: Throwable) { -1 }
+        }
+
+        /**
+         * 反射调用 Sensor.isDynamic() — API 24+，安全兼容 minSdk 21
+         */
+        fun safeIsDynamic(sensor: Sensor): Boolean {
+            return try {
+                val m = Sensor::class.java.getMethod("isDynamic")
+                m.invoke(sensor) as? Boolean ?: false
+            } catch (_: Throwable) { false }
+        }
     }
 
     private val appContext = context.applicationContext
@@ -148,27 +168,5 @@ class SensorDataSource(private val context: Context) {
         } catch (e: Throwable) { false }
     }
 
-    companion object {
-        /**
-         * 反射调用 Sensor.getId() — API 24+
-         */
-        @JvmStatic
-        private fun safeGetSensorId(sensor: Sensor): Int {
-            return try {
-                val m = Sensor::class.java.getMethod("getId")
-                m.invoke(sensor) as? Int ?: -1
-            } catch (_: Throwable) { -1 }
-        }
-
-        /**
-         * 反射调用 Sensor.isDynamic() — API 24+
-         */
-        @JvmStatic
-        private fun safeIsDynamic(sensor: Sensor): Boolean {
-            return try {
-                val m = Sensor::class.java.getMethod("isDynamic")
-                m.invoke(sensor) as? Boolean ?: false
-            } catch (_: Throwable) { false }
-        }
     }
-}
+
