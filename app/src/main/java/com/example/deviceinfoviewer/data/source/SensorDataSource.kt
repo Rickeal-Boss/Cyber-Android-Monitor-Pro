@@ -73,9 +73,9 @@ class SensorDataSource(private val context: Context) {
                     maxRange = sensor.maximumRange,
                     resolution = if (sensor.resolution > 0f) sensor.resolution else Float.NaN,
                     minDelay = if (sensor.minDelay > 0) sensor.minDelay else -1,
-                    sensorId = try { sensor.id } catch (_: Throwable) { -1 },
+                    sensorId = safeGetSensorId(sensor),
                     version = sensor.version,
-                    isDynamic = try { sensor.isDynamic } catch (_: Throwable) { false },
+                    isDynamic = safeIsDynamic(sensor),
                     isWakeUp = sensor.isWakeUpSensor,
                     reportingMode = sensor.reportingMode,
                     typeName = SensorTypeMeta.fromTypeId(sensor.type)?.displayName
@@ -146,5 +146,29 @@ class SensorDataSource(private val context: Context) {
         return try {
             sm?.getDefaultSensor(sensorType) != null
         } catch (e: Throwable) { false }
+    }
+
+    companion object {
+        /**
+         * 反射调用 Sensor.getId() — API 24+
+         */
+        @JvmStatic
+        private fun safeGetSensorId(sensor: Sensor): Int {
+            return try {
+                val m = Sensor::class.java.getMethod("getId")
+                m.invoke(sensor) as? Int ?: -1
+            } catch (_: Throwable) { -1 }
+        }
+
+        /**
+         * 反射调用 Sensor.isDynamic() — API 24+
+         */
+        @JvmStatic
+        private fun safeIsDynamic(sensor: Sensor): Boolean {
+            return try {
+                val m = Sensor::class.java.getMethod("isDynamic")
+                m.invoke(sensor) as? Boolean ?: false
+            } catch (_: Throwable) { false }
+        }
     }
 }
