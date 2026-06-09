@@ -16,6 +16,43 @@ android {
         versionName "2.0.202.0"
     }
 
+    def ksBase64       = System.getenv("KEYSTORE_BASE64")
+    def ksPassword     = System.getenv("KEYSTORE_PASSWORD")
+    def ksAlias        = System.getenv("KEY_ALIAS")
+    def ksKeyPassword  = System.getenv("KEY_PASSWORD")
+
+    def allSet(String s) { s != null && !s.isBlank() }
+
+    def doSign = allSet(ksBase64) && allSet(ksPassword)
+               && allSet(ksAlias) && allSet(ksKeyPassword)
+
+    if (doSign) {
+        def tmpDir = System.getProperty("java.io.tmpdir")
+        def ksFile = new File(tmpDir, "device-info-viewer-release.keystore")
+        ksFile.bytes = ksBase64.decodeBase64()
+
+        signingConfigs {
+            ciRelease {
+                storeFile ksFile
+                storePassword ksPassword
+                keyAlias ksAlias
+                keyPassword ksKeyPassword
+                v1SigningEnabled true
+                v2SigningEnabled true
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            if (doSign) {
+                signingConfig signingConfigs.ciRelease
+            }
+        }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
