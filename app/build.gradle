@@ -7,14 +7,15 @@ plugins {
 android {
     namespace 'com.example.deviceinfoviewer'
     compileSdk 35
-    def ksBase64       = System.getenv("KEYSTORE_BASE64")
-    def ksPassword     = System.getenv("KEYSTORE_PASSWORD")
-    def ksAlias        = System.getenv("KEY_ALIAS")
-    def ksKeyPassword  = System.getenv("KEY_PASSWORD")
+    def ksBase64  = System.getenv("KEYSTORE_BASE64")
+    def ksPassword = System.getenv("KEYSTORE_PASSWORD")
+    def ksAlias   = System.getenv("KEY_ALIAS")
+    def ksKeyPassword = System.getenv("KEY_PASSWORD")
 
-    def allSet(String s) { s != null && !s.isBlank() }
-
-    def doSign = allSet(ksBase64) && allSet(ksPassword) && allSet(ksAlias) && allSet(ksKeyPassword)
+    def doSign = ksBase64 != null && !ksBase64.isBlank() &&
+                 ksPassword != null && !ksPassword.isBlank() &&
+                 ksAlias != null && !ksAlias.isBlank() &&
+                 ksKeyPassword != null && !ksKeyPassword.isBlank()
 
     if (doSign) {
         def ksFile = new File(System.getProperty("java.io.tmpdir"), "device-info-viewer-release.keystore")
@@ -30,6 +31,7 @@ android {
             }
         }
     }
+
     defaultConfig {
         applicationId "com.example.deviceinfoviewer"
         minSdk 21
