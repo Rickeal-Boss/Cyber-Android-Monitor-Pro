@@ -599,7 +599,7 @@ class BatteryDataSource(private val context: Context) {
 
             // 备用: android.os.health.HealthStats (SystemHealthManager)
             try {
-                val healthManager = appContext.getSystemService(Context.HEALTH_SERVICE)
+                val healthManager = appContext.getSystemService(android.os.health.SystemHealthManager::class.java)
                 if (healthManager != null) {
                     val takeUidSnapshot = healthManager.javaClass.getMethod("takeUidSnapshot", Int::class.javaPrimitiveType)
                     val healthStats = takeUidSnapshot.invoke(healthManager, android.os.Process.myUid())
