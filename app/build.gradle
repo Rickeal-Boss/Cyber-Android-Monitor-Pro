@@ -1,7 +1,6 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
-    // Kotlin 2.0+ 强制要求 Compose Compiler 插件
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
@@ -17,10 +16,6 @@ android {
         versionName "2.0.202.0"
     }
 
-    // ================================================================
-    //  签名配置 (通过环境变量注入，CI 友好)
-    //  本地构建时若无环境变量则跳过签名，产出 unsigned APK
-    // ================================================================
     def ksBase64       = System.getenv("KEYSTORE_BASE64")
     def ksPassword     = System.getenv("KEYSTORE_PASSWORD")
     def ksAlias        = System.getenv("KEY_ALIAS")
@@ -70,47 +65,22 @@ android {
     buildFeatures {
         compose true
     }
-
-    // Compose Compiler 版本由 Kotlin 2.0 plugin.compose 自动管理
-    // 无需手动设置 kotlinCompilerExtensionVersion
 }
 
 dependencies {
-    // ========== Kotlin ==========
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.1.0'
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
-
-    // ========== AndroidX 基础 ==========
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'
-
-    // ========== Lifecycle ==========
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.4'
     implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.8.4'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.4'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4'
     implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.4'
-
-    // ========== Activity ==========
     implementation 'androidx.activity:activity-compose:1.9.0'
-
-    // ========== Material Design ==========
-    // 已迁移到 Jetpack Compose Material3，旧 Material 库不再需要
-
-    // ========== MPAndroidChart（保留备用）==========
-    // implementation 'com.github.PhilJay:MPAndroidChart:v3.1.0'
-
-    // ========== JSON ==========
     implementation 'com.google.code.gson:gson:2.10.1'
-
-    // ========== Koin DI ==========
-    // 注意: koin-androidx-viewmodel 在 3.x 已合并到 koin-androidx-compose
-    // 不要单独添加 koin-androidx-viewmodel（Maven Central 只有 2.x 版本）
     implementation 'io.insert-koin:koin-android:3.5.6'
     implementation 'io.insert-koin:koin-androidx-compose:3.5.6'
-
-    // ========== Jetpack Compose ==========
-    // BOM 2024.12.01 与 Kotlin 2.1.0 兼容
     implementation platform('androidx.compose:compose-bom:2024.12.01')
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
@@ -118,8 +88,6 @@ dependencies {
     implementation 'androidx.compose.material3:material3'
     implementation 'androidx.compose.runtime:runtime-livedata'
     implementation 'androidx.compose.ui:ui-text-google-fonts'
-
-    // ========== Compose 调试 ==========
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }
