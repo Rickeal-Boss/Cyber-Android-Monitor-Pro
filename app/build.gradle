@@ -7,7 +7,7 @@ plugins {
 android {
     namespace 'com.example.deviceinfoviewer'
     compileSdk 35
-def ksBase64       = System.getenv("KEYSTORE_BASE64")
+    def ksBase64       = System.getenv("KEYSTORE_BASE64")
     def ksPassword     = System.getenv("KEYSTORE_PASSWORD")
     def ksAlias        = System.getenv("KEY_ALIAS")
     def ksKeyPassword  = System.getenv("KEY_PASSWORD")
@@ -37,7 +37,7 @@ def ksBase64       = System.getenv("KEYSTORE_BASE64")
         versionCode 202
         versionName "2.0.202.0"
     }
- buildTypes {
+    buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
