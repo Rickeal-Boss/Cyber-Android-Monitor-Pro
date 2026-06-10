@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 import com.example.deviceinfoviewer.ui.theme.NeonPurple
 import com.example.deviceinfoviewer.ui.theme.NeonPurpleBright
 import com.example.deviceinfoviewer.ui.theme.NeonCyan
+import com.example.deviceinfoviewer.ui.theme.NeonMagenta
 import com.example.deviceinfoviewer.ui.theme.SuccessNeon
 import com.example.deviceinfoviewer.ui.theme.WarningNeon
 import org.koin.androidx.compose.koinViewModel
@@ -274,7 +275,14 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
             RowItemWithColor("游戏模式", if (o?.gameModeSupported == true) "已激活 ✓" else "未激活", gameColor)
             // 当前调度模式 (带等级颜色)
             val modeName = o?.powerModeCurrent?.ifEmpty { "均衡模式" } ?: "均衡模式"
-            val modeLevel = o?.powerModeLevel ?: -1
+            // 从独立布尔字段推导模式等级
+            val modeLevel = when {
+                o?.ultraPowerSaveMode == true -> 0
+                o?.powerSaveMode == true -> 1
+                o?.vivoBoostMode == true -> 2
+                o?.highPerformanceMode == true -> 3
+                else -> 2  // 默认均衡
+            }
             val modeColor = when (modeLevel) {
                 0, 1 -> NeonCyan           // 省电类 → 青色
                 2 -> WarningNeon           // 均衡 → 橙色 (中性)
