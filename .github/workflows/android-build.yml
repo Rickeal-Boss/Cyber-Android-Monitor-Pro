@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ main, master, DLC, yingai, II, III ]
+    branches: [ main, master, DLC, yingai, II, III, IIII ]
   workflow_dispatch:
 
 jobs:
