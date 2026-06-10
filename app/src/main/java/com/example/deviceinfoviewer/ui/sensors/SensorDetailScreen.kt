@@ -52,21 +52,40 @@ fun SensorDetailScreen(
     // ★ 改用本地 Compose 状态列表 + LaunchedEffect, 直接消费 sensorLiveData
     //   避免依赖 repo.sensorHistoryData 的间接 LiveData 管线
     val chartPoints = remember { mutableStateListOf<HistoryDataPoint>() }
+    // 多轴传感器: X/Y/Z 分别累积
+    val chartPointsX = remember { mutableStateListOf<HistoryDataPoint>() }
+    val chartPointsY = remember { mutableStateListOf<HistoryDataPoint>() }
+    val chartPointsZ = remember { mutableStateListOf<HistoryDataPoint>() }
     val maxChartPoints = 80
+    val isSingleAxis = meta?.valueCount == 1
     LaunchedEffect(liveData) {
         liveData?.let { ld ->
-            val idx = when (meta) {
-                SensorTypeMeta.LIGHT,
-                SensorTypeMeta.PROXIMITY,
-                SensorTypeMeta.PRESSURE,
-                SensorTypeMeta.HUMIDITY,
-                SensorTypeMeta.AMBIENT_TEMPERATURE -> 0
-                else -> -1 // 多轴传感器交由下面的 snapshotFlow 处理
-            }
-            if (idx >= 0 && idx < ld.valueCount && !ld.values[idx].isNaN()) {
-                val pt = HistoryDataPoint(System.currentTimeMillis(), ld.values[idx], "")
-                if (chartPoints.size >= maxChartPoints) chartPoints.removeAt(0)
-                chartPoints.add(pt)
+            if (isSingleAxis) {
+                val idx = when (meta) {
+                    SensorTypeMeta.LIGHT,
+                    SensorTypeMeta.PROXIMITY,
+                    SensorTypeMeta.PRESSURE,
+                    SensorTypeMeta.HUMIDITY,
+                    SensorTypeMeta.AMBIENT_TEMPERATURE -> 0
+                    else -> -1
+                }
+                if (idx >= 0 && idx < ld.valueCount && !ld.values[idx].isNaN()) {
+                    val pt = HistoryDataPoint(System.currentTimeMillis(), ld.values[idx], "")
+                    if (chartPoints.size >= maxChartPoints) chartPoints.removeAt(0)
+                    chartPoints.add(pt)
+                }
+            } else {
+                // 多轴传感器: X/Y/Z 独立累积
+                val axes = arrayOf(chartPointsX, chartPointsY, chartPointsZ)
+                for (axisIdx in 0 until minOf(ld.valueCount, 3)) {
+                    if (!ld.values[axisIdx].isNaN()) {
+                        val pt = HistoryDataPoint(System.currentTimeMillis(), ld.values[axisIdx],
+                            when (axisIdx) { 0 -> "X"; 1 -> "Y"; else -> "Z" })
+                        val list = axes[axisIdx]
+                        if (list.size >= maxChartPoints) list.removeAt(0)
+                        list.add(pt)
+                    }
+                }
             }
         }
     }
@@ -109,7 +128,10 @@ fun SensorDetailScreen(
             // ── 实时波形图 (增强动画) ──
             SensorChartCard(
                 meta = meta,
-                chartPoints = if (meta?.valueCount == 1) chartPoints else emptyList(),
+                chartPoints = if (isSingleAxis) chartPoints else emptyList(),
+                chartPointsX = chartPointsX,
+                chartPointsY = chartPointsY,
+                chartPointsZ = chartPointsZ,
                 liveData = liveData
             )
 
@@ -376,6 +398,9 @@ private fun SensorValueCard(
 private fun SensorChartCard(
     meta: SensorTypeMeta?,
     chartPoints: List<HistoryDataPoint>,
+    chartPointsX: List<HistoryDataPoint>,
+    chartPointsY: List<HistoryDataPoint>,
+    chartPointsZ: List<HistoryDataPoint>,
     liveData: SensorLiveData?
 ) {
     val labels = meta?.axisLabels ?: listOf("X", "Y", "Z")
@@ -400,8 +425,11 @@ private fun SensorChartCard(
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 // 动态数据点计数器
-                val sampleCount = if (valueCount == 1) chartPoints.size
-                    else 0
+                val sampleCount = when {
+                    valueCount == 1 -> chartPoints.size
+                    valueCount >= 2 -> chartPointsX.size
+                    else -> 0
+                }
                 Text(
                     "$sampleCount pts",
                     fontSize = 11.sp,
@@ -445,10 +473,12 @@ private fun SensorChartCard(
                     modifier = Modifier.fillMaxWidth().height(200.dp)
                 )
             } else {
-                // 多轴传感器: 暂时退回到显示"等待数据..."
-                Box(Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
-                    Text("等待数据...", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                MultiAxisChart(
+                    seriesList = listOf(chartPointsX.toList(), chartPointsY.toList(), chartPointsZ.toList())
+                        .take(valueCount),
+                    colors = axisColors.take(valueCount),
+                    modifier = Modifier.fillMaxWidth().height(200.dp)
+                )
             }
 
             // 实时数值指示 (底部)
