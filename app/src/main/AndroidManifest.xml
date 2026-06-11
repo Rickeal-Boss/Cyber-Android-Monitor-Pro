@@ -17,7 +17,8 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
     <!-- 蓝牙（本地设备） -->
-    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <!-- 前台服务（悬浮窗保活） -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
