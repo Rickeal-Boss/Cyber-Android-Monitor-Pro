@@ -97,7 +97,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel = koinViewModel()) {
     // GPS 智能开关状态 — 仅在需要时请求定位权限
     var gpsTabActive by remember { mutableStateOf(false) }
 
-    BackHandler(enabled = showSettings || showFloatConfig || showSensorDetail) {
+    val overlayVisible = showSettings || showFloatConfig || showSensorDetail
+
+    BackHandler(enabled = overlayVisible) {
         when {
             showSettings -> showSettings = false
             showFloatConfig -> showFloatConfig = false
@@ -126,6 +128,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel = koinViewModel()) {
             MainTabs(
                 pagerState = pagerState,
                 scope = scope,
+                overlayVisible = overlayVisible,
                 onOpenSettings = { showSettings = true },
                 onOpenFloat = { showFloatConfig = true },
                 onGpsTabChanged = { active -> gpsTabActive = active },
@@ -190,6 +193,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel = koinViewModel()) {
 private fun MainTabs(
     pagerState: PagerState,
     scope: CoroutineScope,
+    overlayVisible: Boolean = false,
     onOpenSettings: () -> Unit,
     onOpenFloat: () -> Unit,
     onGpsTabChanged: (Boolean) -> Unit = {},
@@ -202,8 +206,9 @@ private fun MainTabs(
         onGpsTabChanged(isGpsRelated)
     }
 
-    // 两步返回键退出: 不在概览页 → 回到概览页; 已在概览页 → 退出应用
-    BackHandler(enabled = currentPage != 0) {
+    // ★ 两步返回键退出: 覆盖层显示时不拦截 → 由 SystemMonitorApp 的 BackHandler 统一处理
+    //   避免与系统预测性返回动画产生双重回调冲突 (Android 16+ mandatory predictive back)
+    BackHandler(enabled = currentPage != 0 && !overlayVisible) {
         scope.launch { pagerState.animateScrollToPage(0) }
     }
 
