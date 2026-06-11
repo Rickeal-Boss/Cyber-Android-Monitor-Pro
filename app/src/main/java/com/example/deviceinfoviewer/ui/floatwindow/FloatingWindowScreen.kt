@@ -97,7 +97,6 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
             Text("实时指标", fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface)
 
-            CheckItem("CPU 利用率", showCpuUsage) { showCpuUsage = it; FloatingWindowConfig.showCpuUsage = it }
             CheckItem("GPU 利用率", showGpuUsage) { showGpuUsage = it; FloatingWindowConfig.showGpuUsage = it }
             CheckItem("CPU 温度", showCpuTemp) { showCpuTemp = it; FloatingWindowConfig.showCpuTemp = it }
             CheckItem("GPU 温度", showGpuTemp) { showGpuTemp = it; FloatingWindowConfig.showGpuTemp = it }
