@@ -52,10 +52,6 @@ fun GpuScreen(
     val governor = gpuInfo?.governor?.takeIf { it.isNotEmpty() }
     val isThrottled = gpuInfo?.isThrottled ?: false
     val effectiveUtil = gpuInfo?.effectiveUtilization
-    val vulkanApi = gpuInfo?.vulkanApiVersion?.takeIf { it.isNotEmpty() }
-    val vulkanDriver = gpuInfo?.vulkanDriverVersion?.takeIf { it.isNotEmpty() }
-    val vulkanDeviceType = gpuInfo?.vulkanDeviceType?.takeIf { it.isNotEmpty() }
-    val vulkanSource = gpuInfo?.vulkanSource?.takeIf { it.isNotEmpty() }
 
     val gpuLoadChart = normalizeChartData(historyData["gpu_load"], 100f)
     val gpuTempChart = normalizeChartData(historyData["gpu_temp"], 100f)
@@ -131,32 +127,6 @@ fun GpuScreen(
                 value = renderer,
                 valueColor = NeonPurpleBright
             )
-        }
-
-        // Vulkan 驱动版本信息
-        if (vulkanApi != null || vulkanDriver != null) {
-            if (vulkanApi != null) {
-                MetricCard(
-                    title = "Vulkan API Version",
-                    value = vulkanApi,
-                    valueColor = SuccessNeon,
-                    subtitle = vulkanSource ?: ""
-                )
-            }
-            if (vulkanDriver != null) {
-                val vulkanVerParts = vulkanDriver.split(".")
-                val displayVer = when {
-                    vulkanVerParts.size >= 4 -> "${vulkanVerParts[0]}.${vulkanVerParts[1]}.${vulkanVerParts[2]} (build ${vulkanVerParts.subList(3, vulkanVerParts.size).joinToString(".")})"
-                    vulkanVerParts.size == 3 -> "主版本 ${vulkanVerParts[0]} · 次版本 ${vulkanVerParts[1]} · 补丁 ${vulkanVerParts[2]}"
-                    else -> vulkanDriver
-                }
-                MetricCard(
-                    title = "Vulkan Driver Version",
-                    value = displayVer,
-                    valueColor = SuccessNeon,
-                    subtitle = vulkanDeviceType ?: ""
-                )
-            }
         }
     }
 }

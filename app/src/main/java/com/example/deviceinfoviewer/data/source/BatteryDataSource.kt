@@ -349,42 +349,8 @@ class BatteryDataSource(private val context: Context) {
         if (info.capacityDesignMAh <= 0 && info.chargeFullDesignMAh > 0) {
             info.capacityDesignMAh = info.chargeFullDesignMAh
         }
-        if (info.capacityDesignMAh <= 0) {
-            // 备用: power_profile.xml (Android 10+)
-            try {
-                val resId = appContext.resources.getIdentifier("config_bluetoothPowerDrainCalculationPower", "integer", "android")
-                // 这不是直接容量，但如果没有charge_full_design可用，尝试从dumpsys batteryproperties获取
-                val propOutput = ShellCommandDataSource.getDumpsysBatteryProperties()
-                // 格式: "Capacity: 5000000" 或 "design capacity: 5000"
-                val capRegex = Regex("""(?i)(?:design\s*)?(?:capacity|battery\s*capacity)[=: ]+(\d+)""")
-                val match = capRegex.find(propOutput)
-                match?.let {
-                    val raw = it.groupValues[1].toLongOrNull()
-                    if (raw != null && raw > 0) {
-                        info.capacityDesignMAh = if (raw > 100_000) raw / 1000 else raw
-                    }
-                }
-            } catch (_: Throwable) {}
-        }
         if (info.capacityNowMAh <= 0 && info.chargeFullMAh > 0) {
             info.capacityNowMAh = info.chargeFullMAh
-        }
-        // 补充: 设计容量仍不可用时，从 SoC 典型值推断
-        if (info.capacityDesignMAh <= 0) {
-            try {
-                val socModel = SysFsReader.readProp("ro.board.platform")
-                val designEstimate = when {
-                    socModel.contains("sm8750") || socModel.contains("sm8650") -> 5400L // 旗舰机
-                    socModel.contains("sm8550") || socModel.contains("sm8475") -> 5000L
-                    socModel.contains("mt689") || socModel.contains("mt698") -> 5000L // 天玑
-                    socModel.contains("sm") -> 5000L  // 骁龙默认
-                    else -> -1L
-                }
-                if (designEstimate > 0) {
-                    info.capacityDesignMAh = designEstimate
-                    info.chargeFullSource = "SoC 典型值推断"
-                }
-            } catch (_: Throwable) {}
         }
     }
 
@@ -566,49 +532,6 @@ class BatteryDataSource(private val context: Context) {
             }
         } catch (_: Throwable) {}
 
-        // === Level 0.1: IHealth HAL binder service (Android 8+ / API 26+) ===
-        if (Build.VERSION.SDK_INT >= 26) {
-            try {
-                val serviceManager = Class.forName("android.os.ServiceManager")
-                val getService = serviceManager.getMethod("getService", String::class.java)
-                // 尝试 health 服务
-                val healthBinder = getService.invoke(null, "health") as? android.os.IBinder
-                if (healthBinder != null) {
-                    try {
-                        // IHealth.getChargeCounter / getBatteryCycleCount
-                        // 通过 Binder 事务号 1-5 访问
-                        val parcel = android.os.Parcel.obtain()
-                        val reply = android.os.Parcel.obtain()
-                        try {
-                            // 尝试不同的 Binder transaction codes (AOSP IHealth.hal)
-                            for (txCode in listOf(5, 7, 8, 9, 10)) {
-                                try {
-                                    parcel.recycle()
-                                    reply.recycle()
-                                    val p = android.os.Parcel.obtain()
-                                    val r = android.os.Parcel.obtain()
-                                    p.writeInterfaceToken("android.hardware.health.IHealth")
-                                    healthBinder.transact(txCode, p, r, 0)
-                                    r.readException()
-                                    val cycle = r.readInt()
-                                    if (cycle > 0 && cycle < 10000) {
-                                        Log.d(TAG, "cycle_count via IHealth HAL tx=$txCode: $cycle")
-                                        return Pair(cycle, "IHealth HAL (Android 8+)")
-                                    }
-                                    p.recycle()
-                                    r.recycle()
-                                    break
-                                } catch (_: Throwable) { continue }
-                            }
-                        } finally {
-                            try { parcel.recycle() } catch (_: Throwable) {}
-                            try { reply.recycle() } catch (_: Throwable) {}
-                        }
-                    } catch (_: Throwable) {}
-                }
-            } catch (_: Throwable) { /* IHealth HAL not available */ }
-        }
-
         // === Level 0.2: dmesg 内核环形缓冲区 — 很多 OEM BMS 驱动在启动时打印循环计数 ===
         try {
             val dmesgProc = Runtime.getRuntime().exec(arrayOf("dmesg"))
@@ -754,19 +677,6 @@ class BatteryDataSource(private val context: Context) {
             // OPPO/OnePlus MTK 新路径
             "/sys/devices/platform/battery/cycle_count" to "MTK platform battery",
             "/sys/devices/platform/mt-battery/cycle_count" to "MTK mt-battery",
-            // Samsung fuelgauge (maxim)
-            "/sys/class/power_supply/battery/fg_cycle" to "samsung fg_cycle",
-            "/sys/devices/platform/samsung_fuelgauge/cycle" to "samsung fuelgauge",
-            // Google Pixel
-            "/sys/class/power_supply/battery/cycle_count" to "pixel cycle_count",
-            "/sys/class/power_supply/bms/battery_cycle_count" to "pixel bms cycle",
-            // 通用 FG (Fuel Gauge) 芯片
-            "/sys/class/power_supply/fg/cycle_count" to "fg/cycle_count",
-            "/sys/class/power_supply/battery/device/cycle_count" to "device/cycle_count",
-            "/sys/devices/virtual/power_supply/battery/cycle_count" to "virtual/cycle_count",
-            "/sys/kernel/debug/battery/cycle_count" to "debug/battery/cycle",
-            // 新增: Android 14+ Health HAL v2.1 cycle_count 导出路径
-            "/sys/class/power_supply/battery/health_cycle_count" to "health/cycle_count",
         )
         for ((path, desc) in extraSysfsPaths) {
             val cnt = SysFsReader.readInt(path)
@@ -1039,6 +949,7 @@ class BatteryDataSource(private val context: Context) {
             reader.close()
             proc.waitFor()
 
+            // checkin 格式: "9,p,电池,0,0,0,0,cycle:123,..."
             val checkinCycleRegex = Regex("""cycle[:=](\d{1,4})""", RegexOption.IGNORE_CASE)
             val match = checkinCycleRegex.find(output)
             match?.let {
@@ -1046,38 +957,6 @@ class BatteryDataSource(private val context: Context) {
                 if (cnt != null && cnt > 0 && cnt < 10000) {
                     Log.d(TAG, "cycle_count via dumpsys batterystats --checkin: $cnt")
                     return Pair(cnt, "dumpsys batterystats --checkin")
-                }
-            }
-
-            // 备用: 解析 "9,p," 电池行中的 "cc:<value>"
-            val ccmRegex = Regex("""(?:cc|cycle_count)[:=](\d{1,4})""", RegexOption.IGNORE_CASE)
-            val ccmMatch = ccmRegex.find(output)
-            ccmMatch?.let {
-                val cnt = it.groupValues[1].toIntOrNull()
-                if (cnt != null && cnt > 0 && cnt < 10000) {
-                    return Pair(cnt, "batterystats checkin cc")
-                }
-            }
-        } catch (_: Throwable) { /* fall through */ }
-
-        // === Level 7.8: dumpsys batteryproperties (Android 10+) ===
-        try {
-            val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "dumpsys batteryproperties 2>/dev/null"))
-            val output = proc.inputStream.bufferedReader().readText()
-            proc.waitFor()
-
-            // 匹配各种格式: "cycle_count: 123", "Cycle count=456" 等
-            val bpPatterns = listOf(
-                Regex("""(?i)(?:cycle[_\s]*count|charge[_\s]*cycle|battery[_\s]*cycle)[=: ]+(\d{1,4})"""),
-                Regex("""(?i)cycle[=: ]+(\d{2,4})"""),
-            )
-            for (regex in bpPatterns) {
-                val match = regex.find(output)
-                match?.let {
-                    val cnt = it.groupValues[1].toIntOrNull()
-                    if (cnt != null && cnt > 0 && cnt < 10000) {
-                        return Pair(cnt, "dumpsys batteryproperties")
-                    }
                 }
             }
         } catch (_: Throwable) { /* fall through */ }

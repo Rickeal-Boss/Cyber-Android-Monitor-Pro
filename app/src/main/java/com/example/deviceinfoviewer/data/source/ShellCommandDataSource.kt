@@ -60,14 +60,6 @@ object ShellCommandDataSource {
     fun getDumpsysBattery(): String = exec("/system/bin/sh", "-c", "dumpsys battery")
 
     /**
-     * 获取 dumpsys batteryproperties 输出 (Android 10+)
-     * 包含：设计容量、充电状态、循环计数等
-     */
-    @JvmStatic
-    fun getDumpsysBatteryProperties(): String =
-        exec("/system/bin/sh", "-c", "dumpsys batteryproperties 2>/dev/null")
-
-    /**
      * 获取 dumpsys thermalservice 输出
      * 包含：全机温控节流状态、各 sensor 温度、冷却设备状态
      */

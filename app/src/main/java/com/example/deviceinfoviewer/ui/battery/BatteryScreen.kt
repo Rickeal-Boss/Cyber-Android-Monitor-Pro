@@ -66,13 +66,14 @@ fun BatteryScreen(
         // === 状态概览 ===
         val statusText = buildString {
             if (isPlugged && isCharging) append("充电中")
-            else if (isPlugged) append("已连接 · 未充")
+            else if (isPlugged && !isCharging) append("已连接 · 未充")
             else append("放电中")
             if (level != null) append(" · ${level}%")
+            if (chargerFromPlug != null && !isPlugged) append("  // 上轮:$chargerFromPlug")
         }
         val techText = buildString {
             if (technology != null) append(technology)
-            if (chargerFromPlug != null && isPlugged) append("  |  $chargerFromPlug")
+            if (chargerFromPlug != null) append("  |  $chargerFromPlug")
             if (chargerType != null && chargerType != chargerFromPlug) append("  |  $chargerType")
         }
 

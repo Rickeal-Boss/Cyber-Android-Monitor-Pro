@@ -65,13 +65,9 @@ fun CpuScreen(
     val cacheL1 = cpuInfo?.cacheL1?.takeIf { it.isNotBlank() }
     val cacheL2 = cpuInfo?.cacheL2?.takeIf { it.isNotBlank() }
     val cacheL3 = cpuInfo?.cacheL3?.takeIf { it.isNotBlank() }
-    val deepSleepPct = cpuInfo?.deepSleepPercent
-    val cStates = cpuInfo?.cStates ?: emptyList()
-    val cpuidleSource = cpuInfo?.cpuidleSource?.takeIf { it.isNotEmpty() }
 
     val cpuTempChart = normalizeChartData(histData["cpu_temp"], 100f)
     val cpuFreqChart = normalizeChartData(histData["cpu_freq"], 3500f)
-    val deepSleepChart = normalizeChartData(histData["cpu_deep_sleep"], 100f)
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -95,38 +91,6 @@ fun CpuScreen(
             LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth())
         }
 
-        // CPU 深度睡眠 (C-States)
-        if (deepSleepPct != null && !deepSleepPct.isNaN() && cStates.isNotEmpty()) {
-            Text("深度睡眠", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-            MetricCard(
-                title = "C-States 深度睡眠",
-                value = "${deepSleepPct.toInt()}%",
-                valueColor = NeonPurpleBright,
-                subtitle = cpuidleSource ?: ""
-            ) {
-                LineChart(data = deepSleepChart, modifier = Modifier.fillMaxWidth())
-            }
-
-            // 各 C-State 详情
-            cStates.forEach { state ->
-                val totalTime = cStates.sumOf { it.timeUs }
-                val pct = if (totalTime > 0) (state.timeUs.toFloat() / totalTime * 100f).coerceIn(0f, 100f) else 0f
-                val color = when {
-                    state.level >= 2 -> NeonPurpleBright
-                    state.level == 1 -> NeonCyan
-                    else -> NeonPurple.copy(alpha = 0.6f)
-                }
-                MetricCard(
-                    title = "${state.name} (C${state.level})",
-                    value = "${pct.toInt()}%",
-                    valueColor = color,
-                    subtitle = "延迟 ${state.latencyUs}µs · 进入 ${state.usage}次",
-                    progress = pct / 100f,
-                    showProgress = true
-                )
-            }
-        }
-
         // CPU 缓存信息
         if (cacheL1 != null || cacheL2 != null || cacheL3 != null) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -141,27 +105,6 @@ fun CpuScreen(
                 if (cacheL3 != null) MetricCard(
                     title = "L3 Cache", value = cacheL3,
                     valueColor = NeonPurpleBright, modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        // 支持的 ABI
-        if (supportedAbis.isNotEmpty()) {
-            Text("支持的 ABI", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-            supportedAbis.forEach { abi ->
-                val abiLabel = when {
-                    abi.contains("arm64") -> "ARM 64-bit (arm64-v8a)"
-                    abi.contains("armeabi-v7a") -> "ARM 32-bit (armeabi-v7a)"
-                    abi.contains("x86_64") -> "x86 64-bit"
-                    abi.contains("x86") -> "x86 32-bit"
-                    abi.contains("riscv64") -> "RISC-V 64-bit"
-                    else -> abi
-                }
-                MetricCard(
-                    title = if (supportedAbis.indexOf(abi) == 0) "主 ABI" else "兼容 ABI",
-                    value = abiLabel,
-                    valueColor = NeonPurpleBright,
-                    subtitle = abi
                 )
             }
         }

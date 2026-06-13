@@ -137,14 +137,7 @@ data class DeviceDetailInfo(
     // ── Identifiers (可重置标识符) ──
     var androidId: String = "",              // Android ID (Settings.Secure.ANDROID_ID, 64-bit hex)
     var serialNumber: String = "",           // 序列号 (Build.getSerial(), API 26+ 需权限)
-    var hardwareSerial: String = "",          // ro.serialno 硬件序列号
-    var deviceFingerprint: String = "",       // Build.FINGERPRINT 设备指纹
-
-    // ── Runtime Environment (运行环境) ──
-    var javaRuntimeVersion: String = "",     // JDK 版本号 + 供应商 e.g. "17.0.13 (Android)"
-    var javaVmName: String = "",             // VM 名称 e.g. "Dalvik" / "ART"
-    var opensslVersion: String = "",         // OpenSSL 版本 e.g. "OpenSSL 3.0.2 15 Mar 2022"
-    var buildTimestamp: String = ""          // APK 构建时间 e.g. "2026-06-13 20:30:00 UTC"
+    var hardwareSerial: String = ""          // ro.serialno 硬件序列号
 )
 
 /**

@@ -102,16 +102,6 @@ class CpuDataSource(private val context: Context) {
         // 获取 CPU 使用率 (/proc/stat)
         info.cpuUsagePercent = getCpuUsage()
 
-        // 获取 CPU 深度睡眠统计 (C-States)
-        val idleResult = collectCpuIdleStats()
-        info.deepSleepPercent = idleResult.first
-        info.cStates = idleResult.second
-        info.totalIdlePercent = idleResult.third
-        info.cpuidleSource = idleResult.fourth
-
-        // 收集支持的 ABI 列表
-        info.supportedAbis = collectSupportedAbis()
-
         return info
     }
 
@@ -479,116 +469,7 @@ class CpuDataSource(private val context: Context) {
         return result
     }
 
-    // ========== CPU 深度睡眠统计 (C-States) ==========
-    /**
-     * 读取所有 CPU 核心的 cpuidle 状态
-     * 路径: /sys/devices/system/cpu/cpu0/cpuidle/state{N}/name, time, usage, latency
-     *
-     * @return (deepSleepPercent, cStates列表, totalIdlePercent, source)
-     */
-    fun collectCpuIdleStats(): Quadruple<Float, List<com.example.deviceinfoviewer.data.model.CpuCState>, Float, String> {
-        try {
-            // 聚合所有核心的各 C-State
-            val allStates = mutableMapOf<String, MutableList<com.example.deviceinfoviewer.data.model.CpuCState>>()
-            var coresFound = 0
-
-            for (coreIdx in 0..7) {
-                val cpuidleBase = "/sys/devices/system/cpu/cpu$coreIdx/cpuidle/"
-                if (!SysFsReader.fileExists(cpuidleBase)) continue
-
-                val stateDirs = SysFsReader.listDir(cpuidleBase)
-                coresFound++
-
-                for (dir in stateDirs) {
-                    if (!dir.startsWith("state")) continue
-                    val statePath = cpuidleBase + dir
-                    val name = SysFsReader.readLine(statePath + "/name").trim()
-                    if (name.isEmpty()) continue
-                    val time = SysFsReader.readLong(statePath + "/time")
-                    val usage = SysFsReader.readInt(statePath + "/usage")
-                    val latency = SysFsReader.readInt(statePath + "/latency")
-
-                    if (time > 0) {
-                        val level = dir.removePrefix("state").toIntOrNull() ?: 0
-                        val state = com.example.deviceinfoviewer.data.model.CpuCState(
-                            name = name, timeUs = time, usage = usage,
-                            latencyUs = latency, level = level
-                        )
-                        allStates.getOrPut(name) { mutableListOf() }.add(state)
-                    }
-                }
-            }
-
-            if (coresFound == 0 || allStates.isEmpty()) {
-                return Quadruple(Float.NaN, emptyList(), Float.NaN, "cpuidle 不可用")
-            }
-
-            // 聚合: 每个 C-State 取所有核心的 time 总和
-            val aggregated = allStates.map { (name, states) ->
-                com.example.deviceinfoviewer.data.model.CpuCState(
-                    name = name,
-                    timeUs = states.sumOf { it.timeUs },
-                    usage = states.sumOf { it.usage },
-                    latencyUs = states.firstOrNull()?.latencyUs ?: 0,
-                    level = states.firstOrNull()?.level ?: 0
-                )
-            }.sortedBy { it.level }
-
-            // C0 (WFI/active idle) 是 idle 但不算深度睡眠
-            // C1 (浅眠) + C2/C3 (深度睡眠)
-            val totalSleepTime = aggregated.sumOf { it.timeUs }
-            if (totalSleepTime <= 0) {
-                return Quadruple(Float.NaN, emptyList(), Float.NaN, "cpuidle 数据为零")
-            }
-
-            // 深度睡眠: C2 及更深的睡眠状态
-            val deepSleepStates = aggregated.filter { it.level >= 2 || it.name.contains("C2", ignoreCase = true) || it.name.contains("SLEEP", ignoreCase = true) || it.name.contains("retention", ignoreCase = true) }
-            val deepTime = deepSleepStates.sumOf { it.timeUs }
-            val deepPct = if (totalSleepTime > 0) (deepTime.toFloat() / totalSleepTime * 100f).coerceIn(0f, 100f) else Float.NaN
-
-            // 总空闲: 全部 C-State 时间 (不包括 active)
-            val totalIdlePct = 100f  // cpuidle 本身就是 idle 时间
-
-            return Quadruple(deepPct, aggregated, totalIdlePct, "cpuidle ($coresFound cores)")
-        } catch (_: Throwable) {
-            return Quadruple(Float.NaN, emptyList(), Float.NaN, "cpuidle 读取失败")
-        }
-    }
-
-    /** 简单的四元组容器，避免引入额外依赖 */
-    data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
-
-    /**
-     * 收集 CPU 支持的 ABI 列表
-     * 数据源: Build.SUPPORTED_ABIS (Android 5+), Build.CPU_ABI (legacy)
-     */
-    private fun collectSupportedAbis(): List<String> {
-        return try {
-            val abis = mutableListOf<String>()
-            // 主 ABI 列表 (Android 5+, API 21+)
-            try {
-                android.os.Build.SUPPORTED_ABIS.forEach { abis.add(it) }
-            } catch (_: Throwable) {
-                // 降级: 32-bit 和 64-bit ABI 分别获取
-                try { android.os.Build.SUPPORTED_64_BIT_ABIS.forEach { abis.add(it) } }
-                    catch (_: Throwable) {}
-                try { android.os.Build.SUPPORTED_32_BIT_ABIS.forEach { abis.add(it) } }
-                    catch (_: Throwable) {}
-            }
-            // 兜底: 单个 CPU_ABI
-            if (abis.isEmpty()) {
-                try {
-                    val cpuAbi = android.os.Build.CPU_ABI
-                    if (cpuAbi.isNotEmpty()) abis.add(cpuAbi)
-                } catch (_: Throwable) {}
-                try {
-                    val cpuAbi2 = android.os.Build.CPU_ABI2
-                    if (cpuAbi2.isNotEmpty()) abis.add(cpuAbi2)
-                } catch (_: Throwable) {}
-            }
-            abis
-        } catch (_: Throwable) { emptyList() }
-    }
+    // ========== Companion ==========
 
     /**
      * 读取 CPU 缓存信息 (L1/L2/L3)

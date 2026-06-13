@@ -16,7 +16,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -277,13 +276,8 @@ fun DeviceScreen(
         val hasAndroidId = detail?.androidId?.isNotEmpty() == true
         val hasSerial = detail?.serialNumber?.isNotEmpty() == true
         val hasHwSerial = detail?.hardwareSerial?.isNotEmpty() == true
-        val hasFingerprint = detail?.deviceFingerprint?.isNotEmpty() == true
-        if (hasAndroidId || hasSerial || hasHwSerial || hasFingerprint) {
+        if (hasAndroidId || hasSerial || hasHwSerial) {
             SectionCard("设备标识符") {
-                if (hasFingerprint) {
-                    RowItem("设备指纹", detail!!.deviceFingerprint,
-                        valueColor = NeonCyan)
-                }
                 if (hasAndroidId) {
                     RowItem("Android ID", detail!!.androidId,
                         valueColor = NeonCyan)
@@ -295,50 +289,6 @@ fun DeviceScreen(
                 if (hasHwSerial) {
                     RowItem("硬件序列号", detail!!.hardwareSerial,
                         valueColor = NeonCyan)
-                }
-            }
-        }
-
-        // ═══════ 16.2 Bootloader 状态 ═══════
-        val bootloader = oem?.bootloader?.takeIf { it.isNotEmpty() }
-        val bootUnlocked = detail?.bootloaderUnlocked
-        if (bootloader != null || bootUnlocked != null) {
-            SectionCard("Bootloader") {
-                if (bootloader != null) {
-                    RowItem("版本", bootloader)
-                }
-                if (bootUnlocked != null) {
-                    val statusText = if (bootUnlocked) "已解锁 ⚠️" else "已锁定"
-                    RowItem("解锁状态", statusText,
-                        valueColor = if (bootUnlocked) Color(0xFFEF5350) else SuccessNeon)
-                }
-                detail?.secureBootEnabled?.let {
-                    RowItem("验证启动", if (it) "已启用" else "未启用")
-                }
-            }
-        }
-
-        // ═══════ 16.5 运行环境 (新增) ═══════
-        val javaRuntime = detail?.javaRuntimeVersion?.takeIf { it.isNotEmpty() }
-        val javaVm = detail?.javaVmName?.takeIf { it.isNotEmpty() }
-        val openssl = detail?.opensslVersion?.takeIf { it.isNotEmpty() }
-        val buildTime = detail?.buildTimestamp?.takeIf { it.isNotEmpty() && it != "未知" }
-        if (javaRuntime != null || openssl != null || buildTime != null) {
-            SectionCard("运行环境") {
-                if (javaRuntime != null) {
-                    RowItem("Java 运行时", javaRuntime,
-                        valueColor = NeonPurpleBright)
-                } else if (javaVm != null) {
-                    RowItem("运行时", javaVm,
-                        valueColor = NeonPurpleBright)
-                }
-                if (openssl != null) {
-                    RowItem("OpenSSL 版本", openssl,
-                        valueColor = NeonPurpleBright)
-                }
-                if (buildTime != null) {
-                    RowItem("构建时间", buildTime,
-                        valueColor = NeonPurpleBright)
                 }
             }
         }

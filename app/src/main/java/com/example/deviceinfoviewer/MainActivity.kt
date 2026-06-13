@@ -113,8 +113,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel = koinViewModel()) {
     // 注: 不额外注册 PredictiveBackHandler。
     // Android 16 enableEdgeToEdge() 已自动启用系统级预测性返回动画，
     // BackHandler 通过 OnBackPressedCallback 在动画完成后正确接收返回事件。
-    // 若同时注册 PredictiveBackHandler，会导致手势被双重消费，
-    // 出现需连续两次返回才能关闭覆盖页的现象。
+    // 若同时注册 PredictiveBackHandler，会导致第一个手势被动画消费而
+    // 不触发 onBack，需连续两次返回才能关闭覆盖页。
 
 
     // GPS 开关观察 — 离开 GPS/网络 Tab 时自动关闭定位

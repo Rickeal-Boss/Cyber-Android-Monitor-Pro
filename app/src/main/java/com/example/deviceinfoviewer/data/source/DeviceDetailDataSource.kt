@@ -309,7 +309,6 @@ class DeviceDetailDataSource(private val context: Context) {
         collectThermal(info)
         collectSecurity(info)
         collectIdentifiers(info)  // Android ID / 序列号
-        collectRuntimeEnv(info)   // Java Runtime / OpenSSL / Build timestamp
         collectMisc(info)
         return info
     }
@@ -1564,104 +1563,6 @@ class DeviceDetailDataSource(private val context: Context) {
             info.hardwareSerial = SysFsReader.readProp("ro.serialno")
                 .ifEmpty { SysFsReader.readProp("sys.serialno") }
         } catch (e: Throwable) { Log.w(TAG, "硬件序列号读取失败", e) }
-
-        // 设备指纹 — Build.FINGERPRINT (ROM 签名唯一标识)
-        try {
-            info.deviceFingerprint = Build.FINGERPRINT
-        } catch (e: Throwable) { Log.w(TAG, "设备指纹读取失败", e) }
-    }
-
-    // ═══════════════════════════════════════════
-    //  Runtime Environment (运行环境)
-    // ═══════════════════════════════════════════
-    private fun collectRuntimeEnv(info: DeviceDetailInfo) {
-        try {
-            // ── Java Runtime ──
-            val javaVm = System.getProperty("java.vm.name", "")
-            val javaVmVersion = System.getProperty("java.vm.version", "")
-            val javaVendor = System.getProperty("java.vendor", "")
-            val javaVersion = System.getProperty("java.version", "")
-
-            info.javaVmName = when {
-                javaVm.contains("Dalvik", ignoreCase = true) -> "Android Runtime (Dalvik)"
-                javaVm.contains("ART", ignoreCase = true) || javaVm.contains("art", ignoreCase = true) -> "Android Runtime (ART)"
-                javaVm.isNotEmpty() -> javaVm
-                else -> "Android Runtime"
-            }
-
-            // Java 版本 + 供应商
-            val versionParts = mutableListOf<String>()
-            if (javaVersion.isNotEmpty()) versionParts.add(javaVersion)
-            if (javaVmVersion.isNotEmpty() && javaVmVersion != javaVersion) versionParts.add("VM $javaVmVersion")
-            if (javaVendor.isNotEmpty()) versionParts.add(javaVendor)
-            info.javaRuntimeVersion = versionParts.joinToString(" | ").ifEmpty {
-                // 降级: ART/Dalvik 版本号
-                try {
-                    val vmRuntime = Class.forName("dalvik.system.VMRuntime")
-                    val getRuntime = vmRuntime.getMethod("getRuntime")
-                    val runtime = getRuntime.invoke(null)
-                    val getVersion = runtime.javaClass.getMethod("vmVersion")
-                    val ver = getVersion.invoke(runtime)?.toString() ?: ""
-                    ver.ifEmpty { "Android Runtime" }
-                } catch (_: Throwable) {
-                    "Android Runtime"
-                }
-            }
-
-            // ── OpenSSL 版本 ──
-            try {
-                // 方式1: 系统属性 (Android 10+)
-                info.opensslVersion = SysFsReader.readProp("ro.openssl.version")
-                    .ifEmpty { SysFsReader.readProp("ro.vendor.openssl.version") }
-
-                // 方式2: 反射安全提供者 (BoringSSL 标准 API)
-                if (info.opensslVersion.isEmpty()) {
-                    try {
-                        val sslCtx = javax.net.ssl.SSLContext.getDefault()
-                        val provider = sslCtx.provider
-                        val name = provider.name  // "AndroidOpenSSL" / "BoringSSL"
-                        val ver = provider.versionStr  // e.g. "1.0.2" or "3.0"
-                        info.opensslVersion = if (ver.isNotEmpty()) "$name $ver" else name
-                    } catch (_: Throwable) {
-                        val provider = java.security.Security.getProvider("AndroidOpenSSL")
-                            ?: java.security.Security.getProvider("BC")
-                        provider?.let {
-                            info.opensslVersion = "${it.name} ${it.versionStr}"
-                        }
-                    }
-                }
-
-                // 方式3: 通过 exec 获取 (Android 5+)
-                if (info.opensslVersion.isEmpty()) {
-                    try {
-                        val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "openssl version 2>/dev/null"))
-                        val output = proc.inputStream.bufferedReader().readText().trim()
-                        proc.waitFor()
-                        if (output.isNotEmpty()) {
-                            info.opensslVersion = output.removePrefix("OpenSSL").trim()
-                                .let { if (it.isNotEmpty()) "OpenSSL $it" else output }
-                        }
-                    } catch (_: Throwable) {}
-                }
-            } catch (_: Throwable) {
-                info.opensslVersion = ""
-            }
-
-            // ── 构建时间戳 ──
-            try {
-                val buildTimeMs = com.example.deviceinfoviewer.BuildConfig.BUILD_TIMESTAMP
-                val buildTimeUtc = com.example.deviceinfoviewer.BuildConfig.BUILD_TIME_UTC
-                if (buildTimeMs > 0) {
-                    info.buildTimestamp = buildTimeUtc
-                        .ifEmpty { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(buildTimeMs)) }
-                }
-            } catch (_: Throwable) {
-                // BuildConfig 字段不存在时降级
-                info.buildTimestamp = "未知"
-            }
-        } catch (_: Throwable) {
-            Log.w(TAG, "运行环境采集异常", null)
-        }
     }
 
     // ═══════════════════════════════════════════

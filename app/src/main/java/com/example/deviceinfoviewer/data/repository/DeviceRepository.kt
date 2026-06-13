@@ -282,8 +282,6 @@ class DeviceRepository(context: Context) {
             if (maxFreq > 0) historyCache.addPoint("cpu_freq", maxFreq.toFloat())
             if (!cpu.cpuUsagePercent.isNaN())
                 historyCache.addPoint("cpu_usage", cpu.cpuUsagePercent)
-            if (!cpu.deepSleepPercent.isNaN())
-                historyCache.addPoint("cpu_deep_sleep", cpu.deepSleepPercent)
             markHealthy("cpu")
         }.onFailure { e ->
             Log.w(TAG, "CPU采集失败", e)

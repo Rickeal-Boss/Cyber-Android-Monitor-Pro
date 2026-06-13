@@ -59,12 +59,6 @@ fun DashboardScreen(
         }
     }
     val uptimeStr = buildUptimeString(liveUptime)
-    // 深度待机信息
-    val sleepEfficiency = systemInfo?.sleepEfficiency
-    val deepSleepStr = if (sleepEfficiency != null && !sleepEfficiency.isNaN() && sleepEfficiency > 0) {
-        "${sleepEfficiency.toInt()}% 待机效率"
-    } else ""
-    val sleepSource = systemInfo?.sleepSource?.takeIf { it.isNotEmpty() } ?: ""
 
     val cpuTempChart = normalizeChartData(historyData["cpu_temp"], 100f)
     val ramChart = normalizeChartData(historyData["ram_usage"], 100f)
@@ -78,7 +72,6 @@ fun DashboardScreen(
             title = deviceName,
             subtitle = buildString {
                 if (uptimeStr.isNotEmpty()) append("已开机 $uptimeStr  ")
-                if (deepSleepStr.isNotEmpty()) append("· $deepSleepStr  ")
                 if (batteryInfo != null) append("电池 $batteryLevel  ")
                 if (!cpuTemp.startsWith("---")) append("温度 $cpuTemp")
             },
