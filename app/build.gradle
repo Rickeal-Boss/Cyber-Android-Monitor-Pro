@@ -16,11 +16,10 @@ android {
         versionCode 202
         versionName "2.0.202.0"
 
-        // 构建时间戳 (UTC 毫秒 + 可读格式)
+        // 构建时间戳 (UTC 格式)
         buildConfigField "long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L"
-        buildConfigField "String", "BUILD_TIME_UTC",
-                "\"" + new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
-                        .format(new java.util.Date()) + " UTC\""
+        def buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date())
+        buildConfigField "String", "BUILD_TIME_UTC", "\"${buildDate} UTC\""
     }
 
     // ================================================================
