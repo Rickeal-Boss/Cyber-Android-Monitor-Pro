@@ -1,6 +1,7 @@
 plugins {
     id 'com.android.application'
     id 'org.jetbrains.kotlin.android'
+    // Kotlin 2.0+ 强制要求 Compose Compiler 插件
     id 'org.jetbrains.kotlin.plugin.compose'
 }
 
@@ -14,11 +15,6 @@ android {
         targetSdk 35
         versionCode 202
         versionName "2.0.202.0"
-
-        // 构建时间戳 (UTC 格式)
-        buildConfigField "long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L"
-        def buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date())
-        buildConfigField "String", "BUILD_TIME_UTC", "\"${buildDate} UTC\""
     }
 
     // ================================================================
