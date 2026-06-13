@@ -32,13 +32,18 @@ android {
         }
     }
 
-    defaultConfig {
-        applicationId "com.example.deviceinfoviewer"
-        minSdk 21
-        targetSdk 35
-        versionCode 202
-        versionName "2.0.202.0"
-    }
+defaultConfig {
+    applicationId "com.example.deviceinfoviewer"
+    minSdk 21
+    targetSdk 35
+    versionCode 202
+    versionName "2.0.202.0"
+
+    buildConfigField "long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L"
+    def buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date())
+    buildConfigField "String", "BUILD_TIME_UTC", "\"${buildDate} UTC\""
+}
+
     buildTypes {
         release {
             minifyEnabled true
