@@ -65,7 +65,9 @@ defaultConfig {
 
     buildFeatures {
         compose true
+        buildConfig true    // ← 新增：启用 BuildConfig 字段生成
     }
+
 }
 
 dependencies {
