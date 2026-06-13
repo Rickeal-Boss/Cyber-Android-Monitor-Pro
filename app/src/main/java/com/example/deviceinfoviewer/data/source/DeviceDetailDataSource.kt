@@ -1626,7 +1626,8 @@ class DeviceDetailDataSource(private val context: Context) {
                         val provider = java.security.Security.getProvider("AndroidOpenSSL")
                             ?: java.security.Security.getProvider("BC")
                         provider?.let {
-                            info.opensslVersion = "${it.name} ${it.versionStr}"
+                            val ver = try { it.version.toString() } catch (_: Throwable) { "" }
+                            info.opensslVersion = if (ver.isNotEmpty()) "${it.name} $ver" else it.name
                         }
                     }
                 }
