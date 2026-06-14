@@ -12,6 +12,7 @@ import kotlinx.coroutines.*
  * 核心数据仓库 — Kotlin 协程驱动
  */
 class DeviceRepository(context: Context) {
+    private val appContext = appContext
 
     companion object {
         const val TAG = "DeviceRepo"
@@ -94,19 +95,19 @@ class DeviceRepository(context: Context) {
     }
 
     // DataSources
-    private val cpuDataSource = CpuDataSource(context.applicationContext)
+    private val cpuDataSource = CpuDataSource(appContext)
     private val gpuDataSource = GpuDataSource()
-    private val batteryDataSource = BatteryDataSource(context.applicationContext)
+    private val batteryDataSource = BatteryDataSource(appContext)
     private val memoryDataSource = MemoryDataSource()
     private val storageDataSource = StorageDataSource()
-    private val wifiDataSource = WifiDataSource(context.applicationContext)
-    private val mobileNetworkDataSource = MobileNetworkDataSource(context.applicationContext)
+    private val wifiDataSource = WifiDataSource(appContext)
+    private val mobileNetworkDataSource = MobileNetworkDataSource(appContext)
     private val networkInterfaceDataSource = NetworkInterfaceDataSource()
-    private val gpsDataSource = GpsDataSource(context.applicationContext)
-    private val sensorDataSource = SensorDataSource(context.applicationContext)
+    private val gpsDataSource = GpsDataSource(appContext)
+    private val sensorDataSource = SensorDataSource(appContext)
     private val systemDataSource = SystemDataSource()
-    private val deviceDetailDataSource = DeviceDetailDataSource(context.applicationContext)
-    private val oemDataSource = OemDataSource(context.applicationContext)
+    private val deviceDetailDataSource = DeviceDetailDataSource(appContext)
+    private val oemDataSource = OemDataSource(appContext)
 
     // 处理器预缓存 — 匹配平台时注入精确信息（SystemProperties 反射）
     private val cachedChip: CpuCache.KnownChip? by lazy {

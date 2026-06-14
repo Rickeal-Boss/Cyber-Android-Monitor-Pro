@@ -14,13 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.BatteryChargingFull
-import androidx.compose.material.icons.filled.GpsFixed
-import androidx.compose.material.icons.filled.GridView
-import androidx.compose.material.icons.filled.Memory
-import androidx.compose.material.icons.filled.Sensors
-import androidx.compose.material.icons.filled.SignalWifi4Bar
-import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -45,6 +39,7 @@ import com.example.deviceinfoviewer.ui.theme.NeonPurpleBright
 import com.example.deviceinfoviewer.ui.theme.NeonSteelBlue
 import com.example.deviceinfoviewer.ui.theme.TextPrimary
 import com.example.deviceinfoviewer.ui.theme.TextSecondary
+import kotlin.math.absoluteValue
 import org.koin.androidx.compose.koinViewModel
 
 private val refreshOptions = listOf(200L, 500L, 1000L, 2000L, 5000L, 10000L, 30000L)
@@ -64,25 +59,25 @@ private data class ModuleIntervalConfig(
 )
 
 private val moduleConfigs = listOf(
-    ModuleIntervalConfig("CPU", Icons.Default.Speed,
+    ModuleIntervalConfig("CPU", Icons.Default.PlayArrow,
         "CPU 频率、核心、温度刷新频率",
         { it.getCpuRefreshMs() }, { vm, ms -> vm.setCpuRefreshMs(ms) }),
-    ModuleIntervalConfig("GPU", Icons.Default.GridView,
+    ModuleIntervalConfig("GPU", Icons.Default.Settings,
         "GPU 负载、频率、温度刷新频率",
         { it.getGpuRefreshMs() }, { vm, ms -> vm.setGpuRefreshMs(ms) }),
-    ModuleIntervalConfig("内存", Icons.Default.Memory,
+    ModuleIntervalConfig("内存", Icons.Default.Star,
         "内存 / ZRAM 使用数据刷新频率",
         { it.getMemoryRefreshMs() }, { vm, ms -> vm.setMemoryRefreshMs(ms) }),
-    ModuleIntervalConfig("电池", Icons.Default.BatteryChargingFull,
+    ModuleIntervalConfig("电池", Icons.Default.Favorite,
         "电池容量、充放电、温度刷新频率",
         { it.getBatteryRefreshMs() }, { vm, ms -> vm.setBatteryRefreshMs(ms) }),
-    ModuleIntervalConfig("网络", Icons.Default.SignalWifi4Bar,
+    ModuleIntervalConfig("网络", Icons.Default.Share,
         "WiFi / 信号 / IP / 流量刷新频率",
         { it.getNetworkRefreshMs() }, { vm, ms -> vm.setNetworkRefreshMs(ms) }),
-    ModuleIntervalConfig("GPS", Icons.Default.GpsFixed,
+    ModuleIntervalConfig("GPS", Icons.Default.Info,
         "GPS 卫星列表与坐标刷新频率",
         { it.getGpsRefreshMs() }, { vm, ms -> vm.setGpsRefreshMs(ms) }),
-    ModuleIntervalConfig("传感器", Icons.Default.Sensors,
+    ModuleIntervalConfig("传感器", Icons.Default.Search,
         "传感器数据采集刷新频率",
         { it.getSensorsRefreshMs() }, { vm, ms -> vm.setSensorsRefreshMs(ms) }),
 )
