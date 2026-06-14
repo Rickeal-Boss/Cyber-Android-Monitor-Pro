@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- ═══ Layer 1: 深色投影(模糊基底, 字母内侧阴影) ═══ -->
+    <path
+        android:fillColor="#40000000"
+        android:pathData="M33,29 L33,81 L49,81 L49,59 L59.7,59 L73.5,81 L91,81 L75.8,58 C83.2,55.5 88,48.5 88,41 C88,34.4 82.6,29 76,29 L33,29 Z M49,45 L49,41 L75,41 C76.1,41 77,41.9 77,43 C77,44.1 76.1,45 75,45 L49,45 Z"/>
+
+    <path
+        android:fillColor="#40000000"
+        android:pathData="M49,81 L79,81 C85.4,81 91.5,76.5 91.5,70 C91.5,65 88.1,60.8 83.5,59 C87,56.8 89.5,52.7 89.5,48 C89.5,41.4 84.1,36 77.5,36 L49,36 L49,81 Z M61,56 L75.5,56 C78.3,56 80.5,58.2 80.5,61 C80.5,63.8 78.3,66 75.5,66 L61,66 L61,56 Z M61,45 L76,45 C78.2,45 80,46.8 80,49 C80,51.2 78.2,53 76,53 L61,53 L61,45 Z"/>
+
+    <!-- ═══ Layer 2: 紫色径向渐变基底 (模拟弥散模糊背景) ═══ -->
+    <path
+        android:pathData="M16,0 L92,0 C100.8,0 108,7.2 108,16 L108,92 C108,100.8 100.8,108 92,108 L16,108 C7.2,108 0,100.8 0,92 L0,16 C0,7.2 7.2,0 16,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:startX="54"
+                android:startY="54"
+                android:startColor="#C68CFE"
+                android:centerX="54"
+                android:centerY="54"
+                android:centerColor="#9333EA"
+                android:gradientRadius="76"
+                android:endColor="#4C1D95"/>
+        </aapt:attr>
+    </path>
+
+    <!-- ═══ Layer 3: 中心亮斑(弥散模糊高光, 模拟 Gaussian Blur 发光) ═══ -->
+    <path
+        android:pathData="M16,0 L92,0 C100.8,0 108,7.2 108,16 L108,92 C108,100.8 100.8,108 92,108 L16,108 C7.2,108 0,100.8 0,92 L0,16 C0,7.2 7.2,0 16,0 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:startX="54"
+                android:startY="40"
+                android:startColor="#2BFFFFFF"
+                android:centerColor="#08FFFFFF"
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="30"
+                android:endColor="#00000000"/>
+        </aapt:attr>
+    </path>
+
+    <!-- ═══ Layer 4: 对角高光反射(左上→右下亮带) ═══ -->
+    <path
+        android:fillColor="#12FFFFFF"
+        android:pathData="M0,0 L70,0 L0,70 Z"/>
+
+    <!-- ═══ Layer 5: 左上角柔光亮斑 ═══ -->
+    <path
+        android:fillColor="#0EFFFFFF"
+        android:pathData="M24,4 a16,16 0,1,1 0,32 a16,16 0,1,1 0,-32 Z"/>
+
+    <!-- ═══ Layer 6: 右下深色压暗 ═══ -->
+    <path
+        android:fillColor="#18000000"
+        android:pathData="M40,108 L108,108 L108,40 Z"/>
+
+    <!-- ═══ Layer 7: R 字母(白色) ═══ -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,28 L32,80 L48,80 L48,58 L58.7,58 L72.5,80 L90,80 L74.8,57 C82.2,54.5 87,47.5 87,40 C87,33.4 81.6,28 75,28 L32,28 Z M48,44 L48,40 L74,40 C75.1,40 76,40.9 76,42 C76,43.1 75.1,44 74,44 L48,44 Z"/>
+
+    <!-- ═══ Layer 7: B 字母(白色) ═══ -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,80 L78,80 C84.4,80 90.5,75.5 90.5,69 C90.5,64 87.1,59.8 82.5,58 C86,55.8 88.5,51.7 88.5,47 C88.5,40.4 83.1,35 76.5,35 L48,35 L48,80 Z M60,55 L74.5,55 C77.3,55 79.5,57.2 79.5,60 C79.5,62.8 77.3,65 74.5,65 L60,65 L60,55 Z M60,44 L75,44 C77.2,44 79,45.8 79,48 C79,50.2 77.2,52 75,52 L60,52 L60,44 Z"/>
+
+    <!-- ═══ Layer 8: 字母高光(顶部边缘亮线, 增强立体感) ═══ -->
+    <path
+        android:fillColor="#1AFFFFFF"
+        android:pathData="M33,30 L33,78 L48,78 L48,56 L58,56 L72,78 L88,78 L73,55 C81,52.5 85,45.5 85,40 C85,33.5 80,30 75,30 Z"/>
+
+    <path
+        android:fillColor="#1AFFFFFF"
+        android:pathData="M50,37 L77,37 C82,37 88,41 88,47 C88,51 85,55 81.5,56 C85,54 87,50 87,47 C87,42 82.5,37 77,37 Z"/>
+
+    <!-- ═══ Layer 9: 顶部边缘全局亮光 ═══ -->
+    <path
+        android:fillColor="#10FFFFFF"
+        android:pathData="M5,2 L103,2 L92,3.5 L16,3.5 Z"/>
+
+    <!-- ═══ Layer 10: 左侧边缘全局亮光 ═══ -->
+    <path
+        android:fillColor="#08FFFFFF"
+        android:pathData="M2,5 L2,103 L3.5,92 L3.5,16 Z"/>
+
+</vector>
