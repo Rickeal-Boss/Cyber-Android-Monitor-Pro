@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.material3.Icon
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.deviceinfoviewer.ui.theme.*
