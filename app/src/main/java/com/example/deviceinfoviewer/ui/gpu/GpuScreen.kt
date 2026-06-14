@@ -135,19 +135,18 @@ fun GpuScreen(
 
         // Vulkan 驱动版本信息
         if (vulkanDriver != null) {
-                val vulkanVerParts = vulkanDriver.split(".")
-                val displayVer = when {
-                    vulkanVerParts.size >= 4 -> "${vulkanVerParts[0]}.${vulkanVerParts[1]}.${vulkanVerParts[2]} (build ${vulkanVerParts.subList(3, vulkanVerParts.size).joinToString(".")})"
-                    vulkanVerParts.size == 3 -> "主版本 ${vulkanVerParts[0]} · 次版本 ${vulkanVerParts[1]} · 补丁 ${vulkanVerParts[2]}"
-                    else -> vulkanDriver
-                }
-                MetricCard(
-                    title = "Vulkan Driver Version",
-                    value = displayVer,
-                    valueColor = SuccessNeon,
-                    subtitle = vulkanDeviceType ?: ""
-                )
+            val vulkanVerParts = vulkanDriver.split(".")
+            val displayVer = when {
+                vulkanVerParts.size >= 4 -> "${vulkanVerParts[0]}.${vulkanVerParts[1]}.${vulkanVerParts[2]} (build ${vulkanVerParts.subList(3, vulkanVerParts.size).joinToString(".")})"
+                vulkanVerParts.size == 3 -> "主版本 ${vulkanVerParts[0]} · 次版本 ${vulkanVerParts[1]} · 补丁 ${vulkanVerParts[2]}"
+                else -> vulkanDriver
             }
+            MetricCard(
+                title = "Vulkan Driver Version",
+                value = displayVer,
+                valueColor = SuccessNeon,
+                subtitle = vulkanDeviceType ?: ""
+            )
         }
     }
 }
