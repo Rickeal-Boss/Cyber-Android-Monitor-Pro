@@ -19,6 +19,7 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -218,9 +219,15 @@ private fun MainTabs(
     }
 
     Column(Modifier.fillMaxSize()) {
-        // ── 赛博朋克霓虹动效头部: TabRow + 操作按钮 + 光晕装饰 ──
-        Box(Modifier.fillMaxWidth().height(56.dp)) {
-            // 底层: 动效装饰 (渐变光晕 + 动态波形 + 粒子)
+        // ── 暗玻璃药丸头部: padding + 大圆角容器 + 动效装饰 ──
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 4.dp)
+                .height(52.dp)
+                .clip(RoundedCornerShape(26.dp))
+        ) {
+            // 底层: 动效装饰 (渐变光晕 + 内发光边框 + 粒子)
             NeonHeaderDecoration(Modifier.matchParentSize())
 
             // 顶层: 紧凑型顶部栏 TabRow + 操作按钮在同一行
@@ -230,7 +237,7 @@ private fun MainTabs(
             ) {
             ScrollableTabRow(
                 selectedTabIndex = pagerState.currentPage,
-                containerColor = MaterialTheme.colorScheme.background,
+                containerColor = Color.Transparent,
                 contentColor = NeonPurple,
                 edgePadding = 0.dp,
                 modifier = Modifier.weight(1f),
@@ -267,8 +274,8 @@ private fun MainTabs(
         }
         } // end Box — 霓虹动效头部
 
-        // ── 霓虹动效分割线 (替代原 HorizontalDivider) ──
-        NeonDivider(Modifier.fillMaxWidth())
+        // ── 霓虹动效分割线 (替代原 HorizontalDivider, 对齐药丸头部的水平边距) ──
+        NeonDivider(Modifier.fillMaxWidth().padding(horizontal = 6.dp))
 
         // 页面内容
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->

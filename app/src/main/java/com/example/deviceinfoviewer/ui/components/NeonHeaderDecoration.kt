@@ -52,12 +52,12 @@ fun NeonHeaderDecoration(
         label = "breathe"
     )
 
-    // ── 边框脉冲 (内发光描边线的透明度) ──
+    // ── 边框脉冲 (内发光描边线的透明度, 对齐 sys.jpg 的浅灰内发光) ──
     val borderPulse by infiniteTransition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 0.40f,
+        initialValue = 0.20f,
+        targetValue = 0.50f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = EaseInOutCubic),
+            animation = tween(2200, easing = EaseInOutCubic),
             repeatMode = RepeatMode.Reverse
         ),
         label = "borderPulse"
@@ -90,18 +90,19 @@ fun NeonHeaderDecoration(
             .fillMaxWidth()
             .clipToBounds()
     ) {
-        // ═══ 层级 1: 深色玻璃渐变底衬 ═══
-        // 模拟 sys.jpg 的暗色药丸背景: 从略亮的中心向边缘变暗
+        // ═══ 层级 1: 深色玻璃渐变底衬 (对齐 sys.jpg 中心亮→边缘暗) ═══
         Box(
             Modifier
                 .matchParentSize()
                 .background(
-                    Brush.verticalGradient(
+                    Brush.radialGradient(
                         colors = listOf(
-                            CyberElevated.copy(alpha = 0.7f * breathe),     // 上方稍亮
-                            CyberCardStart.copy(alpha = 0.4f),              // 中间过渡
-                            CyberBackground.copy(alpha = 0.95f)             // 下方深色
-                        )
+                            CyberCardStart.copy(alpha = breathe * 0.7f),   // 中心稍亮
+                            CyberBackground.copy(alpha = 0.92f),           // 边缘实深
+                            CyberBackground.copy(alpha = 0.98f)            // 最边缘
+                        ),
+                        center = Offset(0.5f, 0.45f),
+                        radius = 600f
                     )
                 )
         )
@@ -125,37 +126,39 @@ fun NeonHeaderDecoration(
                 )
         )
 
-        // ═══ 层级 3: 内发光边框 (Canvas 绘制药丸形描边) ═══
+        // ═══ 层级 3: 内发光边框 (Canvas 绘制药丸形描边, 对齐 sys.jpg 浅灰内发光 #888) ═══
         Canvas(Modifier.matchParentSize()) {
             val w = size.width
             val h = size.height
-            val cornerRadius = CornerRadius(h * 0.45f) // 大圆角, 接近药丸形状
+            val cornerRadius = CornerRadius(h * 0.48f) // 48% 高度 = 药丸半圆
 
-            // 主边框 (浅紫灰, 动态透明度)
+            // 主边框路径
             val borderPath = Path().apply {
                 addRoundRect(
                     RoundRect(
                         rect = Rect(
-                            left = 1.dp.toPx(),
-                            top = 1.dp.toPx(),
-                            right = w - 1.dp.toPx(),
-                            bottom = h - 1.dp.toPx()
+                            left = 0.5.dp.toPx(),
+                            top = 0.5.dp.toPx(),
+                            right = w - 0.5.dp.toPx(),
+                            bottom = h - 0.5.dp.toPx()
                         ),
                         cornerRadius = cornerRadius
                     )
                 )
             }
+
+            // 主描边 (浅紫灰, 模拟 sys.jpg 的 #888 内发光, 动态透明度)
             drawPath(
                 path = borderPath,
-                color = NeonSteelBlue.copy(alpha = borderPulse * 0.5f),
-                style = Stroke(width = 0.7f.dp.toPx())
+                color = NeonSteelBlue.copy(alpha = borderPulse * 0.55f),
+                style = Stroke(width = 1.0f.dp.toPx())
             )
 
-            // 外层极淡光晕 (更宽更透明的第二圈)
+            // 外层柔和光晕 (模拟内发光扩散)
             drawPath(
                 path = borderPath,
-                color = NeonPurple.copy(alpha = borderPulse * 0.1f),
-                style = Stroke(width = 2.dp.toPx())
+                color = NeonPurple.copy(alpha = borderPulse * 0.12f),
+                style = Stroke(width = 2.5f.dp.toPx())
             )
         }
 
