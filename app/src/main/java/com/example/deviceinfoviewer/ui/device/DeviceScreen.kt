@@ -456,7 +456,7 @@ private fun CameraRow(sensor: CameraSensorInfo) {
 }
 
 // ═══════ 共享组件 ═══════
-@Composable
+
 private val SectionGradient = Brush.linearGradient(listOf(CyberCardStart, CyberCardEnd))
 
 @Composable

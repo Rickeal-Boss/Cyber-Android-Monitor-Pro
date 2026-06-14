@@ -320,7 +320,6 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
 private val SectionGradient = Brush.linearGradient(listOf(CyberCardStart, CyberCardEnd))
 
 @Composable
-@Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
     Card(
         Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
