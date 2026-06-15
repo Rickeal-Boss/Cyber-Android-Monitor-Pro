@@ -38,22 +38,21 @@ class DeviceApplication : Application() {
         // 悬浮窗配置初始化
         FloatingWindowConfig.init(this)
 
-        // 全局崩溃日志
+        // 全局崩溃日志 (仅记录最近一次，不累积)
         val oldHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { t, e ->
             Log.e(TAG, "=== FATAL CRASH ===", e)
-            Log.e(TAG, "Thread: ${t.name}")
-            Log.e(TAG, "SDK: ${Build.VERSION.SDK_INT}")
+            Log.e(TAG, "Thread: ${t.name} | SDK: ${Build.VERSION.SDK_INT}")
 
             try {
                 val sw = StringWriter()
                 PrintWriter(sw).use { pw ->
                     pw.println("=== CRASH ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())} ===")
-                    pw.println("SDK=${Build.VERSION.SDK_INT}")
-                    pw.println("Device=${Build.MODEL}")
+                    pw.println("SDK=${Build.VERSION.SDK_INT} Device=${Build.MODEL}")
                     e.printStackTrace(pw)
                 }
-                File(filesDir, "crash.log").appendText(sw.toString())
+                // 覆盖写入，不累积
+                File(filesDir, "crash.log").writeText(sw.toString())
             } catch (_: Throwable) {}
 
             oldHandler?.uncaughtException(t, e)
