@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -18,7 +16,6 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -29,7 +26,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Text
 import androidx.compose.ui.unit.dp
-import android.os.Build
 import com.example.deviceinfoviewer.HapticUtils
 import com.example.deviceinfoviewer.ui.theme.*
 import kotlin.math.cos
@@ -176,7 +172,7 @@ fun Modifier.neonBorderGlow(
 /**
  * 光感多彩水态风格卡片 — 交互时动态增强色彩融合强度
  *
- * 按压/hover 时色彩深度增加 40%，配合 GPU 加速 RenderEffect 模糊 (API 31+)。
+ * 按压/hover 时色彩深度增加 40%，配合弹簧缩放反馈。
  * 多层透明渐变叠加模拟光线穿透液态材质的多彩折射效果。
  */
 @Composable
@@ -195,13 +191,9 @@ fun LiquidColorCard(
             .clip(RoundedCornerShape(16.dp))
             .pointerInput(Unit) { detectTapGestures(onPress = { isPressed = true; tryAwaitRelease(); isPressed = false }) }
             .graphicsLayer {
-                // GPU 加速模糊 (API 31+) — 引用 RenderEffect 确保 compileSdk 35 可访问
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    renderEffect = RenderEffect.createBlurEffect(
-                        2f * colorIntensity, 2f * colorIntensity,
-                        android.graphics.Shader.TileMode.CLAMP
-                    ).takeIf { colorIntensity > 1.0f }
-                }
+                // 弹簧响应缩放 (颜色/边框已由 colorIntensity 和 neonBorderGlow 增强)
+                scaleX = 1f - (colorIntensity - 1f) * 0.02f
+                scaleY = 1f - (colorIntensity - 1f) * 0.02f
             }
             .background(
                 Brush.verticalGradient(listOf(
@@ -247,12 +239,9 @@ fun NeonGlassButton(
                 )
             }
             .graphicsLayer {
-                scaleX = scale; scaleY = scale
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    renderEffect = RenderEffect.createBlurEffect(
-                        0.5f, 0.5f, android.graphics.Shader.TileMode.CLAMP
-                    ).takeIf { isPressed }
-                }
+                // 弹簧缩放反馈 (0.95x)
+                scaleX = if (isPressed) 0.95f else 1f
+                scaleY = if (isPressed) 0.95f else 1f
             }
             .background(
                 Brush.verticalGradient(listOf(
