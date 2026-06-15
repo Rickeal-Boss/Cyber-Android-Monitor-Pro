@@ -10,6 +10,15 @@
     volatile <fields>;
 }
 
+# ===== Kotlin 反射支持 (Koin DI 核心依赖) =====
+-keep class kotlin.** { *; }
+-keep class kotlin.reflect.** { *; }
+-keepclassmembers class kotlin.reflect.** { *; }
+-keepattributes *Annotation*
+-keepattributes Signature
+-keepattributes InnerClasses
+-keepattributes EnclosingMethod
+
 # ===== Compose 运行时 (防止动画/重组类被剥离) =====
 -keep class androidx.compose.** { *; }
 -dontwarn androidx.compose.**
@@ -46,6 +55,23 @@
 
 # ===== 保留 Crash 日志 =====
 -keep class com.example.deviceinfoviewer.DeviceApplication { *; }
+
+# ===== 保留所有 ViewModel 类本身 (Koin 反射实例化) =====
+-keep class com.example.deviceinfoviewer.ui.**ViewModel { *; }
+
+# ===== 保留 Repository 和 DataSource (单例/反射) =====
+-keep class com.example.deviceinfoviewer.data.repository.** { *; }
+-keep class com.example.deviceinfoviewer.data.source.** { *; }
+
+# ===== 保留 Service 类 =====
+-keep class com.example.deviceinfoviewer.service.** { *; }
+
+# ===== 保留 UI 组件 (Compose 可能通过反射访问) =====
+-keep class com.example.deviceinfoviewer.ui.components.** { *; }
+-keep class com.example.deviceinfoviewer.ui.theme.** { *; }
+
+# ===== 保留 util 工具类 =====
+-keep class com.example.deviceinfoviewer.util.** { *; }
 
 # ===== 不混淆枚举 =====
 -keepclassmembers enum * { public static **[] values(); public static ** valueOf(java.lang.String); }
