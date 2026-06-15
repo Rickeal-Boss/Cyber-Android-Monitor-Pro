@@ -34,7 +34,7 @@ val OrbitronMedium = FontFamily(
  * 在 UI 场景下提供均匀的中英文混排间距。
  */
 val SarasaGothic = FontFamily(
-    Font(R.font.sarasagothicsc_regular, FontWeight.Normal),
+    Font(R.font.sarasa_gothic_sc_regular, FontWeight.Normal),
 )
 
 /**
@@ -43,7 +43,7 @@ val SarasaGothic = FontFamily(
  */
 val MixedFontFamily = FontFamily(
     Font(R.font.orbitron_medium, FontWeight.Medium),
-    Font(R.font.sarasagothicsc_regular, FontWeight.Normal),
+    Font(R.font.sarasa_gothic_sc_regular, FontWeight.Normal),
 )
 
 /**
@@ -51,7 +51,7 @@ val MixedFontFamily = FontFamily(
  */
 val MixedBoldFontFamily = FontFamily(
     Font(R.font.orbitron_bold, FontWeight.Bold),
-    Font(R.font.sarasagothicsc_regular, FontWeight.Normal),
+    Font(R.font.sarasa_gothic_sc_regular, FontWeight.Normal),
 )
 
 // 应用默认字体（中文界面基准）
