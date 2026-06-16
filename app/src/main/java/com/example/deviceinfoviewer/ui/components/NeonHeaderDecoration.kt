@@ -30,8 +30,8 @@ import com.example.deviceinfoviewer.ui.theme.*
 @Composable
 fun NeonHeaderDecoration(
     modifier: Modifier = Modifier,
-    showParticles: Boolean = true,
-    showFlowLine: Boolean = true,
+    showParticles: Boolean = false,
+    showFlowLine: Boolean = false,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "headerFx")
 
