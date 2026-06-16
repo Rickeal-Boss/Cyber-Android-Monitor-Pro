@@ -136,10 +136,11 @@ fun SystemMonitorAppNoFx(appViewModel: AppViewModel? = null) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        // 简明头部: 无动效
+        // 简明头部: 无动效 — 实际使用 NeonHeaderDecoration 纯静态版
         Box(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp).height(52.dp)
-            .clip(RoundedCornerShape(26.dp)).background(CyberCardStart)) {
-            Row(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp),
+            .clip(RoundedCornerShape(26.dp))) {
+            NeonHeaderDecoration(Modifier.matchParentSize())
+            Row(
                 verticalAlignment = Alignment.CenterVertically) {
                 ScrollableTabRow(
                     selectedTabIndex = pagerState.currentPage,
