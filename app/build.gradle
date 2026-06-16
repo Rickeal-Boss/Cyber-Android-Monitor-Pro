@@ -46,8 +46,8 @@ defaultConfig {
 
     buildTypes {
         release {
-            minifyEnabled true
-            shrinkResources true
+            minifyEnabled false
+            shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (doSign) {
                 signingConfig signingConfigs.ciRelease
