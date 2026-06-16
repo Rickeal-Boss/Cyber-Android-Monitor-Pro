@@ -66,10 +66,12 @@ class MainActivity : ComponentActivity() {
             Log.e("MainActivity", "configureSystemBars failed", e)
         }
         try {
-            // ★ 二分法第一步: 最简空屏，验证 MainActivity 本身能不能起来
+            // ★ 二分法第三步: 加回 SystemMonitorApp，但 Scaffold 内用空 Box（拆出 MainTabs）
             setContent {
-                Surface(Modifier.fillMaxSize(), color = Color.Black) {
-                    Box(Modifier.fillMaxSize())
+                DeviceInfoViewerTheme {
+                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                        SystemMonitorAppMinimal()
+                    }
                 }
             }
         } catch (e: Throwable) {
@@ -100,6 +102,21 @@ private val topTabs = listOf(
     TopTabItem("传感器", Icons.Default.Info),
     TopTabItem("详情", Icons.Default.Search)
 )
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SystemMonitorAppMinimal() {
+    val safeViewModel = runCatching { koinViewModel<AppViewModel>() }.getOrNull()
+    if (safeViewModel == null) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            Text("Koin failed", color = Color.White, modifier = Modifier.align(Alignment.Center))
+        }
+        return
+    }
+    Scaffold { padding ->
+        Box(Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background))
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
