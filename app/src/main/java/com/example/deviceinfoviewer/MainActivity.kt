@@ -66,11 +66,11 @@ class MainActivity : ComponentActivity() {
             Log.e("MainActivity", "configureSystemBars failed", e)
         }
         try {
-            // ★ 二分法第三步: 加回 SystemMonitorApp，但 Scaffold 内用空 Box（拆出 MainTabs）
+            // ★ 二分法第四步: 加回 MainTabs，但砍掉动效组件
             setContent {
                 DeviceInfoViewerTheme {
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        SystemMonitorAppMinimal()
+                        SystemMonitorAppNoFx()
                     }
                 }
             }
@@ -115,6 +115,55 @@ fun SystemMonitorAppMinimal() {
     }
     Scaffold { padding ->
         Box(Modifier.padding(padding).fillMaxSize().background(MaterialTheme.colorScheme.background))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SystemMonitorAppNoFx(appViewModel: AppViewModel? = null) {
+    val safeViewModel = appViewModel ?: runCatching { koinViewModel<AppViewModel>() }.getOrNull()
+    if (safeViewModel == null) {
+        Box(Modifier.fillMaxSize().background(CyberBackground)) {
+            Text("初始化失败，请查看 crash.log", color = NeonPurple, modifier = Modifier.align(Alignment.Center))
+        }
+        return
+    }
+    val pagerState = rememberPagerState(pageCount = { topTabs.size })
+    val scope = rememberCoroutineScope()
+
+    BackHandler(enabled = pagerState.currentPage != 0) {
+        scope.launch { pagerState.animateScrollToPage(0) }
+    }
+
+    Column(Modifier.fillMaxSize()) {
+        // 简明头部: 无动效
+        Box(Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp).height(52.dp)
+            .clip(RoundedCornerShape(26.dp)).background(CyberCardStart)) {
+            Row(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                ScrollableTabRow(
+                    selectedTabIndex = pagerState.currentPage,
+                    containerColor = Color.Transparent, contentColor = NeonPurple,
+                    edgePadding = 0.dp, modifier = Modifier.weight(1f), divider = {},
+                    indicator = { pos -> TabRowDefaults.Indicator(
+                        Modifier.tabIndicatorOffset(pos[pagerState.currentPage]), color = NeonPurple, height = 3.dp) }
+                ) {
+                    topTabs.forEachIndexed { i, tab ->
+                        Tab(selected = pagerState.currentPage == i,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
+                            text = { Text(tab.title, fontSize = 12.sp, fontWeight = if (pagerState.currentPage == i) FontWeight.Bold else FontWeight.Normal, maxLines = 1) },
+                            icon = { Icon(tab.icon, null, Modifier.size(16.dp)) },
+                            selectedContentColor = NeonPurple, unselectedContentColor = NeonSteelBlue.copy(alpha = 0.7f))
+                    }
+                }
+            }
+        }
+        // 简明分割线
+        Box(Modifier.fillMaxWidth().height(1.dp).background(NeonPurpleDeep.copy(alpha = 0.3f)))
+        // 页面
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            Box(Modifier.fillMaxSize().background(Color.Black))
+        }
     }
 }
 
