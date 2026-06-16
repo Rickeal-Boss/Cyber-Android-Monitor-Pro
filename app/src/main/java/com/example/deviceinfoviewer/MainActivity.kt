@@ -158,8 +158,8 @@ fun SystemMonitorAppNoFx(appViewModel: AppViewModel? = null) {
                 }
             }
         }
-        // 简明分割线
-        Box(Modifier.fillMaxWidth().height(1.dp).background(NeonPurpleDeep.copy(alpha = 0.3f)))
+        // ★ 二分: 只加回 NeonDivider，NeonHeaderDecoration 仍是纯 Box
+        NeonDivider(Modifier.fillMaxWidth().padding(horizontal = 6.dp))
         // 页面
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
             Box(Modifier.fillMaxSize().background(Color.Black))
