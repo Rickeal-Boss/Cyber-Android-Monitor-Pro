@@ -66,11 +66,11 @@ class MainActivity : ComponentActivity() {
             Log.e("MainActivity", "configureSystemBars failed", e)
         }
         try {
-            // ★ 二分法第四步: 加回 MainTabs，但砍掉动效组件
+            // ★ 二分法通关: 用回完整 SystemMonitorApp（安全版 NeonHeaderDecoration）
             setContent {
                 DeviceInfoViewerTheme {
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        SystemMonitorAppNoFx()
+                        SystemMonitorApp()
                     }
                 }
             }
