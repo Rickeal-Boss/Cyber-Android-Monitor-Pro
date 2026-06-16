@@ -86,4 +86,6 @@
    public <init>(android.content.Context, android.util.AttributeSet, int);
 }
 
+# ===== 完全禁用混淆，验证是否混淆导致闪退 =====
 -dontshrink
+-dontobfuscate
