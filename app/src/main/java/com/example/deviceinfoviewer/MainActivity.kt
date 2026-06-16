@@ -66,23 +66,14 @@ class MainActivity : ComponentActivity() {
             Log.e("MainActivity", "configureSystemBars failed", e)
         }
         try {
+            // ★ 二分法第一步: 最简空屏，验证 MainActivity 本身能不能起来
             setContent {
-                DeviceInfoViewerTheme {
-                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        SystemMonitorApp()
-                    }
+                Surface(Modifier.fillMaxSize(), color = Color.Black) {
+                    Box(Modifier.fillMaxSize())
                 }
             }
         } catch (e: Throwable) {
             Log.e("MainActivity", "setContent failed", e)
-            // 如果 setContent 也失败，显示纯色背景防止白屏
-            setContent {
-                DeviceInfoViewerTheme {
-                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        Box(Modifier.fillMaxSize())
-                    }
-                }
-            }
         }
     }
     private fun configureSystemBars() {
