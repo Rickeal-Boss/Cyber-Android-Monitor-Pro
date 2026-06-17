@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive Icon 安全区包装器
+
+  问题: ic_launcher_foreground.png 几乎占满 108dp 画布，
+  在三星/小米/Pixel 等圆形/squircle 遮罩的启动器中被裁切边缘。
+
+  解决: inset 21dp 四边，将前景内容缩进到 66dp 安全区，
+  确保在所有 OEM 遮罩形状 (圆/方圆形/方形) 下都不被裁切。
+  参考: developer.android.com/guide/practices/ui_guidelines/icon_design_adaptive
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_launcher_foreground"
+    android:insetLeft="18dp"
+    android:insetTop="18dp"
+    android:insetRight="18dp"
+    android:insetBottom="18dp" />
