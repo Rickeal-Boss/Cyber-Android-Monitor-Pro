@@ -81,7 +81,7 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
                                 enabled = true; FloatingWindowConfig.enabled = true
                                 ctx.startService(Intent(ctx, FloatingWindowService::class.java))
                             } else {
-                                Toast.makeText(ctx, stringResource(R.string.float_permission_toast), Toast.LENGTH_LONG).show()
+                                Toast.makeText(ctx, ctx.getString(R.string.float_permission_toast), Toast.LENGTH_LONG).show()
                                 ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                     Uri.parse("package:${ctx.packageName}")).apply {
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
