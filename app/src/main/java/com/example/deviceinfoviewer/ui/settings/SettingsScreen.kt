@@ -169,7 +169,7 @@ private fun LanguageSettingsCard() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Public, null,
+                Icon(Icons.Default.Language, null,
                     tint = NeonPurpleBright, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.size(8.dp))
                 Column {
@@ -244,7 +244,7 @@ private fun LanguagePickerDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            if (selected) Icons.Default.Check else Icons.Default.Public,
+                            if (selected) Icons.Default.Check else Icons.Default.Language,
                             contentDescription = null,
                             tint = if (selected) NeonPurpleBright else TextSecondary,
                             modifier = Modifier.size(20.dp)
