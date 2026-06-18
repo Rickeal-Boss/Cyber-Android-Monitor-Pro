@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  locales_config — Android 13+ (API 33+) 系统设置 per-app language 支持
+  参考: https://developer.android.com/guide/topics/resources/app-languages
+
+  精简语言列表（v2.0.202.0+）：
+  - zh-CN  简体中文（主要用户群）
+  - en     英文（默认 fallback / 国际通用）
+  - zh-TW  繁体中文（港澳台用户）
+
+  新增语言时在此追加 <locale> 标签，并在 res/values-<tag>/ 下创建 strings.xml。
+  RTL 语言（如阿拉伯语 ar）追加后，系统会自动镜像布局方向（supportsRtl="true"）。
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="zh-CN" />
+    <locale android:name="en" />
+    <locale android:name="zh-TW" />
+</locale-config>
