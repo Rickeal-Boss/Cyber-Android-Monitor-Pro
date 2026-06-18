@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.callbackFlow
  */
 class BatteryDataSource(private val context: Context) {
 
+    private val TAG = "BatteryDataSource"
     private val appContext = context.applicationContext
 
     fun getBatteryInfo(): BatteryInfo {
@@ -137,13 +138,15 @@ class BatteryDataSource(private val context: Context) {
             else -> "电池供电"
         }
 
+        // === 有效电压（双电芯×2）===
+        val effVoltage = info.effectiveVoltage
+
         // === 预计算实时瓦特数 (V × I / 1,000,000) ===
         if (effVoltage > 0 && currentUA != 0L) {
             info.wattageNow = effVoltage.toDouble() * kotlin.math.abs(currentUA).toDouble() / 1_000_000.0
         }
 
         // === 功率 = |电压(V) × 电流(A)| = |电压(mV) × 电流(µA)| / 1,000,000 = mW ===
-        val effVoltage = info.effectiveVoltage
         if (effVoltage > 0 && currentUA != 0L) {
             val powerMw = Math.abs(effVoltage.toDouble() * currentUA.toDouble()) / 1_000_000.0
             if (currentUA > 0) {
@@ -746,14 +749,16 @@ class BatteryDataSource(private val context: Context) {
         // 注意: 标准 AOSP BatteryManager.java 中不存在此常量 (已验证 API 34-37 源码)
         // 少数 OEM 自定义 ROM 可能包含，通过反射尝试但不可靠
         try {
-            val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager ?: return@try
-            val propField = BatteryManager::class.java.getDeclaredField("BATTERY_PROPERTY_CYCLE_COUNT")
-            propField.isAccessible = true
-            val propId = propField.getInt(null)
-            val cycle = bm.getIntProperty(propId)
-            if (cycle > 0 && cycle < 10000) {
-                Log.d(TAG, "cycle_count via BatteryManager hidden API (propId=$propId): $cycle")
-                return Pair(cycle, "BatteryManager OEM property")
+            val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            if (bm != null) {
+                val propField = BatteryManager::class.java.getDeclaredField("BATTERY_PROPERTY_CYCLE_COUNT")
+                propField.isAccessible = true
+                val propId = propField.getInt(null)
+                val cycle = bm.getIntProperty(propId)
+                if (cycle > 0 && cycle < 10000) {
+                    Log.d(TAG, "cycle_count via BatteryManager hidden API (propId=$propId): $cycle")
+                    return Pair(cycle, "BatteryManager OEM property")
+                }
             }
         } catch (_: Throwable) { /* hidden API not found */ }
 
@@ -1626,3 +1631,4 @@ class BatteryDataSource(private val context: Context) {
             (rawMicroAmps / 1000).toInt()  // 标准 µA → mA
         }
     }
+}
