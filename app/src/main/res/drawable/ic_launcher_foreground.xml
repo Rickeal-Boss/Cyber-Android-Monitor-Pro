@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Adaptive Icon Foreground Layer — RB 字母 (无阴影/无模糊, 安全区内) -->
-<!-- v2: 1.28x 中心缩放，白边被推入 OEM 包裹裁切区域隐藏 -->
+<!-- v2: 1.60x 中心缩放，MIUI 桌面截图实测调整 -->
+<!-- 根据 MIUI 截图实测：1.28x 不足，字母仍偏小，提升至 1.60x -->
+
+<!-- 边界计算（pivot=54,54）:
+    左缘 54-(54-32)*1.60=18.8, 右缘 54+(90.5-54)*1.60=112.4(溢出4.4dp)
+    溢出部分被 OEM 遮罩裁切，不影响显示 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -10,8 +15,8 @@
     <group
         android:pivotX="54"
         android:pivotY="54"
-        android:scaleX="1.28"
-        android:scaleY="1.28">
+        android:scaleX="1.60"
+        android:scaleY="1.60">
 
         <!-- R 字母 -->
         <path
