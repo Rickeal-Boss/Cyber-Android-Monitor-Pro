@@ -719,13 +719,11 @@ private fun MultiAxisChart(
         return
     }
 
-    val recentSeries = remember(seriesList) { seriesList.map { it.takeLast(80) } }
-    val allValues = remember(recentSeries) {
-        recentSeries.flatMap { series -> series.map { it.value } }
-    }
-    val globalMin = remember(allValues) { allValues.minOrNull() ?: 0f }
-    val globalMax = remember(allValues) { allValues.maxOrNull() ?: 1f }
-    val globalRange = remember(globalMin, globalMax) { (globalMax - globalMin).coerceAtLeast(0.001f) }
+    val recentSeries = seriesList.map { it.takeLast(80) }
+    val allValues = recentSeries.flatMap { series -> series.map { it.value } }
+    val globalMin = allValues.minOrNull() ?: 0f
+    val globalMax = allValues.maxOrNull() ?: 1f
+    val globalRange = (globalMax - globalMin).coerceAtLeast(0.001f)
     val gridColor = remember { NeonCyan.copy(alpha = 0.12f) }
     val axisColor = remember { NeonPurple.copy(alpha = 0.45f) }
 
