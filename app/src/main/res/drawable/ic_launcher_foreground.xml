@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive Icon Foreground Layer — RB 字母 (无阴影/无模糊, 安全区内) -->
+<!-- 注意: 此文件未被 Adaptive Icon 引用（实际使用 @mipmap/ic_launcher_foreground PNG） -->
+<!-- 保留作为矢量回退备用 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- R 字母 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M32,28 L32,80 L48,80 L48,58 L58.7,58 L72.5,80 L90,80 L74.8,57 C82.2,54.5 87,47.5 87,40 C87,33.4 81.6,28 75,28 L32,28 Z M48,44 L48,40 L74,40 C75.1,40 76,40.9 76,42 C76,43.1 75.1,44 74,44 L48,44 Z"/>
+
+    <!-- B 字母 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,80 L78,80 C84.4,80 90.5,75.5 90.5,69 C90.5,64 87.1,59.8 82.5,58 C86,55.8 88.5,51.7 88.5,47 C88.5,40.4 83.1,35 76.5,35 L48,35 L48,80 Z M60,55 L74.5,55 C77.3,55 79.5,57.2 79.5,60 C79.5,62.8 77.3,65 74.5,65 L60,65 L60,55 Z M60,44 L75,44 C77.2,44 79,45.8 79,48 C79,50.2 77.2,52 75,52 L60,52 L60,44 Z"/>
+
+</vector>
