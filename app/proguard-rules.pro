@@ -73,6 +73,13 @@
 # ===== 保留 util 工具类 =====
 -keep class com.example.deviceinfoviewer.util.** { *; }
 
+# ===== 保留整个项目包 (2026-06-19 启用 R8 shrink 的安全网) =====
+# 项目大量使用反射 (SystemProperties/BatteryManager hidden field/GnssStatus/
+# VMRuntime/MobileNetwork getter 等) + Compose Composable lambda 元数据,
+# 整体 keep 项目包避免 shrink 误删。R8 仍可缩减第三方库 (kotlinx.coroutines/gson/koin) 死代码。
+-keep class com.example.deviceinfoviewer.** { *; }
+-keepclassmembers class com.example.deviceinfoviewer.** { *; }
+
 # ===== 不混淆枚举 =====
 -keepclassmembers enum * { public static **[] values(); public static ** valueOf(java.lang.String); }
 
@@ -86,6 +93,8 @@
    public <init>(android.content.Context, android.util.AttributeSet, int);
 }
 
-# ===== 完全禁用混淆，验证是否混淆导致闪退 =====
--dontshrink
+# ===== 启用代码缩减 (shrink) 移除第三方库死代码，但禁用混淆 (obfuscate) 保护反射 =====
+# -dontshrink 已移除 → 允许 R8 移除未引用代码
 -dontobfuscate
+# 保留泛型签名 (Gson 反序列化需要)
+-keepattributes Signature, *Annotation*, InnerClasses, EnclosingMethod

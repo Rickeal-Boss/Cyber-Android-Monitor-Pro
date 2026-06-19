@@ -46,8 +46,13 @@ defaultConfig {
 
     buildTypes {
         release {
-            minifyEnabled false
-            shrinkResources false
+            // ★ 性能优化 (2026-06-19): 启用 R8 代码缩减 + 资源缩减
+            //   - minifyEnabled: 移除未使用代码（第三方库死代码），减小 dex 体积，加快类加载
+            //   - shrinkResources: 移除未引用资源，减小 APK 体积
+            //   - proguard-rules.pro 保留 -dontobfuscate（不混淆），保护大量反射调用
+            //     (SystemProperties/BatteryManager hidden field/GnssStatus/VMRuntime 等)
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
             if (doSign) {
                 signingConfig signingConfigs.ciRelease
