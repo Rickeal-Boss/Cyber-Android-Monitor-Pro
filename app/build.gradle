@@ -73,6 +73,12 @@ defaultConfig {
         buildConfig true    // ← 新增：启用 BuildConfig 字段生成
     }
 
+    // ★ 启动性能优化 (2026-06-19): R8 dex startup optimization
+    // gradle.properties 已启用 android.experimental.r8.dex-startup-optimization=true
+    // R8 根据 manifest 的启动 Activity 顺序优化 dex 类排列，冷启动减少 page fault
+    // 注: 完整 Baseline Profile 需 macrobenchmark 模块自动生成，
+    // src/main/baseline-prof.txt 为手写参考，需未来集成 macrobenchmark 插件生效
+
 }
 
 dependencies {
