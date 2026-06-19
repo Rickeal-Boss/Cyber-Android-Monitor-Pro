@@ -425,6 +425,12 @@ private fun SensorChartCard(
 ) {
     val labels = meta?.axisLabelResIds?.map { LocalContext.current.getString(it) } ?: listOf("X", "Y", "Z")
     val valueCount = meta?.valueCount ?: 3
+    // ★ 数据点计数 — 提升到 Column 作用域, 供标题栏和底部共用 (2026-06-20 修复 Unresolved reference)
+    val sampleCount = when {
+        valueCount == 1 -> chartPoints.size
+        valueCount >= 2 -> chartPointsX.size
+        else -> 0
+    }
 
     Card(
         Modifier.fillMaxWidth(),
@@ -444,12 +450,6 @@ private fun SensorChartCard(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                // 动态数据点计数器
-                val sampleCount = when {
-                    valueCount == 1 -> chartPoints.size
-                    valueCount >= 2 -> chartPointsX.size
-                    else -> 0
-                }
                 Text(
                     "$sampleCount pts",
                     fontSize = 11.sp,
