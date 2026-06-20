@@ -40,7 +40,7 @@ Cyber-Android-Monitor-Pro-By-RB
 - 扫描 `thermal_message/` 直接温度文件（HyperOS 专用）
 - 高通 `qcom-battery/` 电池循环计数路径
 
-### 🎨 Batman为灵感的未来科技赛博朋克主题
+### 🎨 Bat 灵感的未来科技赛博朋克主题
 - 纯紫霓虹配色（NeonPurple/Bright/Pale/Deep）
 - 脉冲指示器（PulseDot）实时监测标志
 - 矩阵数字字体 + 扫描线动画
@@ -158,7 +158,7 @@ normalizeChartData()：自适应 Y 轴范围
 "A COMPARATIVE STUDY OF SOFTWARE ARCHITECTURES" → ✅ MVVM 是学界推荐
 
 ### Recent Update：
-- 
+- 4.0.404.0预览版，加入了全局光照系统，水语言按键，边缘HDR色彩描边，改进了多层玻璃效果叠加图标，加入震动马达调用，修复预测性返回动画；修复了诸多底层问题，提升用户体验；优化了卡片效果；加入了更多功能。
 - 参考部分开源代码源以及开源学术加入了API分支，但是由于起不到实质性提升所以遗弃
 - 更新了先返回主页再退出APP
 - 在内存页加入了运行内存各方面占用
