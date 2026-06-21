@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive Icon 安全区包装器 — OEM 包装层适配 (v3)
+  
+  2026-06-19 更新:
+  - PNG 已做 1.20x 中心缩放，透明白边已裁净
+  - 无需再预留大量呼吸空间给白边
+  - 14dp inset = 80dp 内容区，介于 66dp 安全区与 108dp 全视口之间
+  - 多出的 14dp 在外 OEM 遮罩自然裁切，MIUI/HyperOS 实测可用
+-->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@mipmap/ic_launcher_foreground"
+    android:insetLeft="14dp"
+    android:insetTop="14dp"
+    android:insetRight="14dp"
+    android:insetBottom="14dp" />
