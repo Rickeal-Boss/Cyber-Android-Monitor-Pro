@@ -1055,6 +1055,7 @@
     <string name="float_overlay_hint">提示: Android 14+ 需手动授予 &quot;显示在其他应用上层&quot; 权限</string>
     <string name="float_permission_toast">请授予悬浮窗权限</string>
     <string name="float_section_realtime">实时指标</string>
+    <string name="float_refresh_hint">每 %dms 刷新</string>
     <string name="float_section_system">系统</string>
     <string name="float_svc_battery_label">电池:</string>
     <string name="float_svc_channel_name">悬浮窗监控</string>
