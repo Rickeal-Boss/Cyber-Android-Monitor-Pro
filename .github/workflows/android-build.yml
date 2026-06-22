@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ main, master, DLC, yingai, II, III, IIII, IIIII, IIIIII, preview, 4.0, 4.0icon, 4.0.404.0 ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -39,7 +39,35 @@ jobs:
           packages: 'platforms;android-35 build-tools;35.0.0 platform-tools'
 
       - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        run: |
+          echo "=== Android SDK environment ==="
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT}"
+          echo "ANDROID_HOME=${ANDROID_HOME}"
+          echo ""
+          echo "=== Installed cmdline-tools ==="
+          ls -la "${ANDROID_SDK_ROOT}/cmdline-tools/" 2>/dev/null || echo "(no cmdline-tools dir)"
+          echo ""
+
+          # Dynamically locate the newest sdkmanager binary.
+          # Prefer versioned directories (e.g. 12266719) over 'latest' which may be
+          # a stale symlink pointing to the pre-installed 16.0 version.
+          SDKMANAGER=$(find "${ANDROID_SDK_ROOT}/cmdline-tools" -name sdkmanager -type f 2>/dev/null \
+            | xargs -r ls -t 2>/dev/null \
+            | head -1)
+
+          if [ -z "${SDKMANAGER}" ]; then
+            echo "::error::sdkmanager not found under ${ANDROID_SDK_ROOT}/cmdline-tools/"
+            echo "::error::Try adding 'cmdline-tools' to the setup-android packages list."
+            exit 1
+          fi
+
+          echo "Using sdkmanager: ${SDKMANAGER}"
+          echo ""
+
+          # Accept all licenses non-interactively
+          yes | "${SDKMANAGER}" --sdk_root="${ANDROID_SDK_ROOT}" --licenses
+          echo ""
+          echo "=== License acceptance complete ==="
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
