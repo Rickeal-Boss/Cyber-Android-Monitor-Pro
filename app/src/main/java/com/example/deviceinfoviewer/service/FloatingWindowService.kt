@@ -131,7 +131,7 @@ class FloatingWindowService : Service() {
                 combine(
                     FloatingWindowConfig.refreshIntervalFlow,
                     RefreshPolicy.state
-                ) { userMs: Boolean, state: RefreshPolicy.RefreshState ->
+                ) { userMs: Long, state: RefreshPolicy.RefreshState ->
                     val policyFloor = if (state == RefreshPolicy.RefreshState.BACKGROUND)
                         RefreshPolicy.BACKGROUND_CAP_MS else 200L
                     val effective = userMs.coerceIn(policyFloor, 30000L)
