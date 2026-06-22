@@ -1064,6 +1064,8 @@
     <string name="float_permission_toast">Please grant overlay permission</string>
     <string name="float_section_realtime">Real-time Metrics</string>
     <string name="float_refresh_hint">Refresh every %dms</string>
+    <string name="float_refresh_interval">Refresh Interval</string>
+    <string name="float_refresh_status">Status</string>
     <string name="float_section_system">System</string>
     <string name="float_svc_battery_label">Battery:</string>
     <string name="float_svc_channel_name">Floating Window Monitor</string>

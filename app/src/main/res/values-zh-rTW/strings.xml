@@ -1061,6 +1061,8 @@
     <string name="float_permission_toast">请授予懸浮窗許可權</string>
     <string name="float_section_realtime">即時指標</string>
     <string name="float_refresh_hint">每 %dms 刷新</string>
+    <string name="float_refresh_interval">刷新頻率</string>
+    <string name="float_refresh_status">狀態</string>
     <string name="float_section_system">系統</string>
     <string name="float_svc_battery_label">电池:</string>
     <string name="float_svc_channel_name">懸浮窗监控</string>
