@@ -31,7 +31,7 @@ import com.example.deviceinfoviewer.ui.components.charts.ChartUtils
 import com.example.deviceinfoviewer.HapticUtils
 import com.example.deviceinfoviewer.R
 import com.example.deviceinfoviewer.data.model.HistoryDataPoint
-import com.example.deviceinfoviewer.data.repository.DeviceRepository.SourceHealth
+import com.example.deviceinfoviewer.data.repository.HealthTracker.SourceHealth
 import com.example.deviceinfoviewer.ui.components.InfoCard
 import com.example.deviceinfoviewer.ui.components.MetricCard
 import com.example.deviceinfoviewer.ui.components.charts.LineChart
@@ -257,6 +257,7 @@ private fun DataSourceHealthBar(health: SourceHealth) {
                 SourceHealth.Health.ERROR -> ErrorNeon
                 SourceHealth.Health.WARN -> WarningNeon
                 SourceHealth.Health.OK -> SuccessNeon
+                else -> SuccessNeon
             }
             Box(
                 Modifier
