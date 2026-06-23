@@ -21,6 +21,12 @@ class HealthTracker {
         val oem: Health = Health.OK
     ) {
         enum class Health { OK, WARN, ERROR }
+        val allHealthy get() = listOf(cpu, gpu, battery, memory, storage,
+            wifi, mobileNetwork, networkInterface, gps, sensors, system, deviceDetail, oem)
+            .all { it == Health.OK }
+        val errorCount get() = listOf(cpu, gpu, battery, memory, storage,
+            wifi, mobileNetwork, networkInterface, gps, sensors, system, deviceDetail, oem)
+            .count { it == Health.ERROR }
     }
 
     val liveData = MutableLiveData(SourceHealth())
