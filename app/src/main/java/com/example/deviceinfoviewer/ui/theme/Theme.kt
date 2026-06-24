@@ -50,6 +50,7 @@ fun DeviceInfoViewerTheme(
 ) {
     MaterialTheme(
         colorScheme  = CyberpunkColorScheme,
+        typography   = Typography,
         content      = content
     )
 }
