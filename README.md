@@ -1,4 +1,4 @@
-# Cyber-Android-Monitor-Pro-By-RB 设备性能监控工具 System Monitor(deviceinfoviewer\Device Info Viewer)
+# Cyber-Android-Monitor-Pro 设备性能监控工具 System Monitor(deviceinfoviewer\Device Info Viewer)
 
 ![Device](1.png)
 
@@ -14,7 +14,7 @@
 
 ## 🏛️ 项目
 
-Cyber-Android-Monitor-Pro-By-RB
+Cyber-Android-Monitor-Pro
  System Monitor(deviceinfoviewer) 提供实时、精准的硬件状态数据可视化。通过直观的深色界面，帮助开发者、硬件爱好者和普通用户全面掌握设备运行状态。支持Android 5+
 
 ## 🗼 核心功能
