@@ -172,8 +172,9 @@ Java       = 17
 由于 Sdk 36 出现旧设备不兼容问题，所以降级至 35。
 
 ### 🔧 构建优化
-- R8 混淆规则清理：proguard-rules.pro 精简 37%（-34 行冗余 keep）
-- 收紧 kotlin 保留范围：仅 `kotlin.reflect.**`
+
+- R8 混淆规则清理：proguard-rules.pro 精简 37%（-34 行冗余 keep），体积从12降至8
+- 收紧 kotlin 保留范围：仅 `kotlin.reflect.`
 - 删除废弃的 `android.experimental.r8.dex-startup-optimization`（AGP 8.x 已废弃）
 
 ---
@@ -199,10 +200,11 @@ try {
 ---
 
 ### 数据源健康监控
-SourceHealth 数据类跟踪 13 个数据源状态
-DataSourceHealthBar 组件实时展示错误数量
-多级 fallback 链的 catch 保持静默（预期失败路径）
-仅 Repository 级别记录异常
+
+•SourceHealth 数据类跟踪 13 个数据源状态
+•DataSourceHealthBar 组件实时展示错误数量
+•多级 fallback 链的 catch 保持静默（预期失败路径）
+•仅 Repository 级别记录异常
 
 ---
 
@@ -230,6 +232,7 @@ DataSourceHealthBar 组件实时展示错误数量
 ---
 
 ### 🔌 充电协议自动识别
+
 •PD (Power Delivery)
 •QC 3.0 (Quick Charge)
 •SuperVOOC (OPPO)
@@ -239,6 +242,7 @@ DataSourceHealthBar 组件实时展示错误数量
 ---
 
 ### 📄 权限说明
+
 |权限	|用途	| 需 |
 |-------|-------|----|
 |ACCESS_FINE_LOCATION|	GPS 卫星检测	|是|
@@ -270,6 +274,7 @@ DataSourceHealthBar 组件实时展示错误数量
 ---
 
 ### 📚🤯 学术验证
+
 通过 Sciverse 学术论文检索 验证架构设计：理论上学术论文不会骗人吧？
 
 ---
@@ -335,4 +340,4 @@ DataSourceHealthBar 组件实时展示错误数量
 
 ---
 
-### 参与审查的模型：全球顶尖 GLM-5.2 为架构审查模型以及 DeepSeek V4 Pro 为主力模型，DeepSeek V4 Flash、GLM-5.1、GLM-5.0 Turbo 为辅助模型
+### 参与审查的模型：全球顶尖 GLM-5.2 为架构审查模型以及 DeepSeek V4 Pro 为主力评审模型，DeepSeek V4 Flash、GLM-5.1、GLM-5.0 Turbo 为辅助模型
