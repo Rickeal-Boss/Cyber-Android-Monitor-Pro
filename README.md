@@ -181,7 +181,7 @@ Java       = 17
 ## 🛡️ 异常防护体系
 
 ### catch Throwable（OEM ROM 兼容）
-```kotlin
+
 // ✅ 正确：catch Throwable（覆盖 OEM ROM 的 Error 子类）
 try {
     val result = riskyOperation()
@@ -335,5 +335,4 @@ DataSourceHealthBar 组件实时展示错误数量
 
 ---
 
-### 参与开发审查的模型：全球顶尖GLM-5.2架构审查
-DeepSeek V4 Pro 为主力开发模型，DeepSeek V4 Flash、GLM-5.1、GLM-5.0 Turbo 为辅助开发模型
+### 参与审查的模型：全球顶尖 GLM-5.2 为架构审查模型以及 DeepSeek V4 Pro 为主力模型，DeepSeek V4 Flash、GLM-5.1、GLM-5.0 Turbo 为辅助模型
