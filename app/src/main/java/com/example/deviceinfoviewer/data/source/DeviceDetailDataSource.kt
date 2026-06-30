@@ -43,15 +43,16 @@ class DeviceDetailDataSource(private val context: Context) {
             // ═══════════════════════════════════════════
             //  Qualcomm Snapdragon — 8 Gen 旗舰系列
             // ═══════════════════════════════════════════
-            "SM8775" to "3nm TSMC N3E",     // Snapdragon 8s Elite (2026)
+            "SM8850-5-AC" to "3nm TSMC N3P",     // Snapdragon 8 Elite Gen 5 (2026)
             "SM8750" to "3nm TSMC N3E",     // Snapdragon 8 Elite (Gen 4, 2024)
-            "SM8650" to "4nm TSMC N4P",     // Snapdragon 8 Gen 3 (2023) — 已确认
-            "SM8635" to "4nm TSMC N4P",     // Snapdragon 8s Gen 3 (2024) — 已确认
+            "SM8650" to "4nm TSMC N4P",     // Snapdragon 8 Gen 3 (2023)
+            "SM8635" to "4nm TSMC N4P",     // Snapdragon 8s Gen 3 (2024)
             "QTI SM8635" to "4nm TSMC N4P", // Snapdragon 8s Gen 3 (QTI 前缀) — Android 16 返回格式
             "SM8550" to "4nm TSMC N4P",     // Snapdragon 8 Gen 2 (2022) — Notebookcheck: N4P
             "SM8475" to "4nm TSMC N4",      // Snapdragon 8+ Gen 1 (2022) — TechInsights: N4
             "SM8450" to "4nm Samsung",      // Snapdragon 8 Gen 1 (2021) — 三星代工
             "SM8350" to "5nm Samsung",      // Snapdragon 888/888+ (2020/2021) — 三星代工
+            "SM8250-AC" to "7nm TSMC N7P",     // Snapdragon 870 (2021)
             "SM8250" to "7nm TSMC N7P",     // Snapdragon 865/865+ (2019/2020)
             "SM8150" to "7nm TSMC N7",      // Snapdragon 855/855+ (2018/2019)
             "SDM855" to "7nm TSMC N7",      // Snapdragon 855 alternate
@@ -65,6 +66,7 @@ class DeviceDetailDataSource(private val context: Context) {
             "MSM8974" to "28nm",            // Snapdragon 800 (2013)
 
             // Qualcomm Snapdragon — 6xx 系列
+            "SDM670" to "10nm Samsung LPP",     // Snapdragon 670 (2018)
             "SDM660" to "14nm Samsung",     // Snapdragon 660 (2017)
             "SDM636" to "14nm",             // Snapdragon 636 (2017)
             "SDM630" to "14nm",             // Snapdragon 630 (2017)
@@ -79,9 +81,9 @@ class DeviceDetailDataSource(private val context: Context) {
             "SDM435" to "28nm",             // Snapdragon 435 (2016)
 
             // Qualcomm Snapdragon — 7 Gen 系列
-            "SM7675" to "3nm TSMC N3",      // Snapdragon 7+ Gen 4 (2025)
-            "SM7550" to "4nm TSMC",         // Snapdragon 7+ Gen 3 (2024) — N4 未完全确认
-            "SM7475" to "4nm TSMC",         // Snapdragon 7 Gen 3 (2023) — N4 未完全确认
+            "SM7750" to "4nm TSMC",         // Snapdragon 7 Gen 4 (2025)
+            "SM7550" to "4nm TSMC N4P",         // Snapdragon 7+ Gen 3 (2024)
+            "SM7475" to "4nm TSMC",         // Snapdragon 7 Gen 3 (2023)
             "SM7450" to "4nm TSMC",         // Snapdragon 7 Gen 2 (2023)
             "SM7435" to "4nm TSMC",         // Snapdragon 7s Gen 3 (2024)
             "SM7350" to "5nm",              // Snapdragon 7 Gen 1 (2022)
@@ -93,7 +95,8 @@ class DeviceDetailDataSource(private val context: Context) {
             "SM7150" to "8nm TSMC N8",      // Snapdragon 730G (2019)
 
             // Qualcomm Snapdragon — 6 Gen 系列
-            "SM6475" to "4nm TSMC N4",      // Snapdragon 6 Gen 4 (2025)
+            "SM6650" to "4nm TSMC N4P",      // Snapdragon 6 Gen 4 (2025)
+            "SM6475" to "4nm Samsung",      // Snapdragon 6 Gen 3 (2024)
             "SM6450" to "4nm TSMC N4",      // Snapdragon 6 Gen 1 (2022)
             "SM6375" to "6nm TSMC N6",      // Snapdragon 6 Gen 1 / 695 (2022)
             "SM6365" to "6nm",              // Snapdragon 6s Gen 3 (2024)
@@ -115,9 +118,8 @@ class DeviceDetailDataSource(private val context: Context) {
             "MT9200" to "4nm TSMC N4P",     // Dimensity 9200 (2022)
             "MT6989" to "4nm TSMC N4P",     // Dimensity 9000+ (2022)
             "MT6985" to "4nm TSMC N4",      // Dimensity 9000 (2022)
-            "MT6983" to "4nm TSMC N4",      // Dimensity 8100/8000 (2022)
             "MT6897" to "4nm TSMC N4",      // Dimensity 8300 (2023)
-            "MT6895" to "5nm TSMC N5",      // Dimensity 8100 (2022) — 实际为5nm
+            "MT6893" to "6nm TSMC N6",      // Dimensity 8100 (2022)
             "MT6893" to "6nm TSMC N6",      // Dimensity 1200 (2021)
             "MT6889" to "6nm TSMC N6",      // Dimensity 1100 (2021)
             "MT6885" to "7nm TSMC N7",      // Dimensity 1000+ (2020)
@@ -202,14 +204,14 @@ class DeviceDetailDataSource(private val context: Context) {
             "lahaina" to "4nm Samsung",         // SM8450 — Snapdragon 8 Gen 1
             "taro" to "4nm TSMC N4",            // SM8475 — Snapdragon 8+ Gen 1
             "cape" to "4nm TSMC N4",            // SM8475 — Snapdragon 8+ Gen 1 (alternate)
-            "kailua" to "4nm TSMC N4P",         // SM8550 — Snapdragon 8 Gen 2 — Notebookcheck: N4P
-            "pineapple" to "4nm TSMC N4P",      // SM8650 — Snapdragon 8 Gen 3
-            "sun" to "4nm TSMC N4P",            // SM8635 — Snapdragon 8s Gen 3 — N4P已确认
+            "kailua" to "4nm TSMC N4P",         // SM
+            "pineapple" to "4nm TSMC N4P",      // SM
+            "sun" to "4nm TSMC N4P",            // SM
             "shima" to "5nm Samsung",           // SM8350 — Snapdragon 888
             "lito" to "7nm TSMC N7",            // SM7250 — Snapdragon 765G
-            // Qualcomm — 中端 codename (N4/N4P 未完全确认,仅标4nm TSMC)
+            // Qualcomm — 中端 codename 
             "parrot" to "4nm TSMC",             // SM7475 — Snapdragon 7 Gen 3
-            "crow" to "4nm TSMC",               // SM7550 — Snapdragon 7+ Gen 3
+            "crow" to "4nm TSMC N4P",               // SM7550 — Snapdragon 7+ Gen 3
             "diwali" to "4nm TSMC",             // SM7450 — Snapdragon 7 Gen 2
             "yupik" to "6nm TSMC N6",           // SM7325 — Snapdragon 778G
             "palima" to "6nm TSMC N6",          // SM7325 — Snapdragon 778G+
