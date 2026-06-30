@@ -4,6 +4,8 @@ import android.content.Context
 import android.net.DhcpInfo
 import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
+import android.os.Build
+import android.util.Log
 
 import com.example.deviceinfoviewer.data.model.WifiDetailInfo
 
@@ -25,7 +27,8 @@ class WifiDataSource(private val context: Context) {
             ?: return info
 
         // AP 扫描前置：WiFi 开启即扫描，不依赖连接状态
-        if (isWifiEnabled(wm)) {
+        if (isWifiOn(wm)) {
+            Log.d(TAG, "WiFi ON — starting AP scan (connected=${wm.connectionInfo?.ssid != null})")
             info.nearbyAps = scanNearbyAps()
         }
 
@@ -106,18 +109,70 @@ class WifiDataSource(private val context: Context) {
         } catch (_: UnknownHostException) { "" }
     }
 
+    companion object {
+        private const val TAG = "WifiDS"
+    }
+
+    /**
+     * WiFi 是否已开启 — wifiState 为主 (OEM ROM 兼容)，isWifiEnabled 为兜底
+     */
     @Suppress("DEPRECATION")
-    private fun isWifiEnabled(wm: WifiManager): Boolean {
-        return try { wm.isWifiEnabled } catch (_: Throwable) { false }
+    private fun isWifiOn(wm: WifiManager): Boolean {
+        return try {
+            val state = wm.wifiState
+            if (state == WifiManager.WIFI_STATE_ENABLED) {
+                Log.d(TAG, "isWifiOn: wifiState=ENABLED") ; true
+            } else if (state == WifiManager.WIFI_STATE_ENABLING) {
+                Log.d(TAG, "isWifiOn: wifiState=ENABLING — still starting") ; false
+            } else {
+                val enabled = wm.isWifiEnabled
+                Log.d(TAG, "isWifiOn: wifiState=$state, isWifiEnabled=$enabled")
+                enabled
+            }
+        } catch (_: Throwable) { false }
     }
 
     private fun scanNearbyAps(): List<String> {
         return try {
             val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return emptyList()
-            wm.scanResults.take(5).map { r ->
+
+            // 主动触发一次扫描（非连接状态下系统缓存可能为空）
+            if (!tryStartScan(wm)) {
+                Log.d(TAG, "startScan failed/restricted — falling back to cached results")
+            }
+
+            val results = wm.scanResults ?: emptyList()
+            Log.d(TAG, "scanResults: ${results.size} APs")
+
+            results.take(5).map { r ->
                 (r.SSID.ifEmpty { "<hidden>" }) + ": " + r.level + "dBm"
             }
-        } catch (_: Throwable) { emptyList() }
+        } catch (_: Throwable) {
+            Log.w(TAG, "scanNearbyAps failed", _)
+            emptyList()
+        }
+    }
+
+    /**
+     * 尝试触发主动 WiFi 扫描，失败不阻塞
+     * API 29+ startScan 受限制，低版本可直接使用
+     */
+    @Suppress("DEPRECATION")
+    private fun tryStartScan(wm: WifiManager): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // API 29+: startScan() 已弃用且受严格限制，尝试调用但不强求
+                Log.d(TAG, "API 29+ — skip proactive startScan, rely on system background scans")
+                false
+            } else {
+                val ok = wm.startScan()
+                Log.d(TAG, "startScan() = $ok")
+                ok
+            }
+        } catch (_: Throwable) {
+            Log.w(TAG, "startScan threw", _)
+            false
+        }
     }
 
     /**
