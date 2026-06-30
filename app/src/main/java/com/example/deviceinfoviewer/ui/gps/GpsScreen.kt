@@ -87,16 +87,14 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
             )
         }
 
-        // ── 速度 ──
-        gps?.speedMps?.takeIf { it >= 0f }?.let { speed ->
-            val kmh = speed * 3.6f
-            MetricCard(
-                title = stringResource(R.string.gps_speed_title),
-                value = "%.1f km/h".format(kmh),
-                valueColor = NeonCyan,
-                subtitle = "%.1f m/s".format(speed)
-            )
-        }
+        // ── 速度 (始终显示) ──
+        val speedMps = gps?.speedMps?.takeIf { it >= 0f && !it.isNaN() }
+        MetricCard(
+            title = stringResource(R.string.gps_speed_title),
+            value = if (speedMps != null) "%.1f km/h".format(speedMps * 3.6f) else "---",
+            valueColor = if (speedMps != null) NeonCyan else TextSecondary,
+            subtitle = if (speedMps != null) "%.1f m/s".format(speedMps) else ""
+        )
 
         // ── 卫星计数（内/外圈环形统计）──
         MetricCard(
