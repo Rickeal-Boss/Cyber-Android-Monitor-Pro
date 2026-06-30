@@ -85,7 +85,7 @@ object CpuCache {
             platformId = "pineapple",
             chipName = "Snapdragon 8s Gen 3",
             cpuModel = "Kryo (Cortex-X4 + A720 + A520)",
-            processNode = "4nm TSMC N4",
+            processNode = "4nm TSMC N4P",
             releaseDate = "2024-03",
             clusters = listOf(
                 ClusterSpec("Cortex-X4",   1, 3.0f, 0.6f),
@@ -93,14 +93,14 @@ object CpuCache {
                 ClusterSpec("Cortex-A520", 3, 2.0f, 0.5f),
             ),
             l1iPerBig = "64 KB", l1dPerBig = "64 KB",
-            l2PerBig = "2 MB (X4) / 512 KB shared (A720)",
+            l2PerBig = "1 MB (X4) / 256 KB shared (A720)",
             l1iPerSmall = "32 KB", l1dPerSmall = "32 KB",
             l2PerSmall = "256 KB shared (A520)",
-            l3Shared = "8 MB",
+            l3Shared = "4 MB",
             gpuModel = "Adreno 735",
-            gpuClockMhz = 750,
-            gpuAlus = 786,
-            gpuFp32Tflops = 3.73f,
+            gpuClockMhz = 1100,
+            gpuAlus = 768,
+            gpuFp32Tflops = 1.69f,
             isp = "Spectra Triple 18-bit",
             npu = "Hexagon (Qualcomm AI Engine)",
             modem = "Snapdragon X70",
@@ -160,7 +160,7 @@ object CpuCache {
             platformId = "crow",
             chipName = "Snapdragon 7 Gen 3",
             cpuModel = "Kryo (Cortex-A715 + A510)",
-            processNode = "4nm TSMC N4P",
+            processNode = "4nm TSMC N4",
             releaseDate = "2023-11",
             clusters = listOf(
                 ClusterSpec("Cortex-A715", 1, 2.63f),
@@ -266,7 +266,7 @@ object CpuCache {
             l3Shared = "8 MB",
             gpuModel = "Mali-G720 MC7",
             gpuClockMhz = 1300,
-            gpuAlus = 448,
+            gpuAlus = 896,
             gpuFp32Tflops = 2.33f,
             isp = "Imagiq 980",
             npu = "APU 780",
@@ -312,9 +312,9 @@ object CpuCache {
             l1iPerSmall = "32 KB", l1dPerSmall = "32 KB", l2PerSmall = "128 KB",
             l3Shared = "4 MB",
             gpuModel = "Mali-G615 MC2",
-            gpuClockMhz = 950,
+            gpuClockMhz = 1047,
             gpuAlus = 128,
-            gpuFp32Tflops = 0.39f,
+            gpuFp32Tflops = 0.27f,
             isp = "Imagiq 950",
             npu = "APU 650",
             modem = "5G R16 (MediaTek T750)",
@@ -357,7 +357,7 @@ object CpuCache {
         //   Qualcomm 芯片同一平台可能有多个 codename（如 SM8635 → "sun" 或 "pineapple"）
         //   OPPO/Xiaomi 等 OEM 可能返回非标准 codename
         val codenameAliases = mapOf(
-            "sun" to "sm8635"   // Snapdragon 8s Gen 3 — Xiaomi 设备返回 "sun"
+            "sun" to "sm8635"   // Snapdragon 8s Gen 3 
         )
         codenameAliases[raw]?.let { aliasKey ->
             KNOWN_CHIPS[aliasKey]?.let { return it }
