@@ -106,7 +106,7 @@ class WifiDataSource(private val context: Context) {
                 ((ip shr 24) and 0xFF).toByte()
             )
             InetAddress.getByAddress(bytes).hostAddress ?: ""
-        } catch (_: UnknownHostException) { "" }
+        } catch (e: UnknownHostException) { "" }
     }
 
     companion object {
@@ -134,146 +134,82 @@ class WifiDataSource(private val context: Context) {
         }
     }
 
+    // ═══════ 扫描结果缓存 (解决 API 29+ 限速：前台 app 2 分钟最多 4 次) ═══════
+    // 扫描与轮询解耦：扫描间隔 ≥30s，轮询 (2s) 只读缓存
+    @Volatile private var cachedAps: List<String> = emptyList()
+    @Volatile private var lastScanTimestamp: Long = 0L
+    private val scanIntervalMs = 15_000L       // 最小扫描间隔 15s (远低于 30s 硬上限)
+    private val scanCooldownMs = 30_000L       // startScan 失败后冷却 30s
+
     private fun scanNearbyAps(): List<String> {
+        val now = System.currentTimeMillis()
+        val sinceLastScan = now - lastScanTimestamp
+
+        // 缓存有效 → 直接返回
+        if (cachedAps.isNotEmpty() && sinceLastScan < scanIntervalMs) {
+            Log.d(TAG, "returning cached APs (age=${sinceLastScan}ms, count=${cachedAps.size})")
+            return cachedAps
+        }
+
+        // 距上次扫描太近且之前失败 → 跳过本次
+        if (cachedAps.isEmpty() && sinceLastScan < scanCooldownMs && lastScanTimestamp > 0) {
+            Log.d(TAG, "scan cooldown active (${sinceLastScan}ms < ${scanCooldownMs}ms)")
+            return emptyList()
+        }
+
+        lastScanTimestamp = now
+
+        // 触发扫描并读取结果
         return try {
-            // 先触发一次扫描 — 非连接状态下系统不主动扫描，缓存为空
-            triggerWifiScan()
+            val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+                ?: return emptyList()
 
-            val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return emptyList()
+            val scanTriggered = tryStartScan(wm)
+            Log.d(TAG, "startScan triggered=$scanTriggered, SDK=${
+                Build.VERSION.SDK_INT}")
 
-            // API 读取 (GPS 开启 + 权限已授时可用)
-            val apiResults = wm.scanResults ?: emptyList()
-            Log.d(TAG, "scanResults from API: ${apiResults.size} APs")
+            // 扫描需要时间完成，立即读取可能拿旧缓存；尝试 API 读取
+            val results = wm.scanResults ?: emptyList()
+            Log.d(TAG, "getScanResults: ${results.size} APs (triggered=$scanTriggered)")
 
-            if (apiResults.isNotEmpty()) {
-                return apiResults.take(5).map { r ->
+            if (results.isNotEmpty()) {
+                cachedAps = results.take(5).map { r ->
                     (r.SSID.ifEmpty { "<hidden>" }) + ": " + r.level + "dBm"
                 }
+                Log.d(TAG, "cached ${cachedAps.size} APs")
+                return cachedAps
             }
 
-            // API 返回空 → fallback 链
-            Log.d(TAG, "API scanResults empty — fallback chain")
+            // startScan 成功但结果暂未就绪 → 保留旧缓存给下轮
+            if (scanTriggered && cachedAps.isNotEmpty()) {
+                Log.d(TAG, "scan triggered, returning stale cache (${cachedAps.size} APs)")
+                return cachedAps
+            }
 
-            // 策略 1: cmd wifi list-scan-results (API 31+, 直接读 WiFi HAL 缓存)
-            val cmdResults = scanNearbyApsViaCmdWifi()
-            if (cmdResults.isNotEmpty()) return cmdResults
-
-            // 策略 2: dumpsys wifi 解析 (全版本兼容)
-            scanNearbyApsViaDumpsys()
+            emptyList()
         } catch (e: Throwable) {
             Log.w(TAG, "scanNearbyAps failed", e)
-            emptyList()
+            // 异常不清缓存，保留上次有效结果
+            cachedAps.ifEmpty { emptyList() }
         }
     }
 
     /**
-     * 触发一次 WiFi 扫描 — 命令行优先 (绕过 API 限制)，WifiManager 兜底
-     * 非连接状态下系统不主动扫描，无此步骤则缓存永远为空
+     * 触发 WiFi 扫描 — 带限速保护
+     * API 29+ 需要 CHANGE_WIFI_STATE + ACCESS_FINE_LOCATION + 位置已开启
      */
-    private fun triggerWifiScan() {
-        // 优先: cmd wifi start-scan (shell 权限，不受 app 限制)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try {
-                ShellCommandDataSource.exec("/system/bin/cmd", "wifi", "start-scan")
-                Log.d(TAG, "cmd wifi start-scan triggered")
-                return  // shell 方式成功，跳过 API 方式
-            } catch (e: Throwable) {
-                Log.d(TAG, "cmd wifi start-scan failed, trying API: ${e.message}")
-            }
-        }
-        // 兜底: WifiManager.startScan() (API 28- 工作，API 29+ 受限)
-        tryWifiManagerStartScan()
-    }
-
-    @Suppress("DEPRECATION")
-    private fun tryWifiManagerStartScan() {
-        try {
-            val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                wm.startScan()
-                Log.d(TAG, "WifiManager.startScan() triggered")
-            } else {
-                Log.d(TAG, "API 29+ — WifiManager.startScan() not called (restricted by system)")
-            }
+    @Suppress("DEPRECATION", "MissingPermission")
+    private fun tryStartScan(wm: WifiManager): Boolean {
+        return try {
+            val ok = wm.startScan()
+            if (!ok) Log.d(TAG, "startScan() returned false (throttled or HW busy)")
+            ok
+        } catch (e: SecurityException) {
+            Log.w(TAG, "startScan SecurityException — missing CHANGE_WIFI_STATE or location disabled", e)
+            false
         } catch (e: Throwable) {
             Log.w(TAG, "startScan failed", e)
-        }
-    }
-
-    /**
-     * Fallback 1: cmd wifi list-scan-results (API 31+)
-     * 直接读取 WiFi 服务内部缓存的扫描结果，绕过 location 权限强制要求
-     */
-    private fun scanNearbyApsViaCmdWifi(): List<String> {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return emptyList()
-        return try {
-            val raw = ShellCommandDataSource.exec("/system/bin/cmd", "wifi", "list-scan-results")
-            if (raw.isBlank()) return emptyList()
-            Log.d(TAG, "cmd wifi list-scan-results: ${raw.length} chars")
-
-            // 格式: "  xx:xx:xx:xx:xx:xx  2462  -45  2.3  SSID Name"
-            val pattern = Regex(
-                """([0-9a-fA-F:]{17})\s+\d+\s+(-\d+)\s+\d+\.?\d*\s+(.+)""",
-                RegexOption.MULTILINE
-            )
-            val aps = pattern.findAll(raw).map { m ->
-                val ssid = m.groupValues[3].trim().removeSurrounding("\"")
-                val rssi = m.groupValues[2]
-                "${ssid.ifEmpty { "<hidden>" }}: ${rssi}dBm"
-            }.toList()
-
-            Log.d(TAG, "cmd wifi parsed: ${aps.size} APs")
-            aps.take(5)
-        } catch (e: Throwable) {
-            Log.w(TAG, "cmd wifi fallback failed", e)
-            emptyList()
-        }
-    }
-
-    /**
-     * Fallback 2: 从 dumpsys wifi 输出解析附近 AP 列表
-     * 支持 AOSP 12+ 表格格式 + OEM 老旧 SSID/level 格式
-     */
-    private fun scanNearbyApsViaDumpsys(): List<String> {
-        return try {
-            val raw = ShellCommandDataSource.getDumpsysWifi()
-            if (raw.isBlank()) return emptyList()
-
-            // 格式1 (AOSP 12+): "Latest scan results:" 表格
-            //   xx:xx:xx:xx:xx:xx  2462  -45  2.3  MyNetwork
-            val tablePattern = Regex(
-                """([0-9a-fA-F:]{17})\s+\d+\s+(-\d+)\s+\d+\.?\d*\s+(.+)""",
-                RegexOption.MULTILINE
-            )
-            val startMarker = raw.indexOf("Latest scan results")
-            val tableSection = if (startMarker >= 0) raw.substring(startMarker) else raw
-
-            val aps = mutableListOf<String>()
-            for (match in tablePattern.findAll(tableSection)) {
-                val ssid = match.groupValues[3].trim().removeSurrounding("\"")
-                val rssi = match.groupValues[2]
-                aps.add("${ssid.ifEmpty { "<hidden>" }}: ${rssi}dBm")
-            }
-
-            if (aps.isNotEmpty()) {
-                Log.d(TAG, "dumpsys parsed: ${aps.size} APs")
-                return aps.take(5)
-            }
-
-            // 格式2 (老旧 OEM): "SSID: xxx, BSSID: xxx, level: -xx"
-            val legacyPattern = Regex("""SSID:\s*"?([^",\n]+)"?\s*[,\n].*?(?:level|RSSI|rssi):\s*(-?\d+)""",
-                setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
-            for (match in legacyPattern.findAll(raw)) {
-                val ssid = match.groupValues[1].trim()
-                val rssi = match.groupValues[2]
-                aps.add("${ssid.ifEmpty { "<hidden>" }}: ${rssi}dBm")
-            }
-
-            Log.d(TAG, "dumpsys legacy parsed: ${aps.size} APs")
-            aps.take(5)
-        } catch (e: Throwable) {
-            Log.w(TAG, "dumpsys AP parse failed", e)
-            emptyList()
+            false
         }
     }
 
