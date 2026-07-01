@@ -129,7 +129,9 @@ class WifiDataSource(private val context: Context) {
                 Log.d(TAG, "isWifiOn: wifiState=$state, isWifiEnabled=$enabled")
                 enabled
             }
-        } catch (_: Throwable) { false }
+        } catch (e: Throwable) {
+            Log.w(TAG, "isWifiOn failed", e) ; false
+        }
     }
 
     private fun scanNearbyAps(): List<String> {
@@ -142,13 +144,66 @@ class WifiDataSource(private val context: Context) {
             }
 
             val results = wm.scanResults ?: emptyList()
-            Log.d(TAG, "scanResults: ${results.size} APs")
+            Log.d(TAG, "scanResults from API: ${results.size} APs")
 
-            results.take(5).map { r ->
-                (r.SSID.ifEmpty { "<hidden>" }) + ": " + r.level + "dBm"
+            if (results.isNotEmpty()) {
+                results.take(5).map { r ->
+                    (r.SSID.ifEmpty { "<hidden>" }) + ": " + r.level + "dBm"
+                }
+            } else {
+                // API 返回空 → 尝试 dumpsys wifi 解析（绕过 location/权限限制）
+                Log.d(TAG, "API scanResults empty — falling back to dumpsys wifi")
+                scanNearbyApsViaDumpsys()
             }
         } catch (e: Throwable) {
             Log.w(TAG, "scanNearbyAps failed", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * 从 dumpsys wifi 输出解析附近 AP 列表 (shell fallback)
+     * 绕过 Android 8.0+ 对 getScanResults() 的 location 强制要求
+     */
+    private fun scanNearbyApsViaDumpsys(): List<String> {
+        return try {
+            val raw = ShellCommandDataSource.getDumpsysWifi()
+            if (raw.isBlank()) return emptyList()
+
+            // 格式1 (AOSP 12+): "Latest scan results:" 表格
+            //   xx:xx:xx:xx:xx:xx  2462  -45  2.3  MyNetwork
+            val tablePattern = Regex(
+                """([0-9a-fA-F:]{17})\s+\d+\s+(-\d+)\s+\d+\.?\d*\s+(.+)""",
+                RegexOption.MULTILINE
+            )
+            val startMarker = raw.indexOf("Latest scan results")
+            val tableSection = if (startMarker >= 0) raw.substring(startMarker) else raw
+
+            val aps = mutableListOf<String>()
+            for (match in tablePattern.findAll(tableSection)) {
+                val ssid = match.groupValues[3].trim().removeSurrounding("\"")
+                val rssi = match.groupValues[2]
+                aps.add("${ssid.ifEmpty { "<hidden>" }}: ${rssi}dBm")
+            }
+
+            if (aps.isNotEmpty()) {
+                Log.d(TAG, "dumpsys parsed: ${aps.size} APs")
+                return aps.take(5)
+            }
+
+            // 格式2 (老旧 OEM): "SSID: xxx, BSSID: xxx, level: -xx"
+            val legacyPattern = Regex("""SSID:\s*"?([^",\n]+)"?\s*[,\n].*?(?:level|RSSI|rssi):\s*(-?\d+)""",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+            for (match in legacyPattern.findAll(raw)) {
+                val ssid = match.groupValues[1].trim()
+                val rssi = match.groupValues[2]
+                aps.add("${ssid.ifEmpty { "<hidden>" }}: ${rssi}dBm")
+            }
+
+            Log.d(TAG, "dumpsys legacy parsed: ${aps.size} APs")
+            aps.take(5)
+        } catch (e: Throwable) {
+            Log.w(TAG, "dumpsys AP parse failed", e)
             emptyList()
         }
     }
