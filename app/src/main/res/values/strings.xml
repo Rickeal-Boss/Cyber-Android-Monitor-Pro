@@ -441,6 +441,7 @@
     <string name="network_dl_bandwidth_title">DL Bandwidth</string>
     <string name="network_ul_status_title">UL Status</string>
     <string name="network_nearby_aps_title">Nearby APs</string>
+    <string name="network_no_aps_found">No APs found</string>
     <string name="network_signal_excellent">Excellent</string>
     <string name="network_signal_good">Good</string>
     <string name="network_signal_average">Average</string>
