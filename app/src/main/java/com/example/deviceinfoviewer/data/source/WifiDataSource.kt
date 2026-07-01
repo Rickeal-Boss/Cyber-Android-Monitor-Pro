@@ -142,55 +142,46 @@ class WifiDataSource(private val context: Context) {
     private val scanCooldownMs = 30_000L       // startScan 失败后冷却 30s
 
     private fun scanNearbyAps(): List<String> {
-        val now = System.currentTimeMillis()
-        val sinceLastScan = now - lastScanTimestamp
-
-        // 缓存有效 → 直接返回
-        if (cachedAps.isNotEmpty() && sinceLastScan < scanIntervalMs) {
-            Log.d(TAG, "returning cached APs (age=${sinceLastScan}ms, count=${cachedAps.size})")
-            return cachedAps
-        }
-
-        // 距上次扫描太近且之前失败 → 跳过本次
-        if (cachedAps.isEmpty() && sinceLastScan < scanCooldownMs && lastScanTimestamp > 0) {
-            Log.d(TAG, "scan cooldown active (${sinceLastScan}ms < ${scanCooldownMs}ms)")
-            return emptyList()
-        }
-
-        lastScanTimestamp = now
-
-        // 触发扫描并读取结果
         return try {
             val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-                ?: return emptyList()
+                ?: return cachedAps
 
-            val scanTriggered = tryStartScan(wm)
-            Log.d(TAG, "startScan triggered=$scanTriggered, SDK=${
-                Build.VERSION.SDK_INT}")
-
-            // 扫描需要时间完成，立即读取可能拿旧缓存；尝试 API 读取
+            // ★ 每次调用都先读取 scanResults — 上次触发的扫描可能已完成
             val results = wm.scanResults ?: emptyList()
-            Log.d(TAG, "getScanResults: ${results.size} APs (triggered=$scanTriggered)")
+            val now = System.currentTimeMillis()
+            val sinceLastScan = now - lastScanTimestamp
 
+            Log.d(TAG, "getScanResults: ${results.size} APs (cached=${cachedAps.size}, sinceLastScan=${sinceLastScan}ms)")
+
+            // 有新结果 → 更新缓存
             if (results.isNotEmpty()) {
                 cachedAps = results.take(5).map { r ->
                     (r.SSID.ifEmpty { "<hidden>" }) + ": " + r.level + "dBm"
                 }
-                Log.d(TAG, "cached ${cachedAps.size} APs")
+                Log.d(TAG, "cached ${cachedAps.size} APs from fresh scan")
                 return cachedAps
             }
 
-            // startScan 成功但结果暂未就绪 → 保留旧缓存给下轮
-            if (scanTriggered && cachedAps.isNotEmpty()) {
-                Log.d(TAG, "scan triggered, returning stale cache (${cachedAps.size} APs)")
+            // 结果为空但缓存仍有效 → 继续用旧缓存
+            if (cachedAps.isNotEmpty() && sinceLastScan < scanIntervalMs) {
+                Log.d(TAG, "returning stale cache (${cachedAps.size} APs, age=${sinceLastScan}ms)")
                 return cachedAps
             }
 
-            emptyList()
+            // 结果为空且缓存过期 → 判断是否触发新扫描
+            val shouldScan = lastScanTimestamp == 0L || sinceLastScan >= scanCooldownMs
+            if (shouldScan) {
+                lastScanTimestamp = now
+                val ok = tryStartScan(wm)
+                Log.d(TAG, "triggered startScan=$ok, awaiting results next cycle")
+            } else {
+                Log.d(TAG, "scan skipped (cooldown ${sinceLastScan}ms < ${scanCooldownMs}ms)")
+            }
+
+            cachedAps  // 返回空 (或旧缓存，如果冷却期内)
         } catch (e: Throwable) {
             Log.w(TAG, "scanNearbyAps failed", e)
-            // 异常不清缓存，保留上次有效结果
-            cachedAps.ifEmpty { emptyList() }
+            cachedAps
         }
     }
 
