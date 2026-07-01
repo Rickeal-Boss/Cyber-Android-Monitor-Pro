@@ -34,11 +34,11 @@ class WifiDataSource(private val context: Context) {
 
         val wifiInfo: WifiInfo = wm.connectionInfo ?: return info
 
-        info.ssid = wifiInfo.ssid.replace("\"", "")
-        info.bssid = wifiInfo.bssid
+        info.ssid = (wifiInfo.ssid ?: "").replace("\"", "")
+        info.bssid = wifiInfo.bssid ?: ""
         info.signalDbm = wifiInfo.rssi
         info.linkSpeedMbps = wifiInfo.linkSpeed
-        info.macAddress = wifiInfo.macAddress
+        info.macAddress = wifiInfo.macAddress ?: ""
 
         // WiFi 频率 & 标准检测 (Android 5.0+)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
