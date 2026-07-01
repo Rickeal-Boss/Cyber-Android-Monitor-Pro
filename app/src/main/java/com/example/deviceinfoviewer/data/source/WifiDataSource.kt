@@ -89,7 +89,7 @@ class WifiDataSource(private val context: Context) {
             cachedWifiTemp = ShellCommandDataSource.extractWifiTemperature(wifiOutput)
             cachedPowerSave = ShellCommandDataSource.extractWifiPowerSave(wifiOutput)
             dumpsysWifiResolved = true
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) {}
         info.chipTemperatureCelsius = cachedWifiTemp
         info.powerSaveMode = cachedPowerSave
     }
@@ -136,25 +136,30 @@ class WifiDataSource(private val context: Context) {
 
     private fun scanNearbyAps(): List<String> {
         return try {
+            // 先触发一次扫描 — 非连接状态下系统不主动扫描，缓存为空
+            triggerWifiScan()
+
             val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return emptyList()
 
-            // 主动触发一次扫描（非连接状态下系统缓存可能为空）
-            if (!tryStartScan(wm)) {
-                Log.d(TAG, "startScan failed/restricted — falling back to cached results")
-            }
+            // API 读取 (GPS 开启 + 权限已授时可用)
+            val apiResults = wm.scanResults ?: emptyList()
+            Log.d(TAG, "scanResults from API: ${apiResults.size} APs")
 
-            val results = wm.scanResults ?: emptyList()
-            Log.d(TAG, "scanResults from API: ${results.size} APs")
-
-            if (results.isNotEmpty()) {
-                results.take(5).map { r ->
+            if (apiResults.isNotEmpty()) {
+                return apiResults.take(5).map { r ->
                     (r.SSID.ifEmpty { "<hidden>" }) + ": " + r.level + "dBm"
                 }
-            } else {
-                // API 返回空 → 尝试 dumpsys wifi 解析（绕过 location/权限限制）
-                Log.d(TAG, "API scanResults empty — falling back to dumpsys wifi")
-                scanNearbyApsViaDumpsys()
             }
+
+            // API 返回空 → fallback 链
+            Log.d(TAG, "API scanResults empty — fallback chain")
+
+            // 策略 1: cmd wifi list-scan-results (API 31+, 直接读 WiFi HAL 缓存)
+            val cmdResults = scanNearbyApsViaCmdWifi()
+            if (cmdResults.isNotEmpty()) return cmdResults
+
+            // 策略 2: dumpsys wifi 解析 (全版本兼容)
+            scanNearbyApsViaDumpsys()
         } catch (e: Throwable) {
             Log.w(TAG, "scanNearbyAps failed", e)
             emptyList()
@@ -162,8 +167,72 @@ class WifiDataSource(private val context: Context) {
     }
 
     /**
-     * 从 dumpsys wifi 输出解析附近 AP 列表 (shell fallback)
-     * 绕过 Android 8.0+ 对 getScanResults() 的 location 强制要求
+     * 触发一次 WiFi 扫描 — 命令行优先 (绕过 API 限制)，WifiManager 兜底
+     * 非连接状态下系统不主动扫描，无此步骤则缓存永远为空
+     */
+    private fun triggerWifiScan() {
+        // 优先: cmd wifi start-scan (shell 权限，不受 app 限制)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                ShellCommandDataSource.exec("/system/bin/cmd", "wifi", "start-scan")
+                Log.d(TAG, "cmd wifi start-scan triggered")
+                return  // shell 方式成功，跳过 API 方式
+            } catch (e: Throwable) {
+                Log.d(TAG, "cmd wifi start-scan failed, trying API: ${e.message}")
+            }
+        }
+        // 兜底: WifiManager.startScan() (API 28- 工作，API 29+ 受限)
+        tryWifiManagerStartScan()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun tryWifiManagerStartScan() {
+        try {
+            val wm = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager ?: return
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                wm.startScan()
+                Log.d(TAG, "WifiManager.startScan() triggered")
+            } else {
+                Log.d(TAG, "API 29+ — WifiManager.startScan() not called (restricted by system)")
+            }
+        } catch (e: Throwable) {
+            Log.w(TAG, "startScan failed", e)
+        }
+    }
+
+    /**
+     * Fallback 1: cmd wifi list-scan-results (API 31+)
+     * 直接读取 WiFi 服务内部缓存的扫描结果，绕过 location 权限强制要求
+     */
+    private fun scanNearbyApsViaCmdWifi(): List<String> {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return emptyList()
+        return try {
+            val raw = ShellCommandDataSource.exec("/system/bin/cmd", "wifi", "list-scan-results")
+            if (raw.isBlank()) return emptyList()
+            Log.d(TAG, "cmd wifi list-scan-results: ${raw.length} chars")
+
+            // 格式: "  xx:xx:xx:xx:xx:xx  2462  -45  2.3  SSID Name"
+            val pattern = Regex(
+                """([0-9a-fA-F:]{17})\s+\d+\s+(-\d+)\s+\d+\.?\d*\s+(.+)""",
+                RegexOption.MULTILINE
+            )
+            val aps = pattern.findAll(raw).map { m ->
+                val ssid = m.groupValues[3].trim().removeSurrounding("\"")
+                val rssi = m.groupValues[2]
+                "${ssid.ifEmpty { "<hidden>" }}: ${rssi}dBm"
+            }.toList()
+
+            Log.d(TAG, "cmd wifi parsed: ${aps.size} APs")
+            aps.take(5)
+        } catch (e: Throwable) {
+            Log.w(TAG, "cmd wifi fallback failed", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * Fallback 2: 从 dumpsys wifi 输出解析附近 AP 列表
+     * 支持 AOSP 12+ 表格格式 + OEM 老旧 SSID/level 格式
      */
     private fun scanNearbyApsViaDumpsys(): List<String> {
         return try {
@@ -205,28 +274,6 @@ class WifiDataSource(private val context: Context) {
         } catch (e: Throwable) {
             Log.w(TAG, "dumpsys AP parse failed", e)
             emptyList()
-        }
-    }
-
-    /**
-     * 尝试触发主动 WiFi 扫描，失败不阻塞
-     * API 29+ startScan 受限制，低版本可直接使用
-     */
-    @Suppress("DEPRECATION")
-    private fun tryStartScan(wm: WifiManager): Boolean {
-        return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // API 29+: startScan() 已弃用且受严格限制，尝试调用但不强求
-                Log.d(TAG, "API 29+ — skip proactive startScan, rely on system background scans")
-                false
-            } else {
-                val ok = wm.startScan()
-                Log.d(TAG, "startScan() = $ok")
-                ok
-            }
-        } catch (e: Throwable) {
-            Log.w(TAG, "startScan threw", e)
-            false
         }
     }
 
