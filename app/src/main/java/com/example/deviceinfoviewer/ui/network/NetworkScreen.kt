@@ -178,12 +178,14 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
             CellDetailCard(mn)
         }
 
-        // 附近 AP
+        // 附近 AP (始终显示，无数据时给出提示)
         val aps = wifiInfo?.nearbyAps ?: emptyList()
-        if (aps.isNotEmpty()) {
-            MetricCard(title = stringResource(R.string.network_nearby_aps_title),
-                value = aps.joinToString("\n"), valueColor = NeonPurpleBright)
-        }
+        MetricCard(
+            title = stringResource(R.string.network_nearby_aps_title),
+            value = if (aps.isNotEmpty()) aps.joinToString("\n")
+                    else stringResource(R.string.network_no_aps_found),
+            valueColor = if (aps.isNotEmpty()) NeonPurpleBright else TextSecondary
+        )
     }
 }
 
