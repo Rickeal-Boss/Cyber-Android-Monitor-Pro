@@ -147,8 +147,8 @@ class WifiDataSource(private val context: Context) {
             results.take(5).map { r ->
                 (r.SSID.ifEmpty { "<hidden>" }) + ": " + r.level + "dBm"
             }
-        } catch (_: Throwable) {
-            Log.w(TAG, "scanNearbyAps failed", _)
+        } catch (e: Throwable) {
+            Log.w(TAG, "scanNearbyAps failed", e)
             emptyList()
         }
     }
@@ -169,8 +169,8 @@ class WifiDataSource(private val context: Context) {
                 Log.d(TAG, "startScan() = $ok")
                 ok
             }
-        } catch (_: Throwable) {
-            Log.w(TAG, "startScan threw", _)
+        } catch (e: Throwable) {
+            Log.w(TAG, "startScan threw", e)
             false
         }
     }
