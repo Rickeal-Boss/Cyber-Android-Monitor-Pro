@@ -3,7 +3,12 @@
 
     <!-- WiFi 信息读取（本地设备，不上传） -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- WiFi 扫描 (Android 13+ 附近设备权限，声明 neverForLocation 免除位置关联) -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation" />
 
     <!-- GPS 卫星信息（本地设备） -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
