@@ -154,6 +154,7 @@
     <string name="network_dl_bandwidth_title">DL 带宽</string>
     <string name="network_ul_status_title">UL 状态</string>
     <string name="network_nearby_aps_title">附近 AP</string>
+    <string name="network_no_aps_found">未检测到 AP</string>
     <string name="network_signal_excellent">极佳</string>
     <string name="network_signal_good">良好</string>
     <string name="network_signal_average">一般</string>
