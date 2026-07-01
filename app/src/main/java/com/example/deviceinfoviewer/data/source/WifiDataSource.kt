@@ -134,12 +134,12 @@ class WifiDataSource(private val context: Context) {
         }
     }
 
-    // ═══════ 扫描结果缓存 (解决 API 29+ 限速：前台 app 2 分钟最多 4 次) ═══════
-    // 扫描与轮询解耦：扫描间隔 ≥30s，轮询 (2s) 只读缓存
+    // ═══════ 扫描结果缓存 ═══════
+    // 扫描与轮询解耦：启动异步扫描后，下个轮询周期读取结果
     @Volatile private var cachedAps: List<String> = emptyList()
     @Volatile private var lastScanTimestamp: Long = 0L
-    private val scanIntervalMs = 15_000L       // 最小扫描间隔 15s (远低于 30s 硬上限)
-    private val scanCooldownMs = 30_000L       // startScan 失败后冷却 30s
+    private val scanIntervalMs = 15_000L       // 缓存有效期
+    private val scanCooldownMs = 30_000L       // 两次 startScan 最小间隔
 
     private fun scanNearbyAps(): List<String> {
         return try {
@@ -168,12 +168,12 @@ class WifiDataSource(private val context: Context) {
                 return cachedAps
             }
 
-            // 结果为空且缓存过期 → 判断是否触发新扫描
+            // 结果为空且缓存过期 → 触发异步扫描
             val shouldScan = lastScanTimestamp == 0L || sinceLastScan >= scanCooldownMs
             if (shouldScan) {
                 lastScanTimestamp = now
-                val ok = tryStartScan(wm)
-                Log.d(TAG, "triggered startScan=$ok, awaiting results next cycle")
+                tryStartScan(wm)
+                Log.d(TAG, "startScan triggered (async), awaiting results next cycle")
             } else {
                 Log.d(TAG, "scan skipped (cooldown ${sinceLastScan}ms < ${scanCooldownMs}ms)")
             }
@@ -186,21 +186,20 @@ class WifiDataSource(private val context: Context) {
     }
 
     /**
-     * 触发 WiFi 扫描 — 带限速保护
-     * API 29+ 需要 CHANGE_WIFI_STATE + ACCESS_FINE_LOCATION + 位置已开启
+     * 触发 WiFi 扫描
+     * ⚠️ API 29+ (Android 10+) WifiManager.startScan() 始终返回 false，
+     * 但扫描请求仍会被系统异步处理。不要依赖返回值判断成败。
+     * 扫描完成后 getScanResults() 在下个轮询周期会返回新数据。
      */
     @Suppress("DEPRECATION", "MissingPermission")
-    private fun tryStartScan(wm: WifiManager): Boolean {
-        return try {
+    private fun tryStartScan(wm: WifiManager) {
+        try {
             val ok = wm.startScan()
-            if (!ok) Log.d(TAG, "startScan() returned false (throttled or HW busy)")
-            ok
+            Log.d(TAG, "startScan() returned $ok (API 29+ always false, scan is async)")
         } catch (e: SecurityException) {
-            Log.w(TAG, "startScan SecurityException — missing CHANGE_WIFI_STATE or location disabled", e)
-            false
+            Log.w(TAG, "startScan SecurityException — missing CHANGE_WIFI_STATE or location", e)
         } catch (e: Throwable) {
             Log.w(TAG, "startScan failed", e)
-            false
         }
     }
 
