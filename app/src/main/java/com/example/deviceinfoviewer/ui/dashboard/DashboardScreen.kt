@@ -215,6 +215,14 @@ fun DashboardScreen(
                 Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(8) })
         }
 
+        // Row 4: 电池 + 传感器
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            QuickLinkCard(stringResource(R.string.dashboard_quick_battery_title), stringResource(R.string.dashboard_quick_battery_desc), Icons.Filled.BatteryFull, NeonPurple,
+                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(4) })
+            QuickLinkCard(stringResource(R.string.dashboard_quick_sensor_title), stringResource(R.string.dashboard_quick_sensor_desc), Icons.Filled.Sensors, NeonPurpleBright,
+                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(7) })
+        }
+
         Spacer(Modifier.height(8.dp))
     }
 }

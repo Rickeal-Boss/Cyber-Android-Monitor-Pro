@@ -961,6 +961,8 @@
     <string name="dashboard_metric_cpu_temp">CPU 溫度</string>
     <string name="dashboard_metric_gpu_load">GPU 負載</string>
     <string name="dashboard_metric_mem_usage">記憶體用量</string>
+    <string name="dashboard_quick_battery_desc">電壓 · 溫度 · 健康</string>
+    <string name="dashboard_quick_battery_title">電池</string>
     <string name="dashboard_quick_cpu_desc">頻率 · 核心 · 溫度</string>
     <string name="dashboard_quick_cpu_title">CPU 處理器</string>
     <string name="dashboard_quick_device_desc">OEM · 效能模式</string>
@@ -972,6 +974,8 @@
     <string name="dashboard_quick_mem_title">記憶體資訊</string>
     <string name="dashboard_quick_net_desc">WiFi · 訊號</string>
     <string name="dashboard_quick_net_title">網路狀態</string>
+    <string name="dashboard_quick_sensor_desc">加速度 · 陀螺 · 光感</string>
+    <string name="dashboard_quick_sensor_title">感測器</string>
     <string name="dashboard_source_error">%1$d 个資料源异常</string>
     <string name="device_activated">已啟用</string>
     <string name="device_ai_engine">AI 引擎</string>

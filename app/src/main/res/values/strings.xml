@@ -964,6 +964,8 @@
     <string name="dashboard_metric_cpu_temp">CPU Temperature</string>
     <string name="dashboard_metric_gpu_load">GPU Load</string>
     <string name="dashboard_metric_mem_usage">Memory Usage</string>
+    <string name="dashboard_quick_battery_desc">Volt · Temp · Health</string>
+    <string name="dashboard_quick_battery_title">Battery</string>
     <string name="dashboard_quick_cpu_desc">Freq · Cores · Temp</string>
     <string name="dashboard_quick_cpu_title">CPU Processor</string>
     <string name="dashboard_quick_device_desc">OEM · Power Mode</string>
@@ -975,6 +977,8 @@
     <string name="dashboard_quick_mem_title">Memory Info</string>
     <string name="dashboard_quick_net_desc">WiFi · Signal</string>
     <string name="dashboard_quick_net_title">Network Status</string>
+    <string name="dashboard_quick_sensor_desc">Accel · Gyro · Light</string>
+    <string name="dashboard_quick_sensor_title">Sensors</string>
     <string name="dashboard_source_error">%1$d data source(s) abnormal</string>
     <string name="device_activated">Activated</string>
     <string name="device_ai_engine">AI Engine</string>
