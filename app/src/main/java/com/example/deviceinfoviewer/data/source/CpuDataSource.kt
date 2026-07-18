@@ -373,9 +373,12 @@ class CpuDataSource(private val context: Context) {
      * 这些文件通常不受 SELinux 限制（因为它们是内核直接导出的属性文件）
      */
     private fun scanHyperOsThermalMessage(): Float {
-        val messageDir = "/sys/class/thermal/thermal_message/"
-        if (!SysFsReader.fileExists(messageDir)) return Float.NaN
+        // 递归扫描（动态发现 HyperOS 新增文件名，兼容天玑/骁龙变体）
+        val messageTemp = scanThermalMessageDir("/sys/class/thermal/thermal_message/")
+        if (!messageTemp.isNaN()) return messageTemp
 
+        // 回退: 固定文件名候选
+        val messageDir = "/sys/class/thermal/thermal_message/"
         val candidates = listOf(
             "soc_temperature",
             "cpu_big_temperature",
@@ -405,8 +408,21 @@ class CpuDataSource(private val context: Context) {
      *   drivers/thermal/oppo_thermal_message.c — oppo 温控消息驱动
      *   XDA: OnePlus/OPPO thermal monitoring threads
      */
+    /**
+     * OPPO ColorOS 专用 thermal 扫描
+     * ColorOS 有独立的 thermal-engine 和 thermal_message 目录
+     *
+     * 改进 (2026-07-18):
+     * - 递归扫描 /sys/class/thermal/thermal_message/ 全部文件，动态发现 ColorOS 15/16 新增节点
+     *   (原实现仅硬编码 6 个固定路径，ColorOS16/天玑 新增文件名会被漏掉)
+     * - 增加 MTK 天玑平台专有 thermal 节点 (SoC 级 thermal driver)
+     */
     private fun scanColorOsThermal(): Float {
-        // ColorOS 15/16 可能暴露的路径
+        // 1) 递归扫描 thermal_message 目录（动态发现文件名，兼容 ColorOS 15/16 天玑）
+        val messageTemp = scanThermalMessageDir("/sys/class/thermal/thermal_message/")
+        if (!messageTemp.isNaN()) return messageTemp
+
+        // 2) ColorOS 15/16 可能暴露的平台专有路径 + MTK 天玑节点
         val colorOsPaths = listOf(
             "/sys/class/thermal/thermal_message/soc_max_temp",
             "/sys/class/thermal/thermal_message/cpu_temp",
@@ -414,6 +430,18 @@ class CpuDataSource(private val context: Context) {
             "/sys/class/thermal/thermal_zone0/temp",
             "/sys/devices/platform/soc/cpu_temp",
             "/sys/devices/platform/thermal_sensor/cpu_temp",
+            // ── MTK 天玑 ColorOS 16 专有 thermal 节点 ──
+            "/sys/devices/platform/soc/soc:mtk-thermal/temp",
+            "/sys/devices/platform/1e004000.thermal/tz/tz1/temperature",
+            "/sys/devices/platform/soc/1e004000.thermal/tz/tz1/temperature",
+            "/sys/devices/platform/10006000.thermal/temperature",
+            "/sys/devices/platform/soc/mtktscpu/temperature",
+            "/sys/devices/platform/mt8167-thermal/temperature",
+            "/sys/devices/platform/mt6359-thermal/temperature",
+            "/proc/mtk_thermal/temperature",
+            "/proc/driver/thermal/temperature",
+            "/sys/class/thermal/thermal_message/board_temp",
+            "/sys/class/thermal/thermal_message/soc_temp",
         )
         for (path in colorOsPaths) {
             val temp = SysFsReader.readFloat(path)
@@ -426,9 +454,34 @@ class CpuDataSource(private val context: Context) {
     }
 
     /**
+     * 枚举扫描 thermal_message 目录下的温度文件（动态发现文件名）
+     * 仅读取文件名含 temp/thermal/cpu/soc 的文件，避免误读非温度属性。
+     * 天玑/ColorOS 16 常在此目录下暴露 cpu_big_temperature/cpu_little_temperature/board_temp 等。
+     */
+    private fun scanThermalMessageDir(dir: String): Float {
+        if (!SysFsReader.fileExists(dir)) return Float.NaN
+        val files = SysFsReader.listDir(dir)
+        for (file in files) {
+            val lower = file.lowercase()
+            if (!lower.contains("temp") && !lower.contains("thermal") &&
+                !lower.contains("cpu") && !lower.contains("soc")) continue
+            val temp = SysFsReader.readFloat(dir + file)
+            if (!temp.isNaN() && temp > 0) {
+                val celsius = if (temp > 1000f) temp / 1000f else temp
+                if (celsius in 10f..150f) return celsius
+            }
+        }
+        return Float.NaN
+    }
+
+    /**
      * Vivo OriginOS 专用 thermal 扫描
      */
     private fun scanOriginOsThermal(): Float {
+        // 递归扫描（动态发现 OriginOS 新增文件名）
+        val messageTemp = scanThermalMessageDir("/sys/class/thermal/thermal_message/")
+        if (!messageTemp.isNaN()) return messageTemp
+
         val originOsPaths = listOf(
             "/sys/class/thermal/thermal_message/soc_temp",
             "/sys/class/thermal/thermal_message/cpu_temp",

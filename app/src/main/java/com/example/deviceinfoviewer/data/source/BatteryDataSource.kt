@@ -595,6 +595,10 @@ class BatteryDataSource(private val context: Context) {
             "/sys/devices/platform/soc/oplus_chg/usb/current_now" to "soc/oplus_chg/usb_current",
             "/sys/firmware/devicetree/base/oplus_chg/current_now" to "dt/oplus_chg/current",
             "/sys/kernel/oplus_chg/bms/current_now" to "kernel/oplus_chg/bms_current",
+            // ColorOS 16 新增电流节点 (mA — oplus_chg 派生)
+            "/sys/class/oplus_chg/battery/charger_current" to "oplus_chg/charger_current",
+            "/sys/class/oplus_chg/battery/current_avg" to "oplus_chg/current_avg",
+            "/sys/devices/platform/soc/oplus_chg/battery/battery_current" to "soc/oplus_chg/battery_cur2",
             // OPPO/Realme (mA — oplus_chg 派生路径)
             "/sys/class/power_supply/battery/real_charging_current" to "battery/real_charge",
             "/sys/class/power_supply/battery/fast_charge_current" to "battery/fast_charge",
@@ -688,7 +692,10 @@ class BatteryDataSource(private val context: Context) {
                 Regex("""(?i)Max charging current[=:：]\s*(\d+)"""),
                 Regex("""(?i)Charging current[=:：]\s*(\d+)"""),
                 Regex("""(?i)Charge counter[=:：]\s*(\d+)"""),
-                // 新增: 匹配 "Current:" 字段 (部分旧设备 dumpsys 格式)
+                // ColorOS/部分 ROM 在放电态暴露的实时电流字段
+                Regex("""(?i)Current Now[=:：]\s*(-?\d+)"""),
+                Regex("""(?i)current now[=:：]\s*(-?\d+)"""),
+                // 匹配 "Current:" 字段 (部分旧设备 dumpsys 格式)
                 Regex("""(?i)^\s*(?:current|I)\s*[=:：]\s*(-?\d+)"""),
             )
             for (regex in dumpsysCurrentPatterns) {
@@ -1568,20 +1575,25 @@ class BatteryDataSource(private val context: Context) {
      * 通过 Runtime.exec("cat", path) 以 shell 上下文读取。
      */
     private fun readSysfsLineShell(path: String): String? {
-        // 方式1: Runtime.exec("cat", path)
-        try {
-            val proc = Runtime.getRuntime().exec(arrayOf("cat", path))
-            val text = proc.inputStream.bufferedReader().readText().trim()
-            proc.waitFor()
-            if (text.isNotEmpty()) return text
-        } catch (_: Throwable) {}
-        // 方式2: sh -c cat path (某些 ROM 上 sh context 权限不同)
-        try {
-            val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "cat $path 2>/dev/null"))
-            val text = proc.inputStream.bufferedReader().readText().trim()
-            proc.waitFor()
-            if (text.isNotEmpty()) return text
-        } catch (_: Throwable) {}
+        // 多策略 cat（应对 Android 16 / ColorOS16 SELinux 下不同 ROM 的 shell 上下文差异）
+        // 三方应用无 root 时 /sys 直接读被拒，shell 上下文可能拥有不同的（仍受限）权限，
+        // 这里最大化可达的 cat 入口以覆盖更多机型。
+        val catCmds = listOf(
+            arrayOf("cat", path),
+            arrayOf("/system/bin/cat", path),
+            arrayOf("/system/bin/toybox", "cat", path),
+            arrayOf("/sbin/cat", path),
+            arrayOf("/system/bin/sh", "-c", "cat $path 2>/dev/null"),
+            arrayOf("/system/bin/sh", "-c", "toybox cat $path 2>/dev/null"),
+        )
+        for (cmd in catCmds) {
+            try {
+                val proc = Runtime.getRuntime().exec(cmd)
+                val text = proc.inputStream.bufferedReader().readText().trim()
+                proc.waitFor()
+                if (text.isNotEmpty()) return text
+            } catch (_: Throwable) {}
+        }
         return null
     }
 

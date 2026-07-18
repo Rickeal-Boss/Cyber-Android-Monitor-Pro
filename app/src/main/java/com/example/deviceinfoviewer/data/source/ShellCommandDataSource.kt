@@ -22,6 +22,17 @@ object ShellCommandDataSource {
     private const val TIMEOUT_SECONDS: Long = 8
     private val NOT_DIGIT_DOT = Regex("[^0-9.]")  // ★ 预编译
     private val WS = Regex("\\s+")               // ★ 预编译
+    // ── 温度解析 (dumpsys thermalservice) ──
+    // AOSP/MTK Thermal HAL 标准输出格式: Temperature{mType=CPU, mName=cpu0, mValue=42.5, mStatus=0}
+    private val THERMAL_MVALUE = Regex("""mValue=(-?\d+(?:\.\d+)?)""")
+    private val THERMAL_MTYPE = Regex("""mType=([^,}\s]+)""")
+    private val THERMAL_MNAME = Regex("""mName=([^,}\s]+)""")
+    // CPU 相关 sensor 关键词（用于从 dumpsys 输出中筛选 CPU/SoC 温度，排除电池/wifi 等）
+    private val CPU_TEMP_KEYWORDS = listOf("cpu", "soc", "tsens", "mtk", "big", "little", "prime", "cluster", "core", "apc", "cpuss")
+    private val TEMP_EXCLUDE_KEYWORDS = listOf(
+        "battery", "batt", "charger", "charge", "usb", "wifi", "bt", "bluetooth",
+        "camera", "modem", "display", "lcd", "nfc", "flash", "pa", "rf"
+    )
 
     /**
      * 执行 shell 命令并返回完整输出
@@ -186,17 +197,42 @@ object ShellCommandDataSource {
     fun extractThermalTemperatures(thermalOutput: String?): List<Float> {
         val temps = mutableListOf<Float>()
         if (thermalOutput.isNullOrEmpty()) return temps
+
+        // 判断 sensor 标签是否与 CPU/SoC 相关（排除电池/wifi/充电等无关 sensor）
+        fun isCpuRelatedSensor(label: String): Boolean {
+            val lower = label.lowercase()
+            if (TEMP_EXCLUDE_KEYWORDS.any { lower.contains(it) }) return false
+            return CPU_TEMP_KEYWORDS.any { lower.contains(it) }
+        }
+
         for (line in thermalOutput.split("\n")) {
-            // 匹配 "temperature: xx.x" 格式
+            // === 格式1: AOSP/MTK Thermal HAL 标准输出 ===
+            //   Temperature{mType=CPU, mName=cpu0, mValue=42.5, mStatus=0}
+            //   原实现仅匹配 "temperature:"/"temp:" 文本，漏掉了 mValue= 字段，
+            //   导致 ColorOS16/天玑 的 dumpsys thermalservice 降级方案始终解析为空。
+            val mValueMatch = THERMAL_MVALUE.find(line)
+            if (mValueMatch != null) {
+                val value = mValueMatch.groupValues[1].toFloatOrNull() ?: continue
+                val mType = THERMAL_MTYPE.find(line)?.groupValues?.getOrNull(1) ?: ""
+                val mName = THERMAL_MNAME.find(line)?.groupValues?.getOrNull(1) ?: ""
+                val label = if (mType.isNotEmpty()) mType else mName
+                if (isCpuRelatedSensor(label) && value in 10f..150f) {
+                    temps.add(value)
+                }
+                continue
+            }
+            // === 格式2: 简单文本 "temperature: xx.x" / "temp: xx.x"（部分 OEM ROM） ===
             if (line.contains("temperature:") || line.contains("temp:")) {
                 try {
-                    var idx = line.indexOf("temperature:")
-                    if (idx < 0) idx = line.indexOf("temp:")
-                    val numPart = line.substring(idx).replace(NOT_DIGIT_DOT, " ").trim()
+                    val idx = line.indexOf("temperature:")
+                    val start = if (idx >= 0) idx else line.indexOf("temp:")
+                    val numPart = line.substring(start).replace(NOT_DIGIT_DOT, " ").trim()
                     val parts = numPart.split(WS)
                     for (part in parts) {
                         if (part.isNotEmpty()) {
-                            part.toFloatOrNull()?.let { temps.add(it) }
+                            part.toFloatOrNull()?.let {
+                                if (it in 10f..150f) temps.add(it)
+                            }
                         }
                     }
                 } catch (_: Throwable) {}
