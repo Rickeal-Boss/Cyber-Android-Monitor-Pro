@@ -77,8 +77,9 @@ fun BatteryScreen(
     val current = batteryInfo?.currentNowUA?.takeIf { it != 0L }
     val currentSource = batteryInfo?.currentNowSource?.takeIf { it.isNotEmpty() }
     val power = if (isCharging) batteryInfo?.chargingPowerMw else batteryInfo?.dischargingPowerMw
-    val designCap = batteryInfo?.chargeFullDesignMAh?.takeIf { it > 0 }
-    val nowCap = batteryInfo?.chargeFullMAh?.takeIf { it > 0 }
+    // 双电芯：容量随开关翻倍（effective getter，依赖 batteryInfo.dualCell，刷新后生效）
+    val designCap = batteryInfo?.effectiveChargeFullDesignMAh?.takeIf { it > 0 }
+    val nowCap = batteryInfo?.effectiveChargeFullMAh?.takeIf { it > 0 }
     val capSource = batteryInfo?.chargeFullSource?.takeIf { it.isNotEmpty() && it != "无法获取" }
     val counter = batteryInfo?.chargeCounterUAh?.takeIf { it > 0 }
     val cycleCount = batteryInfo?.cycleCount?.takeIf { it >= 0 }

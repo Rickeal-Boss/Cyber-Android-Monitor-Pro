@@ -68,4 +68,19 @@ data class BatteryInfo(
     /** 获取有效电压（双电芯×2） */
     val effectiveVoltage: Int
         get() = if (dualCell && voltage > 0) voltage * 2 else voltage
+
+    /**
+     * 获取有效满电容量（双电芯×2）
+     * 双电芯手动开关开启时，系统上报的 charge_full 仅为单电芯容量，
+     * 整包容量翻倍以反映真实双电芯规格（与 effectiveVoltage 同模型）。
+     */
+    val effectiveChargeFullMAh: Long
+        get() = if (dualCell && chargeFullMAh > 0) chargeFullMAh * 2 else chargeFullMAh
+
+    /**
+     * 获取有效设计容量（双电芯×2）
+     * 同 effectiveChargeFullMAh，针对 charge_full_design。
+     */
+    val effectiveChargeFullDesignMAh: Long
+        get() = if (dualCell && chargeFullDesignMAh > 0) chargeFullDesignMAh * 2 else chargeFullDesignMAh
 }
