@@ -148,6 +148,7 @@
 
     <!-- ═══ Common 通用標籤 (i18n key, 仅含原有不存在的条目) ═══ -->
     <string name="common_unavailable">不可用</string>
+    <string name="common_in_use">已使用</string>
     <string name="common_unsupported">不支援</string>
 
     <!-- ═══ Touchscreen 觸控類型 (i18n key) ═══ -->

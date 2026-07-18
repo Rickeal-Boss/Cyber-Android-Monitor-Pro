@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -59,6 +60,18 @@ fun DashboardScreen(
     val batteryLevel = batteryInfo?.levelPercent?.let { "${it}%" } ?: "---"
     val memUsed = memoryInfo?.let { FormatUtils.formatBytes(it.usedKB * 1024) } ?: "---"
     val memTotal = memoryInfo?.let { FormatUtils.formatBytes(it.totalKB * 1024) } ?: "---"
+    // SWAP/ZRAM 数据（利用内存卡片下部空间）
+    val swapUsedKB = memoryInfo?.swapUsedKB?.takeIf { it > 0 } ?: 0L
+    val swapTotalKB = memoryInfo?.swapTotalKB?.takeIf { it > 0 } ?: 0L
+    val zramUsedKB = memoryInfo?.zramMemUsedTotalKB?.takeIf { it > 0 }
+        ?: memoryInfo?.zramCompressedKB?.takeIf { it > 0 } ?: 0L
+    val zramOriginalKB = memoryInfo?.zramOriginalKB?.takeIf { it > 0 } ?: 0L
+    val hasSwapZram = (swapTotalKB > 0 || zramOriginalKB > 0)
+    // 取较大者作为 "SWAP/ZRAM in use" 的主展示值（swap 优先）
+    val swapzramUsedKB = if (swapUsedKB >= zramUsedKB) swapUsedKB else zramUsedKB
+    val swapzramTotalKB = if (swapUsedKB >= zramUsedKB) swapTotalKB else zramOriginalKB
+    val swapzramPct = if (swapzramTotalKB > 0 && swapzramUsedKB > 0)
+        (swapzramUsedKB.toFloat() / swapzramTotalKB).coerceIn(0f, 1f) else -1f
     // 实时开机时长 (每分钟刷新)
     var liveUptime by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime() / 1000) }
     LaunchedEffect(Unit) {
@@ -113,11 +126,47 @@ fun DashboardScreen(
                 title = stringResource(R.string.dashboard_metric_cpu_temp), value = cpuTemp,
                 valueColor = NeonPurpleBright, modifier = Modifier.weight(1f)
             ) { LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth()) }
+            val memValueColor = NeonPurpleBright
             MetricCard(
                 title = stringResource(R.string.dashboard_metric_mem_usage), value = memUsed,
-                valueColor = NeonPurpleBright, modifier = Modifier.weight(1f),
-                subtitle = "/ $memTotal"
-            )
+                valueColor = memValueColor, modifier = Modifier.weight(1f),
+                subtitle = "/ $memTotal",
+                progress = if (memoryInfo?.totalKB ?: 0L > 0)
+                    (memoryInfo!!.usedKB.toFloat() / memoryInfo!!.totalKB).coerceIn(0f, 1f) else -1f,
+                showProgress = true
+            ) {
+                // ── SWAP / ZRAM 子区域 (利用卡片下部剩余空间) ──
+                if (hasSwapZram) {
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.memory_swap_zram_title),
+                        fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
+                        letterSpacing = 0.5.sp
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    val szText = FormatUtils.formatBytes(swapzramUsedKB * 1024)
+                    Text("$szText ${stringResource(R.string.common_in_use)}",
+                        fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                        color = memValueColor, fontFamily = FontFamily.Monospace
+                    )
+                    // 进度条 (swap/zram 使用率)
+                    if (swapzramPct >= 0f) {
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { swapzramPct },
+                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                            color = memValueColor.copy(alpha = 0.75f), trackColor = CyberMuted
+                        )
+                    }
+                    // 总量行
+                    val szTotalText = FormatUtils.formatBytes(swapzramTotalKB * 1024)
+                    Spacer(Modifier.height(4.dp))
+                    Text(stringResource(R.string.memory_swap_total, szTotalText),
+                        fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.6f))
+                }
+            }
         }
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
