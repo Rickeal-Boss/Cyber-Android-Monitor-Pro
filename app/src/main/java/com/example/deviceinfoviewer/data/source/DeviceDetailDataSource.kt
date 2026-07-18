@@ -612,7 +612,7 @@ class DeviceDetailDataSource(private val context: Context) {
                 return
             }
 
-            info.cpuCacheSource = "不可用"
+            info.cpuCacheSource = "common_unavailable"
         } catch (e: Throwable) { Log.w(TAG, "CPU缓存采集失败", e) }
     }
 
@@ -689,13 +689,18 @@ class DeviceDetailDataSource(private val context: Context) {
             }
 
             // big.LITTLE 拓扑: 统计不同频率组的核心数
-            info.bigLITTLE = detectBigLITTLETopology()
+            detectBigLITTLETopology(info)
         } catch (e: Throwable) { Log.w(TAG, "CPU拓扑采集失败", e) }
     }
 
-    private fun detectBigLITTLETopology(): String {
-        return try {
-            val freqGroups = mutableMapOf<Long, Int>()  // maxFreq → coreCount
+    /**
+     * 检测 big.LITTLE 拓扑 — 同时填入结构化字段供 UI 层 i18n 参数化。
+     * info.bigLITTLE 存语义 key ("cpu_topology" / "cpu_same_freq" / "")，
+     * info.cpuBigCores / cpuLittleCores 存整数值。
+     */
+    private fun detectBigLITTLETopology(info: DeviceDetailInfo) {
+        try {
+            val freqGroups = mutableMapOf<Long, Int>()
             var cpuIndex = 0
             while (true) {
                 val maxFreq = SysFsReader.readFile("/sys/devices/system/cpu/cpu$cpuIndex/cpufreq/cpuinfo_max_freq")
@@ -705,19 +710,27 @@ class DeviceDetailDataSource(private val context: Context) {
                 val key = maxFreq
                 freqGroups[key] = (freqGroups[key] ?: 0) + 1
                 cpuIndex++
-                if (cpuIndex > 16) break  // 安全上限
+                if (cpuIndex > 16) break
             }
-            if (freqGroups.size >= 2) {
-                val sorted = freqGroups.entries.sortedByDescending { it.key }
-                val big = sorted[0].value
-                val little = sorted[1].value
-                val extra = if (sorted.size > 2) sorted.drop(2).joinToString("+") { "${it.value}×${it.key / 1000}MHz" } else ""
-                val base = "${big}大核+${little}小核"
-                if (extra.isNotEmpty()) "$base+${extra}" else base
-            } else if (freqGroups.size == 1) {
-                "${freqGroups.values.first()}核同频"
-            } else ""
-        } catch (_: Throwable) { "" }
+            when {
+                freqGroups.size >= 2 -> {
+                    val sorted = freqGroups.entries.sortedByDescending { it.key }
+                    info.cpuBigCores = sorted[0].value
+                    info.cpuLittleCores = sorted[1].value
+                    info.bigLITTLE = "cpu_topology"
+                }
+                freqGroups.size == 1 -> {
+                    info.cpuBigCores = freqGroups.values.first()
+                    info.cpuLittleCores = 0
+                    info.bigLITTLE = "cpu_same_freq"
+                }
+                else -> {
+                    info.bigLITTLE = ""
+                }
+            }
+        } catch (_: Throwable) {
+            info.bigLITTLE = ""
+        }
     }
 
     // ═══════════════════════════════════════════
@@ -794,7 +807,7 @@ class DeviceDetailDataSource(private val context: Context) {
                 return
             }
 
-            info.socProcessNodeSource = "不可用"
+            info.socProcessNodeSource = "common_unavailable"
         } catch (e: Throwable) { Log.w(TAG, "SoC制程采集失败", e) }
     }
 
@@ -1217,7 +1230,7 @@ class DeviceDetailDataSource(private val context: Context) {
             val drm = MediaDrm(WIDEVINE_UUID)
             info.widevineLevel = drm.getPropertyString("securityLevel") ?: ""
             drm.release()
-        } catch (_: Throwable) { info.widevineLevel = "不支持" }
+        } catch (_: Throwable) { info.widevineLevel = "widevine_unsupported" }
 
         val schemes = mutableListOf<String>()
         try {
@@ -1241,7 +1254,7 @@ class DeviceDetailDataSource(private val context: Context) {
                 TelephonyManager.PHONE_TYPE_GSM -> "GSM"
                 TelephonyManager.PHONE_TYPE_CDMA -> "CDMA"
                 TelephonyManager.PHONE_TYPE_SIP -> "SIP"
-                else -> "未知"
+                else -> "common_unknown"
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP_MR1) {
                 try { info.isDualSim = tm.phoneCount > 1 } catch (_: Throwable) {}
@@ -1358,10 +1371,10 @@ class DeviceDetailDataSource(private val context: Context) {
                         val allChannelCounts = speakers.flatMap { it.channelCounts.toList() }
                         val maxCh = allChannelCounts.maxOrNull() ?: 2
                         info.audioOutputChannels = when {
-                            maxCh >= 8 -> "7.1 环绕 ($maxCh 声道)"
-                            maxCh >= 6 -> "5.1 环绕 ($maxCh 声道)"
-                            maxCh >= 4 -> "4 声道"
-                            else -> "立体声 (${physicalCount}扬声器)"
+                            maxCh >= 8 -> "audio_7.1_surround|$maxCh"
+                            maxCh >= 6 -> "audio_5.1_surround|$maxCh"
+                            maxCh >= 4 -> "audio_4ch"
+                            else -> "audio_stereo|$physicalCount"
                         }
                         info.stereoSpeakers = true
                     } else if (physicalCount == 1) {
@@ -1370,11 +1383,11 @@ class DeviceDetailDataSource(private val context: Context) {
                         val maxCh = channelCounts.maxOrNull() ?: 1
                         val minCh = channelCounts.minOrNull() ?: 1
                         info.audioOutputChannels = when {
-                            maxCh >= 8 -> "7.1 环绕 (${physicalCount}扬声器, $maxCh 声道)"
-                            maxCh >= 6 -> "5.1 环绕 (${physicalCount}扬声器, $maxCh 声道)"
-                            maxCh >= 4 -> "4 声道 (${physicalCount}扬声器)"
-                            maxCh >= 2 -> "单扬声器 · 支持立体声混音"  // 1 speaker, but supports 2.0 output
-                            else -> "单声道"
+                            maxCh >= 8 -> "audio_7.1_single|$physicalCount|$maxCh"
+                            maxCh >= 6 -> "audio_5.1_single|$physicalCount|$maxCh"
+                            maxCh >= 4 -> "audio_4ch_single|$physicalCount"
+                            maxCh >= 2 -> "audio_mono_stereo"
+                            else -> "audio_mono"
                         }
                         info.stereoSpeakers = maxCh >= 2
                     } else {
@@ -1382,11 +1395,11 @@ class DeviceDetailDataSource(private val context: Context) {
                         val allChannels = devices.flatMap { it.channelCounts.toList() }
                         val maxAll = allChannels.maxOrNull() ?: 2
                         info.audioOutputChannels = when {
-                            maxAll >= 8 -> "7.1 ($maxAll 声道)"
-                            maxAll >= 6 -> "5.1 ($maxAll 声道)"
-                            maxAll >= 4 -> "4 声道 ($maxAll 声道)"
-                            maxAll >= 2 -> "立体声 ($maxAll 声道)"
-                            else -> "单声道"
+                            maxAll >= 8 -> "audio_7.1_surround|$maxAll"
+                            maxAll >= 6 -> "audio_5.1_surround|$maxAll"
+                            maxAll >= 4 -> "audio_4ch|$maxAll"
+                            maxAll >= 2 -> "audio_stereo"
+                            else -> "audio_mono"
                         }
                         info.stereoSpeakers = maxAll >= 2
                     }
@@ -1396,7 +1409,7 @@ class DeviceDetailDataSource(private val context: Context) {
                     info.stereoSpeakers = false
                 }
             } else {
-                info.audioOutputChannels = "不可用 (API < 23)"
+                info.audioOutputChannels = "audio_unavailable_api"
             }
 
             // Hi-Res 音频检测 — 多策略
@@ -1514,9 +1527,9 @@ class DeviceDetailDataSource(private val context: Context) {
             } catch (_: Throwable) { false }
 
             info.fileEncryption = when {
-                SysFsReader.readProp("ro.crypto.type").contains("file") -> "FBE (文件级加密)"
-                SysFsReader.readProp("ro.crypto.state").contains("encrypted") -> "FDE (全盘加密)"
-                else -> "未检测到"
+                SysFsReader.readProp("ro.crypto.type").contains("file") -> "enc_fbe"
+                SysFsReader.readProp("ro.crypto.state").contains("encrypted") -> "enc_fde"
+                else -> "common_unavailable"
             }
 
             info.selinuxEnforcing = try {
@@ -1657,10 +1670,10 @@ class DeviceDetailDataSource(private val context: Context) {
                     val formatted = sdf.format(java.util.Date(buildTimeMs))
                     info.buildTimestamp = "$formatted UTC"
                 } else {
-                    info.buildTimestamp = "未知"
+                    info.buildTimestamp = "common_unknown"
                 }
             } catch (_: Throwable) {
-                info.buildTimestamp = "未知"
+                info.buildTimestamp = "common_unknown"
             }
         } catch (_: Throwable) {
             Log.w(TAG, "运行环境采集异常", null)
@@ -1676,11 +1689,11 @@ class DeviceDetailDataSource(private val context: Context) {
         info.hasKeyboard = context.resources.configuration.keyboard != android.content.res.Configuration.KEYBOARD_NOKEYS
 
         info.touchscreenType = when {
-            pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN_MULTITOUCH_JAZZHAND) -> "5指以上多点触控"
-            pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN_MULTITOUCH_DISTINCT) -> "多点触控"
-            pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN_MULTITOUCH) -> "多点触控(基础)"
-            pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN) -> "支持"
-            else -> "不支持"
+            pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN_MULTITOUCH_JAZZHAND) -> "touch_jazzyhand"
+            pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN_MULTITOUCH_DISTINCT) -> "touch_distinct"
+            pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN_MULTITOUCH) -> "touch_basic"
+            pm.hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN) -> "touch_single"
+            else -> "touch_none"
         }
 
         info.hasInfrared = pm.hasSystemFeature(PackageManager.FEATURE_CONSUMER_IR) ||

@@ -139,6 +139,61 @@
     <string name="battery_health_status_title">Health</string>
     <string name="battery_health_unknown">未知</string>
 
+    <!-- ═══ Power Source 電源來源 (i18n key) ═══ -->
+    <string name="ps_ac">交流電源 (AC)</string>
+    <string name="ps_usb">USB 供電</string>
+    <string name="ps_wireless">無線充電</string>
+    <string name="ps_external">外部電源</string>
+    <string name="ps_battery">電池供電</string>
+
+    <!-- ═══ Common 通用標籤 (i18n key, 仅含原有不存在的条目) ═══ -->
+    <string name="common_unavailable">不可用</string>
+    <string name="common_unsupported">不支援</string>
+
+    <!-- ═══ Touchscreen 觸控類型 (i18n key) ═══ -->
+    <string name="touch_jazzyhand">5指以上多點觸控</string>
+    <string name="touch_distinct">多點觸控</string>
+    <string name="touch_basic">多點觸控(基礎)</string>
+    <string name="touch_single">支援</string>
+    <string name="touch_none">不支援</string>
+
+    <!-- ═══ Encryption 加密類型 (i18n key) ═══ -->
+    <string name="enc_fbe">FBE（檔案級加密）</string>
+    <string name="enc_fde">FDE（全碟加密）</string>
+
+    <!-- ═══ Widevine DRM (i18n key) ═══ -->
+    <string name="widevine_l1">L1</string>
+    <string name="widevine_l3">L3</string>
+    <string name="widevine_unsupported">不支援</string>
+
+    <!-- ═══ Audio 音頻 (i18n key) ═══ -->
+    <string name="audio_unavailable_api">不可用 (API &lt; 23)</string>
+    <string name="audio_7.1_surround">7.1 環繞 (%1$d 聲道)</string>
+    <string name="audio_5.1_surround">5.1 環繞 (%1$d 聲道)</string>
+    <string name="audio_4ch">4 聲道</string>
+    <string name="audio_4ch_param">4 聲道 (%1$d 聲道)</string>
+    <string name="audio_stereo">立體聲</string>
+    <string name="audio_stereo_param">立體聲 (%1$d 揚聲器)</string>
+    <string name="audio_mono">單聲道</string>
+    <string name="audio_mono_stereo">單聲道 · 支援立體聲混音</string>
+    <string name="audio_7.1_single">7.1 環繞 (%1$d 揚聲器, %2$d 聲道)</string>
+    <string name="audio_5.1_single">5.1 環繞 (%1$d 揚聲器, %2$d 聲道)</string>
+    <string name="audio_4ch_single">4 聲道 (%1$d 揚聲器)</string>
+
+    <!-- ═══ Charger 充電類型 (i18n key) ═══ -->
+    <string name="charger_ac">交流電源</string>
+    <string name="charger_usb">USB</string>
+    <string name="charger_wireless">無線</string>
+    <string name="charger_unknown">未知</string>
+
+    <!-- ═══ SELinux (i18n key) ═══ -->
+    <string name="selinux_enforcing">強制模式</string>
+    <string name="selinux_permissive">寬容模式</string>
+
+    <!-- ═══ CPU Topology CPU拓撲 (參數化) ═══ -->
+    <string name="cpu_topology_format">%1$d大核+%2$d小核</string>
+    <string name="cpu_topology_same_freq">%1$d核同頻</string>
+
     <!-- ═══════════════════ Network ═══════════════════ -->
     <string name="network_wifi_connected">Wi-Fi · 已連線</string>
     <string name="network_wifi_not_connected">Wi-Fi · 未連線</string>

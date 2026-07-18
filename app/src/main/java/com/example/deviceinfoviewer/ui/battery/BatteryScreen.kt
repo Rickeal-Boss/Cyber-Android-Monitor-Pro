@@ -88,6 +88,14 @@ fun BatteryScreen(
     val technology = batteryInfo?.technology?.takeIf { it.isNotEmpty() }
     val chargerType = batteryInfo?.chargerType?.takeIf { it.isNotEmpty() }
     val chargerFromPlug = batteryInfo?.chargerTypeFromPlugged?.takeIf { it.isNotEmpty() }
+    // 充电类型语义 key → 翻译文本 (charger_ac/charger_usb/charger_wireless/charger_unknown)
+    val chargerFromPlugText = when (chargerFromPlug) {
+        "charger_ac" -> stringResource(R.string.charger_ac)
+        "charger_usb" -> stringResource(R.string.charger_usb)
+        "charger_wireless" -> stringResource(R.string.charger_wireless)
+        "charger_unknown" -> stringResource(R.string.charger_unknown)
+        else -> chargerFromPlug ?: ""  // fallback: 可能是原始值或空
+    }
     val isPlugged = batteryInfo?.isPlugged ?: false
     val internalR = batteryInfo?.internalResistanceMOhm?.takeIf { !it.isNaN() && it > 0 }
     val protocolDetected = batteryInfo?.protocolDetected?.takeIf { it.isNotEmpty() }
@@ -115,7 +123,7 @@ fun BatteryScreen(
         }
         val techText = FormatUtils.joinNonBlank("  |  ",
             technology,
-            if (chargerFromPlug != null && isPlugged) chargerFromPlug else null,
+            if (chargerFromPlugText.isNotEmpty() && isPlugged) chargerFromPlugText else null,
             if (chargerType != null && chargerType != chargerFromPlug) chargerType else null
         )
 
@@ -224,15 +232,24 @@ fun BatteryScreen(
         }
 
         // === 电源来源标签 (2026-06-18) ===
+        // 数据层返回语义 key (ps_ac/ps_usb/ps_wireless/ps_external/ps_battery)，UI 层翻译
         if (powerSourceLabel != null) {
-            val psColor = when {
-                powerSourceLabel.contains("AC") -> SuccessNeon
-                powerSourceLabel.contains("USB") || powerSourceLabel.contains("无线") -> NeonPurpleBright
+            val psText = when (powerSourceLabel) {
+                "ps_ac" -> stringResource(R.string.ps_ac)
+                "ps_usb" -> stringResource(R.string.ps_usb)
+                "ps_wireless" -> stringResource(R.string.ps_wireless)
+                "ps_external" -> stringResource(R.string.ps_external)
+                "ps_battery" -> stringResource(R.string.ps_battery)
+                else -> powerSourceLabel  // fallback: 原样显示
+            }
+            val psColor = when (powerSourceLabel) {
+                "ps_ac", "charger_ac" -> SuccessNeon
+                "ps_usb", "ps_wireless", "charger_usb", "charger_wireless" -> NeonPurpleBright
                 else -> Color(0xFFFFA726)
             }
             MetricCard(
                 title = "Power source",
-                value = powerSourceLabel,
+                value = psText,
                 valueColor = psColor
             ) { }
         }

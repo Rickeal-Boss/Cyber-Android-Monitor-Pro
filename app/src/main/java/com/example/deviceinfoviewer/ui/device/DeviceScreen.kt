@@ -67,8 +67,15 @@ fun DeviceScreen(
                 RowItem("CPU Implementer", detail!!.cpuImplementer)
             if (detail?.cpuPart?.isNotEmpty() == true)
                 RowItem("CPU Part", detail!!.cpuPart)
-            if (detail?.bigLITTLE?.isNotEmpty() == true)
-                RowItem(stringResource(R.string.device_core_topology), detail!!.bigLITTLE)
+            if (detail?.bigLITTLE?.isNotEmpty() == true) {
+                // CPU 拓扑: 数据层返回语义 key + 结构化参数
+                val topologyText = when (detail!!.bigLITTLE) {
+                    "cpu_topology" -> stringResource(R.string.cpu_topology_format, detail!!.cpuBigCores, detail!!.cpuLittleCores)
+                    "cpu_same_freq" -> stringResource(R.string.cpu_topology_same_freq, detail!!.cpuBigCores)
+                    else -> detail!!.bigLITTLE  // fallback
+                }
+                RowItem(stringResource(R.string.device_core_topology), topologyText)
+            }
             RowItem(stringResource(R.string.device_build_id), oem?.buildDisplayId?.takeIf { it.isNotEmpty() } ?: "-")
             RowItem(stringResource(R.string.device_security_patch), oem?.securityPatch?.takeIf { it.isNotEmpty() } ?: "-")
             RowItem("API Level", "${oem?.sdkLevel ?: Build.VERSION.SDK_INT} (Android ${oem?.androidVersion ?: Build.VERSION.RELEASE})")
@@ -95,7 +102,11 @@ fun DeviceScreen(
                 if (detail!!.cpuCacheL3Kb > 0)
                     RowItem(stringResource(R.string.device_l3_cache), if (detail!!.cpuCacheL3Kb >= 1024) "${detail!!.cpuCacheL3Kb / 1024} MB" else "${detail!!.cpuCacheL3Kb} KB")
                 if (detail!!.cpuCacheSource.isNotEmpty())
-                    RowItem(stringResource(R.string.device_data_source), detail!!.cpuCacheSource, valueColor = NeonPurple.copy(alpha = 0.6f))
+                    RowItem(stringResource(R.string.device_data_source),
+                        when (detail!!.cpuCacheSource) {
+                            "common_unavailable" -> stringResource(R.string.common_unavailable)
+                            else -> detail!!.cpuCacheSource
+                        }, valueColor = NeonPurple.copy(alpha = 0.6f))
             }
         }
 
@@ -191,7 +202,14 @@ fun DeviceScreen(
                 RowItem("HDR", it.joinToString(", "))
             }
             detail?.maxBrightnessNits?.takeIf { it > 0 }?.let { RowItem(stringResource(R.string.device_peak_brightness), "${it} nits") }
-            RowItem(stringResource(R.string.device_touch), detail?.touchscreenType ?: "")
+            RowItem(stringResource(R.string.device_touch), when (detail?.touchscreenType) {
+                "touch_jazzyhand" -> stringResource(R.string.touch_jazzyhand)
+                "touch_distinct" -> stringResource(R.string.touch_distinct)
+                "touch_basic" -> stringResource(R.string.touch_basic)
+                "touch_single" -> stringResource(R.string.touch_single)
+                "touch_none" -> stringResource(R.string.touch_none)
+                else -> detail?.touchscreenType ?: ""
+            })
         }
 
         // ═══════ 6. 内存 (新增) ═══════
@@ -247,7 +265,10 @@ fun DeviceScreen(
         SectionCard(stringResource(R.string.device_section_sim)) {
             RowItem(stringResource(R.string.device_operator_label), detail?.simOperator?.takeIf { it.isNotEmpty() } ?: "-")
             RowItem(stringResource(R.string.device_mcc_mnc), detail?.simMccMnc?.takeIf { it != "0" } ?: "-")
-            RowItem(stringResource(R.string.device_network_standard), detail?.phoneType ?: "")
+            RowItem(stringResource(R.string.device_network_standard), when (detail?.phoneType) {
+                "common_unknown" -> stringResource(R.string.common_unknown)
+                else -> detail?.phoneType ?: ""
+            })
             RowItem(stringResource(R.string.device_dual_sim), if (detail?.isDualSim == true) stringResource(R.string.common_yes) else stringResource(R.string.device_not_supported))
         }
 
@@ -314,7 +335,13 @@ fun DeviceScreen(
 
         // ═══════ 14. DRM ═══════
         SectionCard(stringResource(R.string.device_section_drm)) {
-            RowItem(stringResource(R.string.device_widevine_level), detail?.widevineLevel ?: stringResource(R.string.common_detecting))
+            RowItem(stringResource(R.string.device_widevine_level), when (detail?.widevineLevel) {
+                "L1", "l1" -> stringResource(R.string.widevine_l1)
+                "L3", "l3" -> stringResource(R.string.widevine_l3)
+                "widevine_unsupported" -> stringResource(R.string.widevine_unsupported)
+                "" -> stringResource(R.string.common_detecting)
+                else -> detail?.widevineLevel ?: stringResource(R.string.common_detecting)
+            })
             RowItem(stringResource(R.string.device_drm_schemes), detail?.drmSchemes?.joinToString(", ").orEmpty())
         }
 
@@ -324,8 +351,17 @@ fun DeviceScreen(
                 if (detail?.teeSupported == true) SuccessNeon else WarningNeon)
             RowItem(stringResource(R.string.device_verified_boot), if (detail?.secureBootEnabled == true) stringResource(R.string.device_activated) else stringResource(R.string.device_not_activated),
                 if (detail?.secureBootEnabled == true) SuccessNeon else WarningNeon)
-            RowItem(stringResource(R.string.device_file_encryption), detail?.fileEncryption?.takeIf { it.isNotEmpty() } ?: "-")
-            RowItem(stringResource(R.string.device_selinux), if (detail?.selinuxEnforcing == true) "Enforcing" else "Permissive",
+            RowItem(stringResource(R.string.device_file_encryption), when (detail?.fileEncryption) {
+                "enc_fbe" -> stringResource(R.string.enc_fbe)
+                "enc_fde" -> stringResource(R.string.enc_fde)
+                "common_unavailable" -> stringResource(R.string.common_unavailable)
+                else -> detail?.fileEncryption?.takeIf { it.isNotEmpty() } ?: "-"
+            })
+            RowItem(stringResource(R.string.device_selinux),
+                if (detail?.selinuxEnforcing == true)
+                    stringResource(R.string.selinux_enforcing)
+                else
+                    stringResource(R.string.selinux_permissive),
                 if (detail?.selinuxEnforcing == true) SuccessNeon else WarningNeon)
         }
 
@@ -378,7 +414,7 @@ fun DeviceScreen(
         val javaRuntime = detail?.javaRuntimeVersion?.takeIf { it.isNotEmpty() }
         val javaVm = detail?.javaVmName?.takeIf { it.isNotEmpty() }
         val openssl = detail?.opensslVersion?.takeIf { it.isNotEmpty() }
-        val buildTime = detail?.buildTimestamp?.takeIf { it.isNotEmpty() && it != "未知" }
+        val buildTime = detail?.buildTimestamp?.takeIf { it.isNotEmpty() && it != "common_unknown" }
         if (javaRuntime != null || openssl != null || buildTime != null) {
             SectionCard(stringResource(R.string.device_section_runtime)) {
                 if (javaRuntime != null) {

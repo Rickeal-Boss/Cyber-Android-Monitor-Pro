@@ -137,6 +137,61 @@
     <string name="battery_status_not_charging">Connected · Not Charging</string>
     <string name="battery_capacity_locked">Capacity Locked</string>
 
+    <!-- ═══ Power Source 电源来源 (i18n key) ═══ -->
+    <string name="ps_ac">AC Power</string>
+    <string name="ps_usb">USB Powered</string>
+    <string name="ps_wireless">Wireless Charging</string>
+    <string name="ps_external">External Power</string>
+    <string name="ps_battery">Battery</string>
+
+    <!-- ═══ Common 通用标签 (i18n key, 仅含原有不存在的条目) ═══ -->
+    <string name="common_unavailable">Unavailable</string>
+    <string name="common_unsupported">Not Supported</string>
+
+    <!-- ═══ Touchscreen 触控类型 (i18n key) ═══ -->
+    <string name="touch_jazzyhand">5+ Finger Multitouch</string>
+    <string name="touch_distinct">Multitouch</string>
+    <string name="touch_basic">Basic Multitouch</string>
+    <string name="touch_single">Touch Supported</string>
+    <string name="touch_none">Not Supported</string>
+
+    <!-- ═══ Encryption 加密类型 (i18n key) ═══ -->
+    <string name="enc_fbe">FBE (File-Based Encryption)</string>
+    <string name="enc_fde">FDE (Full-Disk Encryption)</string>
+
+    <!-- ═══ Widevine DRM (i18n key) ═══ -->
+    <string name="widevine_l1">L1</string>
+    <string name="widevine_l3">L3</string>
+    <string name="widevine_unsupported">Not Supported</string>
+
+    <!-- ═══ Audio 音频 (i18n key) ═══ -->
+    <string name="audio_unavailable_api">Unavailable (API &lt; 23)</string>
+    <string name="audio_7.1_surround">7.1 Surround (%1$d ch)</string>
+    <string name="audio_5.1_surround">5.1 Surround (%1$d ch)</string>
+    <string name="audio_4ch">4-Channel</string>
+    <string name="audio_4ch_param">4-Channel (%1$d ch)</string>
+    <string name="audio_stereo">Stereo</string>
+    <string name="audio_stereo_param">Stereo (%1$d speakers)</string>
+    <string name="audio_mono">Mono</string>
+    <string name="audio_mono_stereo">Mono · Stereo downmix</string>
+    <string name="audio_7.1_single">7.1 Surround (%1$d spk, %2$d ch)</string>
+    <string name="audio_5.1_single">5.1 Surround (%1$d spk, %2$d ch)</string>
+    <string name="audio_4ch_single">4-Channel (%1$d spk)</string>
+
+    <!-- ═══ Charger 充电类型 (i18n key) ═══ -->
+    <string name="charger_ac">AC</string>
+    <string name="charger_usb">USB</string>
+    <string name="charger_wireless">Wireless</string>
+    <string name="charger_unknown">Unknown</string>
+
+    <!-- ═══ SELinux (i18n key) ═══ -->
+    <string name="selinux_enforcing">Enforcing</string>
+    <string name="selinux_permissive">Permissive</string>
+
+    <!-- ═══ CPU Topology CPU拓扑 (参数化) ═══ -->
+    <string name="cpu_topology_format">%1$d big + %2$d little cores</string>
+    <string name="cpu_topology_same_freq">%1$d cores same freq</string>
+
     <!-- ═══ Network 网络 ═══ -->
     <string name="network_title">Network</string>
     <string name="network_wifi">WiFi</string>

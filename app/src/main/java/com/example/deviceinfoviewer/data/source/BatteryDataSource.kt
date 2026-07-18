@@ -117,12 +117,12 @@ class BatteryDataSource(private val context: Context) {
         info.isCharging = isPlugged && (statusIsCharging
                 || status == BatteryManager.BATTERY_STATUS_NOT_CHARGING
                 || status == BatteryManager.BATTERY_STATUS_DISCHARGING)
-        // 保存充电类型
+        // 保存充电类型 (语义 key: charger_ac/charger_usb/charger_wireless/charger_unknown)
         info.chargerTypeFromPlugged = when {
-            (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "AC"
-            (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "USB"
-            (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "无线"
-            else -> if (isPlugged) "未知" else ""
+            (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "charger_ac"
+            (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "charger_usb"
+            (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "charger_wireless"
+            else -> if (isPlugged) "charger_unknown" else ""
         }
         info.isPlugged = isPlugged
 
@@ -159,12 +159,14 @@ class BatteryDataSource(private val context: Context) {
         info.currentNormalizedMa = normalizeBbKCurrent(currentUA, currentSource)
 
         // === 电源来源标签 (EXTRA_PLUGGED 三级检测) ===
+        // 返回语义 key (ps_ac/ps_usb/ps_wireless/ps_external/ps_battery)，
+        // UI 层通过 stringResource() 翻译为用户可见文本。
         info.powerSourceLabel = when {
-            (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "交流电源 (AC)"
-            (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "USB 供电"
-            (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "无线充电"
-            isPlugged -> "外部电源"
-            else -> "电池供电"
+            (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "ps_ac"
+            (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "ps_usb"
+            (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "ps_wireless"
+            isPlugged -> "ps_external"
+            else -> "ps_battery"
         }
 
         // === 有效电压（双电芯×2）===
@@ -1476,7 +1478,7 @@ class BatteryDataSource(private val context: Context) {
             }
             if ("true".equals(wirelessOnline, ignoreCase = true)) {
                 if (chargerType.isNotEmpty()) chargerType.append(" + ")
-                chargerType.append("无线")
+                chargerType.append("charger_wireless")
             }
             if ("true".equals(dockOnline, ignoreCase = true)) {
                 if (chargerType.isNotEmpty()) chargerType.append(" + ")
@@ -1665,10 +1667,10 @@ class BatteryDataSource(private val context: Context) {
                 if (plugged != lastPlugged) {
                     lastPlugged = plugged
                     val chargerLabel = when {
-                        (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "AC"
-                        (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "USB"
-                        (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "无线"
-                        plugged > 0 -> "未知"
+                        (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "charger_ac"
+                        (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "charger_usb"
+                        (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "charger_wireless"
+                        plugged > 0 -> "charger_unknown"
                         else -> ""
                     }
                     trySend(BatteryPulseEvent.PlugStateChanged(plugged > 0, chargerLabel))

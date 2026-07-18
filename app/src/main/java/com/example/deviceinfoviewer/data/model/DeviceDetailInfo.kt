@@ -44,7 +44,9 @@ data class DeviceDetailInfo(
     var cpuArchitecture: String = "",         // ARMv8-A / ARMv9-A
     var cpuImplementer: String = "",         // 0x41=ARM / 0x51=QCOM / 0x48=HiSilicon
     var cpuPart: String = "",                 // 0xd05=Cortex-A72 等
-    var bigLITTLE: String = "",               // big.LITTLE 拓扑描述
+    var bigLITTLE: String = "",               // big.LITTLE 拓扑描述 (语义 key 或 fallback)
+    var cpuBigCores: Int = -1,                // 大核数量 (用于 i18n 参数化)
+    var cpuLittleCores: Int = -1,            // 小核数量 (用于 i18n 参数化)
 
     // ── SoC Details (新增) ──
     var socProcessNode: String = "",          // 制程: 3nm / 4nm / 5nm / 6nm / 7nm
