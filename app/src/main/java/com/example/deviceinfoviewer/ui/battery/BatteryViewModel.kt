@@ -39,4 +39,12 @@ class BatteryViewModel(
     }
 
     val historyData get() = repo.historyData
+
+    /**
+     * 用户在电池页手动切换双电芯后调用：
+     * 立即重采电池数据，使 BatteryInfo.dualCell / effectiveVoltage 按新偏好重算。
+     */
+    fun refreshDualCell() {
+        repo.forceRefreshBattery()
+    }
 }

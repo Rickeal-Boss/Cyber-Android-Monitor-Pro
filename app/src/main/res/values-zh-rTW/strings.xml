@@ -113,6 +113,8 @@
 
     <!-- ═══════════════════ Battery ═══════════════════ -->
     <string name="battery_health_title">Battery health</string>
+    <string name="battery_dual_cell_title">雙電芯電池</string>
+    <string name="battery_dual_cell_subtitle">手動覆蓋 — 測量電壓翻倍以計算準確功率</string>
     <string name="battery_capacity_title">Battery capacity</string>
     <string name="battery_design_capacity_format">設計容量: %1$d mAh</string>
     <string name="battery_cycle_count_title">Cycle count</string>

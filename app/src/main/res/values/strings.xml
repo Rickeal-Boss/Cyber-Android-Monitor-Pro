@@ -114,6 +114,8 @@
 
     <!-- ═══ Battery 电池 ═══ -->
     <string name="battery_title">Battery</string>
+    <string name="battery_dual_cell_title">Dual-cell battery</string>
+    <string name="battery_dual_cell_subtitle">Manual override — doubles measured voltage for accurate power</string>
     <string name="battery_level">Level</string>
     <string name="battery_status">Status</string>
     <string name="battery_health">Health</string>

@@ -1,33 +1,58 @@
 package com.example.deviceinfoviewer.ui.battery
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.deviceinfoviewer.R
+import com.example.deviceinfoviewer.AppSettings
 import com.example.deviceinfoviewer.FormatUtils
 import com.example.deviceinfoviewer.ui.components.charts.ChartUtils
 import com.example.deviceinfoviewer.data.model.HistoryDataPoint
 import com.example.deviceinfoviewer.ui.components.InfoCard
 import com.example.deviceinfoviewer.ui.components.MetricCard
 import com.example.deviceinfoviewer.ui.components.charts.LineChart
+import com.example.deviceinfoviewer.ui.components.CardGradient
+import com.example.deviceinfoviewer.ui.components.hdrHighlight
+import com.example.deviceinfoviewer.ui.effects.revealLight
 import com.example.deviceinfoviewer.ui.theme.NeonPurple
 import com.example.deviceinfoviewer.ui.theme.NeonPurpleBright
+import com.example.deviceinfoviewer.ui.theme.NeonSteelBlue
+import com.example.deviceinfoviewer.ui.theme.PurpleGlowLight
 import com.example.deviceinfoviewer.ui.theme.SuccessNeon
+import com.example.deviceinfoviewer.ui.theme.TextPrimary
+import com.example.deviceinfoviewer.ui.theme.TextSecondary
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -39,6 +64,10 @@ fun BatteryScreen(
 ) {
     val batteryInfo by viewModel.batteryInfo.observeAsState()
     val historyData by viewModel.historyData.observeAsState(emptyMap())
+
+    // 双电芯手动开关 — 自动检测不可靠时的用户覆盖项
+    val context = LocalContext.current
+    var dualCellEnabled by remember { mutableStateOf(AppSettings.getInstance(context).dualCellBattery) }
 
     val level = batteryInfo?.levelPercent?.takeIf { it >= 0 }
     val isCharging = batteryInfo?.isCharging ?: false
@@ -94,6 +123,18 @@ fun BatteryScreen(
             title = statusText,
             subtitle = techText.ifEmpty { batteryInfo?.chargeStatus?.takeIf { it.isNotEmpty() } ?: "" },
             icon = Icons.Filled.Favorite, iconTint = NeonPurple
+        )
+
+        // === 双电芯手动开关 (自动检测不可靠时的用户覆盖项) ===
+        DualCellToggleCard(
+            checked = dualCellEnabled,
+            onCheckedChange = { enabled ->
+                dualCellEnabled = enabled
+                AppSettings.getInstance(context).dualCellBattery = enabled
+                viewModel.refreshDualCell()
+            },
+            title = stringResource(R.string.battery_dual_cell_title),
+            subtitle = stringResource(R.string.battery_dual_cell_subtitle)
         )
 
         // === 系统省电模式 (PowerManager.isPowerSaveMode, API 21+) ===
@@ -298,6 +339,63 @@ fun BatteryScreen(
             value = health,
             valueColor = NeonPurpleBright
         ) { }
+    }
+}
+
+/**
+ * 双电芯手动开关卡片 — 复用全局霓虹卡片容器 (revealLight + hdrHighlight + CardGradient)。
+ * 开 = 测量电压翻倍 (effectiveVoltage)，用于双电芯机型准确计算功率。
+ */
+@Composable
+private fun DualCellToggleCard(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    title: String,
+    subtitle: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+            .revealLight(radius = 160.dp, intensity = 0.22f)
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(CardGradient)
+                .hdrHighlight(12.dp)
+        ) {
+            Row(
+                Modifier.fillMaxWidth().padding(14.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.padding(end = 12.dp)) {
+                    Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    if (subtitle.isNotBlank()) {
+                        Text(
+                            subtitle,
+                            fontSize = 12.sp,
+                            color = TextSecondary.copy(alpha = 0.75f),
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
+                Switch(
+                    checked = checked,
+                    onCheckedChange = onCheckedChange,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = TextPrimary,
+                        checkedTrackColor = NeonPurpleBright,
+                        uncheckedThumbColor = NeonSteelBlue,
+                        uncheckedTrackColor = NeonSteelBlue.copy(alpha = 0.2f),
+                    )
+                )
+            }
+        }
     }
 }
 
