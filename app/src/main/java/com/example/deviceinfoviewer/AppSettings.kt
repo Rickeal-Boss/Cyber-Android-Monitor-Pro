@@ -67,6 +67,24 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getBoolean("dual_cell_battery", false)
         set(value) = prefs.edit { putBoolean("dual_cell_battery", value) }
 
+    // ── 概览页卡片排序 (逗号分隔的卡片 ID) ──
+    // 指标卡: cpu_temp, mem_usage, battery_level, gpu_load
+    // 快速访问: cpu, gpu, mem, net, gps, device, battery, sensor
+    var metricCardOrder: String
+        get() = prefs.getString("metric_card_order", "cpu_temp,mem_usage,battery_level,gpu_load")
+            ?: "cpu_temp,mem_usage,battery_level,gpu_load"
+        set(value) = prefs.edit { putString("metric_card_order", value) }
+
+    var quickCardOrder: String
+        get() = prefs.getString("quick_card_order", "cpu,gpu,mem,net,gps,device,battery,sensor")
+            ?: "cpu,gpu,mem,net,gps,device,battery,sensor"
+        set(value) = prefs.edit { putString("quick_card_order", value) }
+
+    // 概览页卡片拖拽重排总开关 (默认开启；关闭则回落静态网格，零代码回退)
+    var dashboardReorderEnabled: Boolean
+        get() = prefs.getBoolean("dashboard_reorder_enabled", true)
+        set(value) = prefs.edit { putBoolean("dashboard_reorder_enabled", value) }
+
     // ── 应用语言偏好（i18n）──
     // 值为 LocaleManager.LANG_SYSTEM（"system"）或 BCP 47 语言 code（如 "zh-CN"、"en"、"ja"）
     // 默认 "system" = 跟随系统语言；用户手动选择后持久化，下次启动优先读取用户偏好

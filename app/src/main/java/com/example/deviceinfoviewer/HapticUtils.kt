@@ -32,6 +32,12 @@ object HapticUtils {
     /** 重按 — 重要操作确认 (Heavy Click) */
     fun heavyTap(context: Context) = vibrate(context, HEAVY)
 
+    /** 拖拽拾起 — 重反馈，提示抓取成功 */
+    fun dragStart(context: Context) = heavyTap(context)
+
+    /** 拖拽落下 — 标准反馈，提示放置完成 */
+    fun dragEnd(context: Context) = standardTap(context)
+
     /** 滑动刻度 — Slider 档位切换 (自定义阶梯感)
      *
      *  重要: 不使用 VibrationEffect.createOneShot(long, int)

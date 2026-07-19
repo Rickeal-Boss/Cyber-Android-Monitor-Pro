@@ -3,6 +3,10 @@ package com.example.deviceinfoviewer.ui.dashboard
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -27,6 +31,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.deviceinfoviewer.AppSettings
 import com.example.deviceinfoviewer.FormatUtils
 import com.example.deviceinfoviewer.ui.components.charts.ChartUtils
 import com.example.deviceinfoviewer.HapticUtils
@@ -40,6 +45,9 @@ import com.example.deviceinfoviewer.ui.effects.revealLight
 import com.example.deviceinfoviewer.ui.theme.*
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.draggableHandle
+import sh.calvin.reorderable.rememberReorderableLazyGridState
 
 private val DefaultSourceHealth = SourceHealth()
 
@@ -87,6 +95,30 @@ fun DashboardScreen(
 
     val ctx = LocalContext.current
 
+    // ── 卡片排序 (可拖拽重排) ──
+    val appSettings = AppSettings.getInstance(ctx)
+    val reorderEnabled = appSettings.dashboardReorderEnabled
+    var metricOrder by remember { mutableStateOf(resolveCardOrder(appSettings.metricCardOrder, METRIC_CARD_IDS)) }
+    var quickOrder by remember { mutableStateOf(resolveCardOrder(appSettings.quickCardOrder, QUICK_CARD_IDS)) }
+    val onMetricReorder: (List<String>) -> Unit = { newOrder ->
+        metricOrder = newOrder
+        appSettings.metricCardOrder = newOrder.joinToString(",")
+    }
+    val onQuickReorder: (List<String>) -> Unit = { newOrder ->
+        quickOrder = newOrder
+        appSettings.quickCardOrder = newOrder.joinToString(",")
+    }
+
+    // 预计算：内存进度与电池副标题（供 MetricCardByType 按 ID 渲染）
+    val memProgress = if (memoryInfo?.totalKB ?: 0L > 0)
+        (memoryInfo!!.usedKB.toFloat() / memoryInfo!!.totalKB).coerceIn(0f, 1f) else -1f
+    val batterySubtitle = buildString {
+        if (batteryInfo?.isPlugged == true && batteryInfo?.isCharging == true) append(chargingStr)
+        else if (batteryInfo?.isPlugged == true && batteryInfo?.isCharging == false) append(pluggedNotChargingStr)
+        else append(dischargingStr)
+    }
+
+
     // ★ 图表缓存: 避免每次重组重算 normalizeChartData
     val cpuTempChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["cpu_temp"], 100f) } }
     val ramChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["ram_usage"], 100f) } }
@@ -120,107 +152,47 @@ fun DashboardScreen(
         // ── 分割线 ──
         HorizontalDivider(thickness = 1.dp, color = NeonPurpleDeep.copy(alpha = 0.3f))
 
-        // ── 2×2 实时指标网格 (Ardot 设计稿) ──
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard(
-                title = stringResource(R.string.dashboard_metric_cpu_temp), value = cpuTemp,
-                valueColor = NeonPurpleBright, modifier = Modifier.weight(1f)
-            ) { LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth()) }
-            val memValueColor = NeonPurpleBright
-            MetricCard(
-                title = stringResource(R.string.dashboard_metric_mem_usage), value = memUsed,
-                valueColor = memValueColor, modifier = Modifier.weight(1f),
-                subtitle = "/ $memTotal",
-                progress = if (memoryInfo?.totalKB ?: 0L > 0)
-                    (memoryInfo!!.usedKB.toFloat() / memoryInfo!!.totalKB).coerceIn(0f, 1f) else -1f,
-                showProgress = true
-            ) {
-                // ── SWAP / ZRAM 子区域 (利用卡片下部剩余空间) ──
-                if (hasSwapZram) {
-                    Spacer(Modifier.height(10.dp))
-                    HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        stringResource(R.string.memory_swap_zram_title),
-                        fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
-                        letterSpacing = 0.5.sp
-                    )
-                    Spacer(Modifier.height(3.dp))
-                    val szText = FormatUtils.formatBytes(swapzramUsedKB * 1024)
-                    Text("$szText ${stringResource(R.string.common_in_use)}",
-                        fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-                        color = memValueColor, fontFamily = FontFamily.Monospace
-                    )
-                    // 进度条 (swap/zram 使用率)
-                    if (swapzramPct >= 0f) {
-                        Spacer(Modifier.height(6.dp))
-                        LinearProgressIndicator(
-                            progress = { swapzramPct },
-                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                            color = memValueColor.copy(alpha = 0.75f), trackColor = CyberMuted
-                        )
-                    }
-                    // 总量行
-                    val szTotalText = FormatUtils.formatBytes(swapzramTotalKB * 1024)
-                    Spacer(Modifier.height(4.dp))
-                    Text(stringResource(R.string.memory_swap_total, szTotalText),
-                        fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.6f))
+        // ── 2×2 实时指标网格 (可拖拽重排) ──
+        ReorderableCardGrid(
+            getItems = { metricOrder },
+            onReorder = onMetricReorder,
+            enabled = reorderEnabled,
+            keyOf = { it }
+        ) { id ->
+            Box(Modifier.fillMaxWidth()) {
+                MetricCardByType(
+                    id = id,
+                    cpuTemp = cpuTemp, cpuTempChart = cpuTempChart,
+                    memUsed = memUsed, memTotal = memTotal, memProgress = memProgress,
+                    swapzramUsedKB = swapzramUsedKB, swapzramTotalKB = swapzramTotalKB, swapzramPct = swapzramPct,
+                    hasSwapZram = hasSwapZram,
+                    batteryLevel = batteryLevel, batterySubtitle = batterySubtitle,
+                    gpuLoadText = gpuLoadText, gpuLoadChart = gpuLoadChart
+                )
+                if (reorderEnabled) {
+                    ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp))
                 }
             }
-        }
-
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            MetricCard(
-                title = stringResource(R.string.dashboard_metric_battery_level), value = batteryLevel,
-                valueColor = SuccessNeon, modifier = Modifier.weight(1f),
-                subtitle = buildString {
-                    if (batteryInfo?.isPlugged == true && batteryInfo?.isCharging == true) append(chargingStr)
-                    else if (batteryInfo?.isPlugged == true && batteryInfo?.isCharging == false) append(pluggedNotChargingStr)
-                    else append(dischargingStr)
-                }
-            )
-            MetricCard(
-                title = stringResource(R.string.dashboard_metric_gpu_load), value = gpuLoadText,
-                valueColor = NeonPurpleBright, modifier = Modifier.weight(1f)
-            ) { LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth()) }
         }
 
         // ── 分割线 ──
         HorizontalDivider(thickness = 1.dp, color = NeonPurpleDeep.copy(alpha = 0.3f))
 
-        // ── 快速访问 ──
+        // ── 快速访问 (可拖拽重排) ──
         Text(stringResource(R.string.dashboard_quick_access), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
 
-        // Row 1: CPU + GPU
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickLinkCard(stringResource(R.string.dashboard_quick_cpu_title), stringResource(R.string.dashboard_quick_cpu_desc), Icons.Filled.PlayArrow, NeonPurple,
-                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(1) })
-            QuickLinkCard(stringResource(R.string.dashboard_quick_gpu_title), stringResource(R.string.dashboard_quick_gpu_desc), Icons.Filled.Info, NeonPurpleBright,
-                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(2) })
-        }
-
-        // Row 2: 内存 + 网络
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickLinkCard(stringResource(R.string.dashboard_quick_mem_title), "$memUsed / $memTotal", Icons.Filled.Star, NeonPurple,
-                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(3) })
-            QuickLinkCard(stringResource(R.string.dashboard_quick_net_title), stringResource(R.string.dashboard_quick_net_desc), Icons.Filled.Share, NeonPurpleBright,
-                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(5) })
-        }
-
-        // Row 3: GPS + 系统详情
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickLinkCard(stringResource(R.string.dashboard_quick_gps_title), stringResource(R.string.dashboard_quick_gps_desc), Icons.Filled.PlayArrow, NeonMagenta,
-                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(6) })
-            QuickLinkCard(stringResource(R.string.dashboard_quick_device_title), stringResource(R.string.dashboard_quick_device_desc), Icons.Filled.Search, SuccessNeon,
-                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(8) })
-        }
-
-        // Row 4: 电池 + 传感器
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            QuickLinkCard(stringResource(R.string.dashboard_quick_battery_title), stringResource(R.string.dashboard_quick_battery_desc), Icons.Filled.BatteryFull, NeonPurple,
-                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(4) })
-            QuickLinkCard(stringResource(R.string.dashboard_quick_sensor_title), stringResource(R.string.dashboard_quick_sensor_desc), Icons.Filled.Sensors, NeonPurpleBright,
-                Modifier.weight(1f).clickable { HapticUtils.standardTap(ctx); onNavigate(7) })
+        ReorderableCardGrid(
+            getItems = { quickOrder },
+            onReorder = onQuickReorder,
+            enabled = reorderEnabled,
+            keyOf = { it }
+        ) { id ->
+            Box(Modifier.fillMaxWidth()) {
+                QuickLinkByType(id = id, onNavigate = onNavigate, memUsed = memUsed, memTotal = memTotal)
+                if (reorderEnabled) {
+                    ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp))
+                }
+            }
         }
 
         Spacer(Modifier.height(8.dp))
@@ -260,6 +232,186 @@ private fun QuickLinkCard(
             }
         }
     }
+}
+
+// ── 概览页卡片可拖拽重排：常量与解析 ──
+private val METRIC_CARD_IDS = listOf("cpu_temp", "mem_usage", "battery_level", "gpu_load")
+private val QUICK_CARD_IDS = listOf("cpu", "gpu", "mem", "net", "gps", "device", "battery", "sensor")
+private val QUICK_NAV = mapOf(
+    "cpu" to 1, "gpu" to 2, "mem" to 3, "net" to 5,
+    "gps" to 6, "device" to 8, "battery" to 4, "sensor" to 7
+)
+
+/**
+ * 将持久化的逗号分隔顺序解析为有效卡片有序列表：
+ * - 保留已存顺序中的已知 ID
+ * - 追加存储中缺失的新 ID（版本增减卡片时不丢、不崩）
+ * - 剔除未知 ID
+ * - 存储为空/非法时回落默认序
+ */
+private fun resolveCardOrder(stored: String, validIds: List<String>): List<String> {
+    val storedList = stored.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    val kept = storedList.filter { it in validIds }
+    val missing = validIds.filter { it !in kept }
+    return if (kept.isEmpty()) validIds else kept + missing
+}
+
+/**
+ * 可重排 2 列网格。
+ * enabled=true：挂 ReorderableItem + 拖拽手柄（闭包内 getItems() 始终读取最新顺序，避免捕获旧快照）。
+ * enabled=false：回落普通 LazyVerticalGrid（静态，便于特性开关一键回滚）。
+ */
+@Composable
+private fun ReorderableCardGrid(
+    getItems: () -> List<String>,
+    onReorder: (List<String>) -> Unit,
+    enabled: Boolean,
+    keyOf: (String) -> String,
+    itemContent: @Composable (String) -> Unit,
+) {
+    if (enabled) {
+        val gridState = rememberLazyGridState()
+        val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
+            val list = getItems().toMutableList()
+            list.add(to.index, list.removeAt(from.index))
+            onReorder(list)
+        }
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            state = gridState,
+            userScrollEnabled = false,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(getItems(), key = keyOf) { item ->
+                ReorderableItem(reorderState, key = keyOf(item)) {
+                    itemContent(item)
+                }
+            }
+        }
+    } else {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            state = rememberLazyGridState(),
+            userScrollEnabled = false,
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(getItems(), key = keyOf) { item -> itemContent(item) }
+        }
+    }
+}
+
+/** 拖拽手柄（仅 enabled 时显示），绑定拾起/落下震动反馈 */
+@Composable
+private fun ReorderHandle(modifier: Modifier) {
+    IconButton(
+        onClick = {},
+        modifier = modifier
+            .size(28.dp)
+            .draggableHandle(
+                onDragStarted = { HapticUtils.dragStart(LocalContext.current) },
+                onDragStopped = { HapticUtils.dragEnd(LocalContext.current) }
+            )
+    ) {
+        Icon(
+            Icons.Filled.DragHandle,
+            stringResource(R.string.dashboard_reorder_handle),
+            tint = TextSecondary.copy(alpha = 0.7f),
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+/** 按 ID 渲染对应的 2×2 实时指标卡 */
+@Composable
+private fun MetricCardByType(
+    id: String,
+    cpuTemp: String, cpuTempChart: List<Float>,
+    memUsed: String, memTotal: String, memProgress: Float,
+    swapzramUsedKB: Long, swapzramTotalKB: Long, swapzramPct: Float, hasSwapZram: Boolean,
+    batteryLevel: String, batterySubtitle: String,
+    gpuLoadText: String, gpuLoadChart: List<Float>,
+) {
+    val memValueColor = NeonPurpleBright
+    when (id) {
+        "cpu_temp" -> MetricCard(
+            title = stringResource(R.string.dashboard_metric_cpu_temp), value = cpuTemp,
+            valueColor = NeonPurpleBright, modifier = Modifier.fillMaxWidth()
+        ) { LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth()) }
+
+        "mem_usage" -> MetricCard(
+            title = stringResource(R.string.dashboard_metric_mem_usage), value = memUsed,
+            valueColor = memValueColor, modifier = Modifier.fillMaxWidth(), subtitle = "/ $memTotal",
+            progress = memProgress, showProgress = true
+        ) {
+            if (hasSwapZram) {
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.memory_swap_zram_title),
+                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f), letterSpacing = 0.5.sp)
+                Spacer(Modifier.height(3.dp))
+                val szText = FormatUtils.formatBytes(swapzramUsedKB * 1024)
+                Text("$szText ${stringResource(R.string.common_in_use)}",
+                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                    color = memValueColor, fontFamily = FontFamily.Monospace)
+                if (swapzramPct >= 0f) {
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { swapzramPct },
+                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                        color = memValueColor.copy(alpha = 0.75f), trackColor = CyberMuted
+                    )
+                }
+                val szTotalText = FormatUtils.formatBytes(swapzramTotalKB * 1024)
+                Spacer(Modifier.height(4.dp))
+                Text(stringResource(R.string.memory_swap_total, szTotalText),
+                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.6f))
+            }
+        }
+
+        "battery_level" -> MetricCard(
+            title = stringResource(R.string.dashboard_metric_battery_level), value = batteryLevel,
+            valueColor = SuccessNeon, modifier = Modifier.fillMaxWidth(), subtitle = batterySubtitle
+        )
+
+        "gpu_load" -> MetricCard(
+            title = stringResource(R.string.dashboard_metric_gpu_load), value = gpuLoadText,
+            valueColor = NeonPurpleBright, modifier = Modifier.fillMaxWidth()
+        ) { LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth()) }
+    }
+}
+
+private data class QuickMeta(
+    val title: String, val subtitle: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val tint: androidx.compose.ui.graphics.Color, val nav: Int
+)
+
+/** 按 ID 渲染对应的快速访问卡（点击导航，拖拽手柄独立处理排序） */
+@Composable
+private fun QuickLinkByType(
+    id: String, onNavigate: (Int) -> Unit, memUsed: String, memTotal: String
+) {
+    val ctx = LocalContext.current
+    val meta = when (id) {
+        "cpu" -> QuickMeta(stringResource(R.string.dashboard_quick_cpu_title), stringResource(R.string.dashboard_quick_cpu_desc), Icons.Filled.PlayArrow, NeonPurple, 1)
+        "gpu" -> QuickMeta(stringResource(R.string.dashboard_quick_gpu_title), stringResource(R.string.dashboard_quick_gpu_desc), Icons.Filled.Info, NeonPurpleBright, 2)
+        "mem" -> QuickMeta(stringResource(R.string.dashboard_quick_mem_title), "$memUsed / $memTotal", Icons.Filled.Star, NeonPurple, 3)
+        "net" -> QuickMeta(stringResource(R.string.dashboard_quick_net_title), stringResource(R.string.dashboard_quick_net_desc), Icons.Filled.Share, NeonPurpleBright, 5)
+        "gps" -> QuickMeta(stringResource(R.string.dashboard_quick_gps_title), stringResource(R.string.dashboard_quick_gps_desc), Icons.Filled.PlayArrow, NeonMagenta, 6)
+        "device" -> QuickMeta(stringResource(R.string.dashboard_quick_device_title), stringResource(R.string.dashboard_quick_device_desc), Icons.Filled.Search, SuccessNeon, 8)
+        "battery" -> QuickMeta(stringResource(R.string.dashboard_quick_battery_title), stringResource(R.string.dashboard_quick_battery_desc), Icons.Filled.BatteryFull, NeonPurple, 4)
+        "sensor" -> QuickMeta(stringResource(R.string.dashboard_quick_sensor_title), stringResource(R.string.dashboard_quick_sensor_desc), Icons.Filled.Sensors, NeonPurpleBright, 7)
+        else -> QuickMeta(id, "", Icons.Filled.Info, NeonPurple, 0)
+    }
+    QuickLinkCard(
+        meta.title, meta.subtitle, meta.icon, meta.tint,
+        Modifier.fillMaxWidth().clickable { HapticUtils.standardTap(ctx); onNavigate(meta.nav) }
+    )
 }
 
 private fun gpuLoad(historyData: Map<String, List<HistoryDataPoint>>): String {
