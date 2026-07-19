@@ -46,7 +46,6 @@ import com.example.deviceinfoviewer.ui.theme.*
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
-import sh.calvin.reorderable.draggableHandle
 import sh.calvin.reorderable.rememberReorderableLazyGridState
 
 private val DefaultSourceHealth = SourceHealth()
@@ -109,14 +108,9 @@ fun DashboardScreen(
         appSettings.quickCardOrder = newOrder.joinToString(",")
     }
 
-    // 预计算：内存进度与电池副标题（供 MetricCardByType 按 ID 渲染）
+    // 预计算：内存进度（供 MetricCardByType 按 ID 渲染）
     val memProgress = if (memoryInfo?.totalKB ?: 0L > 0)
         (memoryInfo!!.usedKB.toFloat() / memoryInfo!!.totalKB).coerceIn(0f, 1f) else -1f
-    val batterySubtitle = buildString {
-        if (batteryInfo?.isPlugged == true && batteryInfo?.isCharging == true) append(chargingStr)
-        else if (batteryInfo?.isPlugged == true && batteryInfo?.isCharging == false) append(pluggedNotChargingStr)
-        else append(dischargingStr)
-    }
 
 
     // ★ 图表缓存: 避免每次重组重算 normalizeChartData
@@ -131,6 +125,15 @@ fun DashboardScreen(
     val chargingStr = stringResource(R.string.battery_status_charging)
     val pluggedNotChargingStr = stringResource(R.string.battery_status_plugged_not_charging)
     val dischargingStr = stringResource(R.string.battery_status_discharging)
+
+    // 电池副标题：按充电状态组合（供电池指标卡 subtitle 使用）
+    val batterySubtitle = buildString {
+        when {
+            batteryInfo?.isPlugged == true && batteryInfo?.isCharging == true -> append(chargingStr)
+            batteryInfo?.isPlugged == true -> append(pluggedNotChargingStr)
+            else -> append(dischargingStr)
+        }
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -158,7 +161,7 @@ fun DashboardScreen(
             onReorder = onMetricReorder,
             enabled = reorderEnabled,
             keyOf = { it }
-        ) { id ->
+        ) { id, handleMod ->
             Box(Modifier.fillMaxWidth()) {
                 MetricCardByType(
                     id = id,
@@ -170,7 +173,7 @@ fun DashboardScreen(
                     gpuLoadText = gpuLoadText, gpuLoadChart = gpuLoadChart
                 )
                 if (reorderEnabled) {
-                    ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp))
+                    ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp), handleMod)
                 }
             }
         }
@@ -186,11 +189,11 @@ fun DashboardScreen(
             onReorder = onQuickReorder,
             enabled = reorderEnabled,
             keyOf = { it }
-        ) { id ->
+        ) { id, handleMod ->
             Box(Modifier.fillMaxWidth()) {
                 QuickLinkByType(id = id, onNavigate = onNavigate, memUsed = memUsed, memTotal = memTotal)
                 if (reorderEnabled) {
-                    ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp))
+                    ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp), handleMod)
                 }
             }
         }
@@ -267,7 +270,7 @@ private fun ReorderableCardGrid(
     onReorder: (List<String>) -> Unit,
     enabled: Boolean,
     keyOf: (String) -> String,
-    itemContent: @Composable (String) -> Unit,
+    itemContent: @Composable (String, Modifier) -> Unit,
 ) {
     if (enabled) {
         val gridState = rememberLazyGridState()
@@ -286,7 +289,14 @@ private fun ReorderableCardGrid(
         ) {
             items(getItems(), key = keyOf) { item ->
                 ReorderableItem(reorderState, key = keyOf(item)) {
-                    itemContent(item)
+                    // 拖拽手柄 Modifier 必须在 ReorderableItem 作用域内计算
+                    // （draggableHandle 是 ReorderableCollectionItemScope 的成员，非顶层函数）
+                    val ctx = LocalContext.current
+                    val handleModifier = Modifier.draggableHandle(
+                        onDragStarted = { HapticUtils.dragStart(ctx) },
+                        onDragStopped = { HapticUtils.dragEnd(ctx) }
+                    )
+                    itemContent(item, handleModifier)
                 }
             }
         }
@@ -299,22 +309,20 @@ private fun ReorderableCardGrid(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            items(getItems(), key = keyOf) { item -> itemContent(item) }
+            items(getItems(), key = keyOf) { item -> itemContent(item, Modifier) }
         }
     }
 }
 
-/** 拖拽手柄（仅 enabled 时显示），绑定拾起/落下震动反馈 */
+/** 拖拽手柄（仅 enabled 时显示），绑定拾起/落下震动反馈。
+ *  handleModifier 由 ReorderableItem 作用域内计算的 draggableHandle 传入。 */
 @Composable
-private fun ReorderHandle(modifier: Modifier) {
+private fun ReorderHandle(modifier: Modifier, handleModifier: Modifier) {
     IconButton(
         onClick = {},
         modifier = modifier
             .size(28.dp)
-            .draggableHandle(
-                onDragStarted = { HapticUtils.dragStart(LocalContext.current) },
-                onDragStopped = { HapticUtils.dragEnd(LocalContext.current) }
-            )
+            .then(handleModifier)
     ) {
         Icon(
             Icons.Filled.DragHandle,
