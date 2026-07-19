@@ -72,6 +72,7 @@
     <!-- ═══ Dashboard 概览 ═══ -->
     <string name="dashboard_title">Dashboard</string>
     <string name="dashboard_quick_access">Quick Access</string>
+    <string name="dashboard_reorder_handle">Drag to reorder</string>
     <string name="dashboard_system_status">System Status</string>
     <string name="dashboard_realtime_monitor">Real-time Monitor</string>
 

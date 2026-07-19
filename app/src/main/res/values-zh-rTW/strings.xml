@@ -36,6 +36,7 @@
     <string name="dashboard_battery_level_title">電池電量</string>
     <string name="dashboard_gpu_load_title">GPU 負載</string>
     <string name="dashboard_quick_access">快速存取</string>
+    <string name="dashboard_reorder_handle">拖曳排序</string>
     <string name="dashboard_cpu_processor">CPU 處理器</string>
     <string name="dashboard_cpu_processor_desc">頻率 · 核心 · 溫度</string>
     <string name="dashboard_gpu_graphics">GPU 圖形</string>
