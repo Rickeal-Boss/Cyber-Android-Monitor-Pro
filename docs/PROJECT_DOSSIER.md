@@ -349,6 +349,7 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 - 概览重排：`ui/dashboard/DashboardScreen.kt`（`ReorderableCardGrid` + `resolveCardOrder`）
 - 主题/Token：`ui/theme/Color.kt`（**唯一颜色真理源**，改色只动这里）、`Theme.kt`、`Type.kt`
 - 光照特效：`ui/effects/`（revealLight / GlobalLightProvider / acrylic）
+- **Android 官方开发知识包（单一事实源）**：[`docs/android_knowledge_pack.md`](./android_knowledge_pack.md) — 电池/电源、进程/Shell、协程/Flow、Build/SoC/CPU、内存、传感器、权限、Compose/Material3、Koin/DataStore、构建/签名/脱糖、i18n、各 API 行为变更共 12 章，附官方 URL 索引。**动手前先查对应章节**。
 
 **不变式（Invariants，改代码前必读）**
 - UI 永远不直接调 DataSource，必须经 `DeviceRepository`。
