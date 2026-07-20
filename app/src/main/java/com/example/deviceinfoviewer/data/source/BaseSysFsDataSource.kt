@@ -1,6 +1,7 @@
 package com.example.deviceinfoviewer.data.source
 
 import android.util.Log
+import com.example.deviceinfoviewer.util.waitForWithTimeout
 
 /** Base class for sysfs data sources with IO + shell fallback */
 abstract class BaseSysFsDataSource(protected val tag: String = "SysFsDS") {
@@ -25,7 +26,7 @@ abstract class BaseSysFsDataSource(protected val tag: String = "SysFsDS") {
         try {
             val process = Runtime.getRuntime().exec(arrayOf("/system/bin/cat", path))
             val content = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
+            process.waitForWithTimeout()
             if (content.isNotEmpty()) return content
         } catch (_: Throwable) { /* path not accessible */ }
 

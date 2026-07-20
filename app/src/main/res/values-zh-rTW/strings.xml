@@ -141,6 +141,9 @@
     <string name="battery_charge_counter_title">Charge counter</string>
     <string name="battery_temperature_title">Battery temperature</string>
     <string name="battery_health_status_title">Health</string>
+    <string name="battery_card_power_save_mode">省電模式</string>
+    <string name="battery_card_power_source">電源</string>
+    <string name="battery_card_real_wattage">即時功率</string>
     <string name="battery_health_unknown">未知</string>
 
     <!-- ═══ Power Source 電源來源 (i18n key) ═══ -->

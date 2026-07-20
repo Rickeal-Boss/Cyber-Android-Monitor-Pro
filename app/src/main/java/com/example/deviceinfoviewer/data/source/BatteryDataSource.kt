@@ -9,6 +9,7 @@ import android.os.Build
 import android.util.Log
 import com.example.deviceinfoviewer.AppSettings
 import com.example.deviceinfoviewer.data.model.BatteryInfo
+import com.example.deviceinfoviewer.util.waitForWithTimeout
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -377,14 +378,42 @@ class BatteryDataSource(private val context: Context) {
 
     // ========== 电池容量（全网方案） ==========
 
+    /**
+     * sysfs charge_full[|_design] 容量单位归一化 (µAh → mAh)。
+     *
+     * 规范: Linux power supply class 中 charge_full 为 **microampere-hours (µAh)**,
+     * 故标准做法 value/1000 → mAh。但部分 OEM 内核直接以 mAh (或库仑) 上报,
+     * 导致 /1000 后出现 1000× 偏差。这里按"典型手机电芯 1500–9000 mAh"做边界校验:
+     * - value/1000 落在合理区间 → 视为 µAh, 返回 value/1000
+     * - value 本身落在合理区间 → 视为 OEM 已用 mAh 上报, 直接返回 value
+     * - 均不在区间 → 不可信, 返回 -1 (交由后续路径兜底)
+     */
+    private fun normalizeChargeFullToMAh(value: Long): Long {
+        if (value <= 0) return -1L
+        val divided = value / 1000L
+        return when {
+            divided in CAP_MIN_MAH..CAP_MAX_MAH -> divided
+            value in CAP_MIN_MAH..CAP_MAX_MAH -> value
+            else -> -1L
+        }
+    }
+
+    companion object {
+        // 典型手机电芯容量合理区间 (mAh)
+        private const val CAP_MIN_MAH = 1500L
+        private const val CAP_MAX_MAH = 9000L
+    }
+
     private fun readBatteryCapacity(info: BatteryInfo) {
-        // 1. BatteryManager API（官方）
+        // 1. BatteryManager 官方属性
+        // ★ 修正: BATTERY_PROPERTY_CAPACITY 返回的是【剩余容量百分比(0-100)】, 不是 mAh!
+        //   原代码误赋给 info.capacityDesignMAh, 污染设计容量。此处仅作 levelPercent 交叉校验。
         try {
             val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
             bm?.let {
-                val capacity = it.getLongProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
-                if (capacity != Long.MIN_VALUE && capacity > 0) {
-                    info.capacityDesignMAh = capacity
+                val capPct = it.getLongProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                if (capPct != Long.MIN_VALUE && capPct in 1..100) {
+                    if (info.levelPercent <= 0) info.levelPercent = capPct.toInt()
                 }
             }
         } catch (_: Throwable) {}
@@ -425,13 +454,16 @@ class BatteryDataSource(private val context: Context) {
         for (path in chargeFullPaths) {
             val value = readSysfsLongRobust(path)
             if (value > 0) {
-                val mah = value / 1000
-                if (path.contains("design")) {
-                    info.chargeFullDesignMAh = mah
-                    if (info.chargeFullSource.isEmpty()) info.chargeFullSource = path
-                } else {
-                    info.chargeFullMAh = mah
-                    if (info.chargeFullSource.isEmpty()) info.chargeFullSource = path
+                // ★ 单位归一化: 经 normalizeChargeFullToMAh 处理 OEM 单位差异, 不可信值返回 -1 跳过
+                val mah = normalizeChargeFullToMAh(value)
+                if (mah > 0) {
+                    if (path.contains("design")) {
+                        info.chargeFullDesignMAh = mah
+                        if (info.chargeFullSource.isEmpty()) info.chargeFullSource = path
+                    } else {
+                        info.chargeFullMAh = mah
+                        if (info.chargeFullSource.isEmpty()) info.chargeFullSource = path
+                    }
                 }
             }
         }
@@ -696,7 +728,7 @@ class BatteryDataSource(private val context: Context) {
             val reader = proc.inputStream.bufferedReader()
             val output = reader.readText()
             reader.close()
-            proc.waitFor()
+            proc.waitForWithTimeout()
 
             // 匹配 dumpsys 中的充电电流字段
             val dumpsysCurrentPatterns = listOf(
@@ -727,7 +759,7 @@ class BatteryDataSource(private val context: Context) {
                 arrayOf("/system/bin/sh", "-c", "dumpsys batterystats 2>/dev/null")
             )
             val output = proc.inputStream.bufferedReader().readText()
-            proc.waitFor()
+            proc.waitForWithTimeout()
 
             // 从 batterystats 提取电流估计值
             val currentMatch = Regex("""(?i)Estimated power use.*?=.*?(\d+)""").find(output)
@@ -953,7 +985,7 @@ class BatteryDataSource(private val context: Context) {
         try {
             val dmesgProc = Runtime.getRuntime().exec(arrayOf("dmesg"))
             val dmesgOutput = dmesgProc.inputStream.bufferedReader().readText()
-            dmesgProc.waitFor()
+            dmesgProc.waitForWithTimeout()
             // 匹配电池循环相关日志: "bms: cycle=123", "charge_cycle: 456", "battery_cycle=789" 等
             val dmesgPatterns = listOf(
                 Regex("""(?i)(?:bms|battery|fuel).*?(?:cycle|loop).*?[=: ](\d{1,4})"""),
@@ -1060,7 +1092,7 @@ class BatteryDataSource(private val context: Context) {
                 arrayOf("logcat", "-d", "-b", "system", "-t", "100")
             )
             val logcatOutput = logcatProc.inputStream.bufferedReader().readText()
-            logcatProc.waitFor()
+            logcatProc.waitForWithTimeout()
             val logcatPatterns = listOf(
                 Regex("""(?i)(?:health|battery|bms|charge).*?cycle.*?[=: ](\d{2,4})"""),
                 Regex("""(?i)cycle_count[=: ](\d{2,4})"""),
@@ -1295,7 +1327,7 @@ class BatteryDataSource(private val context: Context) {
             val reader = androidOsProcess.inputStream.bufferedReader()
             val output = reader.readText()
             reader.close()
-            androidOsProcess.waitFor()
+            androidOsProcess.waitForWithTimeout()
 
             // 尝试匹配 mSavedBatteryUsage 或 charge cycles
             val savedUsageRegex = Regex("""mSavedBatteryUsage[=:]\s*(\d+)""", RegexOption.IGNORE_CASE)
@@ -1320,7 +1352,7 @@ class BatteryDataSource(private val context: Context) {
             val reader = proc.inputStream.bufferedReader()
             val output = reader.readText()
             reader.close()
-            proc.waitFor()
+            proc.waitForWithTimeout()
 
             // dumpsys battery 在各个 OEM ROM 上的常见格式
             val dumpsysPatterns = listOf(
@@ -1377,7 +1409,7 @@ class BatteryDataSource(private val context: Context) {
             val reader = proc.inputStream.bufferedReader()
             val output = reader.readText()
             reader.close()
-            proc.waitFor()
+            proc.waitForWithTimeout()
 
             val checkinCycleRegex = Regex("""cycle[:=](\d{1,4})""", RegexOption.IGNORE_CASE)
             val match = checkinCycleRegex.find(output)
@@ -1404,7 +1436,7 @@ class BatteryDataSource(private val context: Context) {
         try {
             val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "dumpsys batteryproperties 2>/dev/null"))
             val output = proc.inputStream.bufferedReader().readText()
-            proc.waitFor()
+            proc.waitForWithTimeout()
 
             // 匹配各种格式: "cycle_count: 123", "Cycle count=456" 等
             val bpPatterns = listOf(
@@ -1601,7 +1633,7 @@ class BatteryDataSource(private val context: Context) {
             try {
                 val proc = Runtime.getRuntime().exec(cmd)
                 val text = proc.inputStream.bufferedReader().readText().trim()
-                proc.waitFor()
+                proc.waitForWithTimeout()
                 if (text.isNotEmpty()) return text
             } catch (_: Throwable) {}
         }

@@ -1,6 +1,7 @@
 package com.example.deviceinfoviewer.data.repository
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import androidx.lifecycle.MutableLiveData
 import com.example.deviceinfoviewer.AppSettings
@@ -36,7 +37,14 @@ class DeviceRepository(context: Context) {
 
     // ═══════ CpuCache ═══════
     private val cachedChip: CpuCache.KnownChip? by lazy {
-        val platform = try {
+        // ★ Android 12+ (API31) 官方 SoC 字段优先：Build.SOC_MODEL 直接给出型号(如 mt6989)与厂商(MediaTek)
+        //   仅在 API31+ 可达时使用，作为比 ro.board.platform 更高优先级的候选；
+        //   minSdk=21，故旧路径 (ro.board.platform → ro.hardware.chipname) 必须保留为降级链。
+        val socModel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            Build.SOC_MODEL.trim().lowercase()
+        } else ""
+        val platform = if (socModel.isNotEmpty()) socModel
+        else try {
             Class.forName("android.os.SystemProperties")
                 .getMethod("get", String::class.java, String::class.java)
                 .invoke(null, "ro.board.platform", "") as? String ?: ""

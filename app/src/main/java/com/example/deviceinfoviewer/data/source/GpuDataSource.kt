@@ -1,6 +1,7 @@
 package com.example.deviceinfoviewer.data.source
 
 import com.example.deviceinfoviewer.data.model.GpuInfo
+import com.example.deviceinfoviewer.util.waitForWithTimeout
 
 /**
  * GPU 数据源 — v3 重写版
@@ -800,7 +801,7 @@ class GpuDataSource {
                             val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c",
                                 "strings $libPath 2>/dev/null | head -200"))
                             proc.inputStream.bufferedReader().readText().also {
-                                try { proc.waitFor() } catch (_: Throwable) {}
+                                try { proc.waitForWithTimeout() } catch (_: Throwable) {}
                             }
                         } catch (_: Throwable) { "" }
 

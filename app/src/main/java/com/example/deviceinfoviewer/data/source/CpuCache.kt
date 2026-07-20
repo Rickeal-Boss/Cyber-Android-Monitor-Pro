@@ -363,6 +363,34 @@ object CpuCache {
             KNOWN_CHIPS[aliasKey]?.let { return it }
         }
 
+        // ★ 天玑家族兜底: mt67xx / mt68xx / mt69xx 全系
+        //   表内已显式列出的型号（mt6989/6899/6897/6878 等）会在策略1/2 命中，
+        //   此处仅兜底未逐型号录入的中低端天玑（如 mt6768/mt6833/mt6873/mt6885...），
+        //   保证任意 MediaTek 天玑平台都能被识别为 MediaTek 天玑，而非"识别覆没"。
+        //   注意：高通/三星/麒麟等既有匹配逻辑完全不受影响，仅新增此兜底分支。
+        val dimensityPattern = Regex("mt(67|68|69)\\d{2}")
+        dimensityPattern.find(raw)?.let { match ->
+            val num = match.value.removePrefix("mt")
+            return KnownChip(
+                platformId = raw,
+                chipName = "Dimensity $num",
+                cpuModel = "",
+                processNode = "",
+                releaseDate = "",
+                clusters = emptyList(),
+                l1iPerBig = "", l1dPerBig = "", l2PerBig = "",
+                l1iPerSmall = "", l1dPerSmall = "", l2PerSmall = "",
+                l3Shared = "",
+                gpuModel = "",
+                gpuClockMhz = 0,
+                gpuAlus = 0,
+                gpuFp32Tflops = 0f,
+                isp = "",
+                npu = "",
+                modem = "",
+            )
+        }
+
         return null
     }
 
