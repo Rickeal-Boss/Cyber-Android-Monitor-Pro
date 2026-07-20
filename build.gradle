@@ -1,8 +1,9 @@
 // Top-level build file
 plugins {
     id 'com.android.application' version '9.0.1' apply false
-    id 'org.jetbrains.kotlin.android' version '2.4.10' apply false
-    id 'org.jetbrains.kotlin.plugin.compose' version '2.4.10' apply false
+    // AGP 9.0 内置 Kotlin (built-in Kotlin 2.2.10)，无需 apply kotlin-android 插件
+    // compose 编译器随内置 Kotlin 版本，需与内置 Kotlin 版本一致 (2.2.10)
+    id 'org.jetbrains.kotlin.plugin.compose' version '2.2.10' apply false
 }
 
 task clean(type: Delete) {
