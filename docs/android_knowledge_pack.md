@@ -1,7 +1,7 @@
 # Android 官方开发知识包（Cyber Android Monitor · 随时查阅版）
 
 **适用范围**：Cyber Android Monitor（原 DeviceInfoViewer）v2.0.202+ / v3 重构
-**技术栈（项目当前）**：Kotlin 2.1.0 · Jetpack Compose BOM 2024.12.01 · Material3 · MVVM + Koin 3.5.6 · kotlinx-coroutines-android 1.8.1 · AGP 8.6.0
+**技术栈（项目当前，2026-07-20 工具链升级后）**：Kotlin 2.2.10（AGP 9 内置）· Jetpack Compose BOM 2025.06.00 · Material3 · MVVM + Koin 3.5.6 · kotlinx-coroutines-android 1.11.0 · AGP 9.0.1 / Gradle 9.1 / compileSdk 36 / targetSdk 35
 **构建约束**：`minSdk = 21`、`compileSdk/targetSdk = 35`、**未启用 coreLibraryDesugaring**
 **整理日期**：2026-07-20（**前瞻性刷新版**：含 Android 16/17、Kotlin 2.4.x、Compose BOM 2026.06.00、Play targetSdk 时间线、健康权限迁移等最新事实）
 **性质**：单一事实源（single source of truth）。所有结论均回链 Android 开发者官网 / AOSP 源码 / Kotlin 官方文档。后续开发、修 bug、加功能前先查本包对应章节。
@@ -35,16 +35,16 @@
 | 项 | 值 | 对可用 API 面的影响 |
 |----|----|----|
 | `minSdk` | **21** | `Build.SOC_MODEL`/`SOC_MANUFACTURER`(API31)、`Process.waitFor(timeout)`/`destroyForcibly`/`isAlive`(API26)、`collectAsStateWithLifecycle`(Lifecycle 2.7.0)、`dynamicColorScheme`(API31) 等在 21–30 设备**不可用** → 必须降级路径 / 运行时分支 |
-| `compileSdk`/`targetSdk` | **35** | 可编译全部最新 API（含 `BATTERY_PROPERTY_STATE_OF_HEALTH` 等 `@FlaggedApi`），但运行时仍按 `minSdk` 分支；⚠️ **Play 要求 2026-08-31 起须 `targetSdk 36`**（见 §13） |
-| Kotlin | **2.1.0**（最新稳定 **2.4.10**，K2 编译器默认稳定） | 支持 `withTimeoutOrNull`/`runInterruptible`/`StateFlow`；升级见 §13 |
-| Compose BOM | **2024.12.01**（最新稳定 **2026.06.00**） | 统一 Compose 库版本；BOM 2026.06.00 需 compileSdk 37 + AGP 9 |
-| kotlinx-coroutines | **1.8.1**（最新 **1.11.0**，1.10.2 为 Kotlin 2.1 稳妥点） | 协程库 |
-| AGP / Gradle / JDK | **AGP 8.6.0 / Gradle 8.x / JDK 17**（最新 **AGP 9.0.1 / Gradle 9.1 / JDK 17**） | 构建工具链 |
+| `compileSdk`/`targetSdk` | **36 / 35** | 可编译全部最新 API（含 `BATTERY_PROPERTY_STATE_OF_HEALTH` 等 `@FlaggedApi`），但运行时仍按 `minSdk` 分支；⚠️ **Play 要求 2026-08-31 起须 `targetSdk 36`**（见 §13） |
+| Kotlin | **2.2.10**（AGP 9.0.1 内置；最新稳定 **2.4.10** 需 AGP 9.1+） | AGP 9 内置 Kotlin，禁止显式 apply kotlin-android 插件；编译器见 §8.6 |
+| Compose BOM | **2025.06.00**（最新稳定 **2026.06.00**） | 统一 Compose 库版本；BOM 2026.06.00 需 Kotlin 2.4.x（AGP 9.1+），AGP 9.0.1 内置 Kotlin 2.2.10 下 BOM 上限 2025.06.00 |
+| kotlinx-coroutines | **1.11.0**（最新稳定） | 协程库 |
+| AGP / Gradle / JDK | **AGP 9.0.1 / Gradle 9.1 / JDK 17** | 构建工具链；AGP 9 默认内置 Kotlin 2.2.10 |
 | coreLibraryDesugaring | **未启用** | ⚠️ `java.time` 子集 / `java.util.stream` 可脱糖，但 **`Process.waitFor(timeout)`/`destroyForcibly`/`isAlive` 不在脱糖表**——低版本必须自建超时范式 |
 
 > **兼容性铁律**：凡文档标注「API N+」的能力，在 minSdk 21 下都需 `if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.X)` 分支 + 降级实现，不可直接调用。
 
-> 🔮 **版本前瞻（截至 2026-07）**：项目当前 Kotlin 2.1.0 / BOM 2024.12.01 / AGP 8.6.0 均**偏旧**——最新为 Kotlin **2.4.10**、BOM **2026.06.00**、AGP **9.0.1**（需 Gradle 9.1 + JDK 17）。`targetSdk 35` 目前可服务新用户，但 **2026-08-31 后提交更新必须升到 36**。升级压力与分步路线见 §13。
+> 🔮 **版本前瞻（截至 2026-07，2026-07-20 已执行工具链升级）**：项目已升 AGP 9.0.1 / Gradle 9.1 / 内置 Kotlin 2.2.10 / BOM 2025.06.00 / coroutines 1.11.0 / compileSdk 36。`targetSdk 35` 仍须于 **2026-08-31 前升到 36**（健康权限迁移 + 大屏自适应 + edge-to-edge），见 §13。Kotlin 2.4.10 + BOM 2026.06.00 需 **AGP 9.1+**（内置 Kotlin 抬升），列为后续。
 
 ---
 
@@ -384,9 +384,9 @@
 ### 8.6 Compose 编译器 ↔ Kotlin 版本耦合（前瞻性）
 
 - **Kotlin ≥ 2.0 起，Compose 编译器已并入 Kotlin 仓库**，版本号 = Kotlin 版本号，通过 `org.jetbrains.kotlin.plugin.compose` Gradle 插件启用，**不再有独立 Compose 编译器版本、也无需核对兼容表**（旧 `composeOptions { kotlinCompilerExtensionVersion }` 已废弃）。
-- **本项目绑定关系**：`Kotlin 2.1.0` → 必须用 **Compose 编译器 `2.1.0`**（即 `id("org.jetbrains.kotlin.plugin.compose") version "2.1.0"`）。升级 Kotlin 到 2.2.x → 编译器 2.2.x；最新 2.4.10 → 编译器 2.4.10。**编译器与 Kotlin 版本必须一致**，否则构建失败。
+- **本项目绑定关系（AGP 9 实战结论）**：AGP 9.0 启用**内置 Kotlin**，版本由 AGP 9.0.1 固定为 **2.2.10**（含 Compose 编译器 2.2.10），**禁止显式 apply `org.jetbrains.kotlin.android` 插件**（硬报错）。`org.jetbrains.kotlin.plugin.compose` 仍需显式 apply 且版本须 = 内置 Kotlin（**2.2.10**）。**编译器与 Kotlin 版本必须一致**。Kotlin 2.4.10 + Compose 编译器 2.4.10 需 **AGP 9.1+**（内置 Kotlin 抬升到 2.4.x）。
 - **Material3 版本**：稳定版 `1.4.0`（2026-07-15）；预览 `1.5.0-alpha24`。**Material 3 Expressive** 截至 2026-07 **仍仅以 `ExperimentalMaterial3ExpressiveApi` 形式随 `1.5.0-alphaXX` 演进，未独立稳定、未纳入稳定 BOM**——生产代码勿依赖。
-- ⚠️ **前瞻告警**：自 Compose `1.12.0` 起要求 **compileSdk 37 + AGP 9**（Gradle 9.1 + JDK 17）。若本项目想追最新 BOM `2026.06.00`（含 Compose 1.12.x），必须同步抬升 compileSdk/targetSdk 到 37、AGP 到 9——这是一次**大版本跃迁**，见 §13 行动项 #7。
+- ⚠️ **前瞻告警**：Compose `1.12.x`（BOM `2026.06.00`）要求 **Kotlin/Compose 编译器 2.4.x**，而 AGP 9.0.1 内置 Kotlin 仅 2.2.10 → **BOM 2026.06.00 在 AGP 9.0.1 下不可达**。AGP 9 最大支持 API **36.1**（无 compileSdk 37）。升级到 BOM 2026.06.00 须先升 **AGP 9.1+**（内置 Kotlin 2.4.x），见 §13 #7。
 
 ---
 
@@ -460,7 +460,7 @@
 
 - **BOM**：`platform("androidx.compose:compose-bom:2024.12.01")` 统一 Compose 库版本（**编译器自 Kotlin 2.0 起已并入 Kotlin，不在 BOM 内**，见 §8.6）。
 - **BaselineProfile**：`BaselineProfileRule`（Macrobenchmark）`collect()` 采集；`./gradlew app:generateBaselineProfile`；`profileinstaller` 于安装/首启写入。建议 release `isMinifyEnabled=true`（AGP 8.2+ R8 重写规则）。收益：首次启动代码执行 ~30% 提速，Startup Profiles 再 +~15%。
-- 🔮 **BOM 前瞻**：最新稳定 BOM **`2026.06.00`**（官方示例已用），对应 Compose `1.12.x`，**需 compileSdk 37 + AGP 9**（见 §13 #7）。Material3 稳定版 `1.4.0`，Material 3 Expressive 仍未稳定（§8.6）。
+- 🔮 **BOM 前瞻**：最新稳定 BOM **`2026.06.00`**（对应 Compose `1.12.x`）需 **Kotlin 2.4.x**（AGP 9.1+ 内置）；AGP 9.0.1 内置 Kotlin 2.2.10 下项目用 **`2025.06.00`**（Compose 1.8.x）。Material3 稳定版 `1.4.0`，Material 3 Expressive 仍未稳定（§8.6）。
 
 ---
 
@@ -540,13 +540,15 @@
 | 3 | 🟠 | **Edge-to-edge 改造**：移除 `setDecorFitsSystemWindows`、用 `WindowInsets` 避让状态栏/挖孔 | target 35 已强制、36 退路移除 | 概览/详情页全屏布局 |
 | 4 | 🟠 | **大屏自适应**：`sw≥600dp` 下 `screenOrientation` 失效，需响应式布局 | target 36 | 平板/折叠屏 |
 | 5 | 🟠 | **预测性返回**：接入 `OnBackInvokedCallback` | target 35+ 默认开启 | 返回手势 |
-| 6 | 🟡 | **Kotlin 2.1.0 → 2.2.x/2.4.x**：改用 `org.jetbrains.kotlin.plugin.compose`，删旧 `kotlinCompilerExtensionVersion` | 追最新语言特性 | 全工程（编译器一致） |
-| 7 | 🟡 | **Compose BOM 2024.12.01 → 2026.06.00**：需 compileSdk 37 + AGP 9 + Gradle 9.1 + JDK 17 | 升 BOM 前 | Compose 全部 |
-| 8 | 🟡 | **kotlinx-coroutines 1.8.1 → 1.10.2/1.11.0** | 追 bug 修复 | 协程层 |
+| 6 | ✅ | **Kotlin 2.1.0 → 2.2.10（AGP 9 内置）**：已迁移到内置 Kotlin，移除 kotlin-android 插件；Compose 编译器 2.2.10 | 2026-07-20 已完成 | 全工程 |
+| 7 | 🟡 | **Compose BOM 2024.12.01 → 2025.06.00（已完成）；2026.06.00 受限于 AGP 9.0.1 内置 Kotlin 2.2.10，需 AGP 9.1+ 方达** | AGP 9.1 后追 2026.06.00 | Compose 全部 |
+| 8 | ✅ | **kotlinx-coroutines 1.8.1 → 1.11.0** | 2026-07-20 已完成 | 协程层 |
 | 9 | 🟡 | **非 SDK 依赖替换**：`SystemProperties` 反射 → 公开 `Build`/`DeviceConfig` 或申请 API | 长期抗版本收紧 | SoC 识别 |
 | 10 | 🟡 | **非 SDK 检测**：接入 StrictMode / veridex 定期扫描 | 持续 | 全工程健壮性 |
 
 > **升级顺序建议**：先在不升 targetSdk 的前提下做 Kotlin/Compose/BOM 库版本升级（低风险）→ 再做 edge-to-edge / 预测性返回 / 大屏自适应（target 35 已部分强制）→ 最后冲 targetSdk 36 + 健康权限迁移（绑定 2026-08-31 deadline）。每一步单独验证、单独提交。
+>
+> **✅ 第一阶段已完成（2026-07-20，CI 绿灯）**：AGP 8.6.0→9.0.1 / Gradle 8.7→9.1 / 内置 Kotlin 2.1.0→2.2.10 / BOM 2024.12.01→2025.06.00 / coroutines 1.8.1→1.11.0 / compileSdk 35→36（对应 §13 #6/#8 已完成、#7 部分完成）。**关键约束（实战验证）**：AGP 9 强制内置 Kotlin 且禁止显式 apply kotlin-android 插件；内置 Kotlin 版本由 AGP 9.0.1 锁为 2.2.10；BOM 2026.06.00（需 Kotlin 2.4.x）在 AGP 9.0.1 下不可达，须等 AGP 9.1+。下一阶段 = targetSdk 36 + 健康权限迁移（#1/#2），绑定 2026-08-31。
 
 ---
 
