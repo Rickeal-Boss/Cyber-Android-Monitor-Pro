@@ -398,12 +398,6 @@ class BatteryDataSource(private val context: Context) {
         }
     }
 
-    companion object {
-        // 典型手机电芯容量合理区间 (mAh)
-        private const val CAP_MIN_MAH = 1500L
-        private const val CAP_MAX_MAH = 9000L
-    }
-
     private fun readBatteryCapacity(info: BatteryInfo) {
         // 1. BatteryManager 官方属性
         // ★ 修正: BATTERY_PROPERTY_CAPACITY 返回的是【剩余容量百分比(0-100)】, 不是 mAh!
@@ -528,6 +522,10 @@ class BatteryDataSource(private val context: Context) {
      * @return Pair<电流µA (正=充电/负=放电), 来源描述>
      */
     private companion object {
+        // 典型手机电芯容量合理区间 (mAh) — 技术债修复新增
+        private const val CAP_MIN_MAH = 1500L
+        private const val CAP_MAX_MAH = 9000L
+
         // Maps each path keyword to its known unit to avoid heuristic misclassification.
         // UnitHint.ASSUME_UA: Standard Linux power_supply path, directly µA.
         // UnitHint.ASSUME_MA: OEM driver known to use mA.
