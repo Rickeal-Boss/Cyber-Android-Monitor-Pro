@@ -80,6 +80,30 @@ object CpuCache {
             modem = "Snapdragon X55",
         ),
 
+        // ═══ Snapdragon 870 (SM8250-AC) — kona ═══
+        "sm8250-ac" to KnownChip(
+            platformId = "kona",
+            chipName = "Snapdragon 870",
+            cpuModel = "Kryo 585 (Cortex-A77 + A55)",
+            processNode = "7nm TSMC N7P",
+            releaseDate = "2021-01",
+            clusters = listOf(
+                ClusterSpec("Cortex-A77 Prime", 1, 3.19f),
+                ClusterSpec("Cortex-A77 Gold",  3, 2.42f),
+                ClusterSpec("Cortex-A55 Silver", 4, 1.80f),
+            ),
+            l1iPerBig = "64 KB", l1dPerBig = "64 KB", l2PerBig = "512 KB",
+            l1iPerSmall = "32 KB", l1dPerSmall = "32 KB", l2PerSmall = "128 KB",
+            l3Shared = "4 MB",
+            gpuModel = "Adreno 650",
+            gpuClockMhz = 670,
+            gpuAlus = 512,
+            gpuFp32Tflops = 1.37f,
+            isp = "Spectra 480",
+            npu = "Hexagon 698",
+            modem = "Snapdragon X55",
+        ),
+
         // ═══ Snapdragon 8s Gen 3 (SM8635) — pineapple ═══
         "sm8635" to KnownChip(
             platformId = "pineapple",
@@ -533,6 +557,35 @@ object CpuCache {
         }
 
         return null
+    }
+
+    /**
+     * kona 平台细分 Snapdragon 865 / 870（SM8250 / SM8250-AC）。
+     * 四级判定，任一命中即定；默认回退 865：
+     *  1) ro.soc.model 含 "sm8250-ac" 或以 "-ac" 结尾 → 870
+     *  2) ro.soc.id == 341 (870) / 356 (865)
+     *  3) 任一 CPU 核心 cpuinfo_max_freq > 3.04GHz（870 Prime 3.19GHz / 865 2.84GHz）→ 870
+     *  4) ro.chipname / ro.hardware.chipname 含 "870" / "ac" → 870
+     */
+    fun resolveKonaVariant(): String {
+        val socModel = SysFsReader.readProp("ro.soc.model").lowercase()
+        if (socModel.contains("sm8250-ac") || socModel.endsWith("-ac")) return "870"
+
+        val socId = SysFsReader.readProp("ro.soc.id").toIntOrNull()
+        if (socId == 341) return "870"   // SM8250-AC
+        if (socId == 356) return "865"   // SM8250
+
+        var maxPrimeHz = 0L
+        for (i in 0..7) {
+            val f = SysFsReader.readLong("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_max_freq")
+            if (f > maxPrimeHz) maxPrimeHz = f
+        }
+        if (maxPrimeHz > 3_040_000L) return "870"
+
+        val chip = SysFsReader.readProp("ro.chipname").lowercase()
+        if (chip.contains("870") || chip.contains("ac")) return "870"
+
+        return "865"
     }
 
     fun injectCpuInfo(chip: KnownChip, info: CpuInfo) {

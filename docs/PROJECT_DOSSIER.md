@@ -322,7 +322,7 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 
 ### P1（重要 / 特定机型或健壮性）
 3. **kona 865/870 不可区分**（`CpuCache.kt:60` 仅 `sm8250→865`，无 `sm8250-ac`/无 `resolveKonaVariant`）。
-   - ⬜ 未修复。落地方案 `diagnosis_5_issues_fix.md` 方案 4（`resolveKonaVariant()` 四级判定 + `sm8250-ac` 条目）。
+   - ✅ **已修复**（本次提交）：`CpuCache` 增补 `sm8250-ac`（870）规格条目 + `resolveKonaVariant()` 四级判定（ro.soc.model 含 -ac / ro.soc.id 341(870)·356(865) / Prime 频率 >3.04GHz / chipname 含 870·ac）；`collectSocProcess` 策略0 在 `ro.board.platform=="kona"` 时按 variant 选 `sm8250`/`sm8250-ac`，870 不再误判为 865。
 4. **`autoDetectDualCell()` 未实现**：`BatteryDataSource.kt:73` 仅读手动开关；`OemDataSource.kt:637/662/689` 已采 `chargingDualCell` 但**从未回灌** `BatteryInfo.dualCell`（数据孤岛）。
    - ⬜ 未修复。落地方案 `diagnosis_5_issues_fix.md` 方案 3（五级 fallback 自动检测 + OEM 回灌）。
 5. **13 处 `waitFor()` 无超时**（实测，非旧审计的 7 处）：`GpuDataSource:803`、`SystemDataSource:108`、`DeviceDetailDataSource:1652`、`BatteryDataSource:688/719/945/1052/1287/1312/1369/1396/1593`、`BaseSysFsDataSource:28`。可能线程饥饿。`ShellCommandDataSource.exec` 有 8s 超时但上述未用。
