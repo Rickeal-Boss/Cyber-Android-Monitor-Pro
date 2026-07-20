@@ -1,10 +1,12 @@
 # Android 官方开发知识包（Cyber Android Monitor · 随时查阅版）
 
 **适用范围**：Cyber Android Monitor（原 DeviceInfoViewer）v2.0.202+ / v3 重构
-**技术栈**：Kotlin 2.1.0 · Jetpack Compose BOM 2024.12.01 · Material3 · MVVM + Koin 3.5.6 · kotlinx-coroutines-android 1.8.1
+**技术栈（项目当前）**：Kotlin 2.1.0 · Jetpack Compose BOM 2024.12.01 · Material3 · MVVM + Koin 3.5.6 · kotlinx-coroutines-android 1.8.1 · AGP 8.6.0
 **构建约束**：`minSdk = 21`、`compileSdk/targetSdk = 35`、**未启用 coreLibraryDesugaring**
-**整理日期**：2026-07-20
+**整理日期**：2026-07-20（**前瞻性刷新版**：含 Android 16/17、Kotlin 2.4.x、Compose BOM 2026.06.00、Play targetSdk 时间线、健康权限迁移等最新事实）
 **性质**：单一事实源（single source of truth）。所有结论均回链 Android 开发者官网 / AOSP 源码 / Kotlin 官方文档。后续开发、修 bug、加功能前先查本包对应章节。
+
+> 🔮 **前瞻性摘要（截至 2026-07）**：Android 16 (`BAKLAWA`, API 36) 已于 2025-06-10 正式发布；Android 17 (API 37) 处 Beta，代号/常量名未定。**Kotlin 最新稳定 2.4.10**（K2 编译器默认稳定）；**Compose BOM 最新 2026.06.00**；**AGP 最新 9.0.1**（需 Gradle 9.1 + JDK 17）。**Google Play 要求 2026-08-31 起新应用/更新须 `targetSdk 36`**（可延至 2026-11-01）——本项目当前 `targetSdk 35` 须在此前完成**健康权限迁移 / 大屏自适应 / edge-to-edge** 改造。版本路线图与升级压力见 §13。
 
 ---
 
@@ -22,7 +24,8 @@
 - [9. Koin 依赖注入 / DataStore 持久化](#9-koin-依赖注入--datastore-持久化)
 - [10. 构建 / 发布 / 签名 / 缩减 / 脱糖](#10-构建--发布--签名--缩减--脱糖)
 - [11. 国际化 (i18n) 与本地化](#11-国际化-i18n-与本地化)
-- [12. 各 API 级别行为变更（对监控类 App 的影响）](#12-各-api-级别行为变更对监控类-app-的影响)
+- [12. 各 API 级别行为变更（API 11–17，含 Android 15/16/17）](#12-各-api-级别行为变更对监控类-app-的影响)
+- [13. 版本前瞻与升级路线图（行动项）](#13-版本前瞻与升级路线图行动项)
 - [附：官方参考来源索引](#附官方参考来源索引)
 
 ---
@@ -32,11 +35,16 @@
 | 项 | 值 | 对可用 API 面的影响 |
 |----|----|----|
 | `minSdk` | **21** | `Build.SOC_MODEL`/`SOC_MANUFACTURER`(API31)、`Process.waitFor(timeout)`/`destroyForcibly`/`isAlive`(API26)、`collectAsStateWithLifecycle`(Lifecycle 2.7.0)、`dynamicColorScheme`(API31) 等在 21–30 设备**不可用** → 必须降级路径 / 运行时分支 |
-| `compileSdk`/`targetSdk` | **35** | 可编译全部最新 API（含 `BATTERY_PROPERTY_STATE_OF_HEALTH` 等 `@FlaggedApi`），但运行时仍按 `minSdk` 分支 |
-| Kotlin | **2.1.0** | 支持 `withTimeoutOrNull`/`runInterruptible`/`StateFlow` |
+| `compileSdk`/`targetSdk` | **35** | 可编译全部最新 API（含 `BATTERY_PROPERTY_STATE_OF_HEALTH` 等 `@FlaggedApi`），但运行时仍按 `minSdk` 分支；⚠️ **Play 要求 2026-08-31 起须 `targetSdk 36`**（见 §13） |
+| Kotlin | **2.1.0**（最新稳定 **2.4.10**，K2 编译器默认稳定） | 支持 `withTimeoutOrNull`/`runInterruptible`/`StateFlow`；升级见 §13 |
+| Compose BOM | **2024.12.01**（最新稳定 **2026.06.00**） | 统一 Compose 库版本；BOM 2026.06.00 需 compileSdk 37 + AGP 9 |
+| kotlinx-coroutines | **1.8.1**（最新 **1.11.0**，1.10.2 为 Kotlin 2.1 稳妥点） | 协程库 |
+| AGP / Gradle / JDK | **AGP 8.6.0 / Gradle 8.x / JDK 17**（最新 **AGP 9.0.1 / Gradle 9.1 / JDK 17**） | 构建工具链 |
 | coreLibraryDesugaring | **未启用** | ⚠️ `java.time` 子集 / `java.util.stream` 可脱糖，但 **`Process.waitFor(timeout)`/`destroyForcibly`/`isAlive` 不在脱糖表**——低版本必须自建超时范式 |
 
 > **兼容性铁律**：凡文档标注「API N+」的能力，在 minSdk 21 下都需 `if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.X)` 分支 + 降级实现，不可直接调用。
+
+> 🔮 **版本前瞻（截至 2026-07）**：项目当前 Kotlin 2.1.0 / BOM 2024.12.01 / AGP 8.6.0 均**偏旧**——最新为 Kotlin **2.4.10**、BOM **2026.06.00**、AGP **9.0.1**（需 Gradle 9.1 + JDK 17）。`targetSdk 35` 目前可服务新用户，但 **2026-08-31 后提交更新必须升到 36**。升级压力与分步路线见 §13。
 
 ---
 
@@ -218,10 +226,11 @@
 | `S` | 31 | Android 12 |
 | `TIRAMISU` | 33 | Android 13 |
 | `UPSIDE_DOWN_CAKE` | 34 | Android 14 |
-| `VANILLA_ICE_CREAM` | 35 | Android 15 |
-| `BAKLAWA` | 36 | Android 16（官网已列） |
+| `VANILLA_ICE_CREAM` | 35 | Android 15（**已发布/稳定**，本项目 targetSdk） |
+| `BAKLAWA` | 36 | Android 16（**已正式发布 2025-06-10**，官方常量名） |
+| *Android 17* | *37* | *API 37（**Beta 预览**，代号/常量名官方未定，勿臆测写入代码）* |
 
-> ⚠️ Android 17 代号尚未以最终常量名公开，以官网为准；不要臆测。
+> ⚠️ **前瞻性**：Android 16 (`BAKLAWA`, API 36) 已正式发布，不再是"官网已列"。Android 17 (API 37) 截至 2026-07 处 Beta，官方**未公布**最终代号与常量名（民间指向 "Cinnamon Bun" 但非官方）。详见 §12、§13。
 
 ### 4.5 CPU 信息
 
@@ -372,6 +381,13 @@
 - `LazyColumn` 用稳定 `key` 复用项；`Modifier` 顺序影响（先 `padding`/`clickable` 再 `background`）；**BaselineProfile** 预编译关键路径。
 - `WindowInsets`：`Modifier.imePadding()`、`navigationBarsPadding()`、`systemBarsPadding()`（官方内置，accompanist-insets 已弃用迁移）。
 
+### 8.6 Compose 编译器 ↔ Kotlin 版本耦合（前瞻性）
+
+- **Kotlin ≥ 2.0 起，Compose 编译器已并入 Kotlin 仓库**，版本号 = Kotlin 版本号，通过 `org.jetbrains.kotlin.plugin.compose` Gradle 插件启用，**不再有独立 Compose 编译器版本、也无需核对兼容表**（旧 `composeOptions { kotlinCompilerExtensionVersion }` 已废弃）。
+- **本项目绑定关系**：`Kotlin 2.1.0` → 必须用 **Compose 编译器 `2.1.0`**（即 `id("org.jetbrains.kotlin.plugin.compose") version "2.1.0"`）。升级 Kotlin 到 2.2.x → 编译器 2.2.x；最新 2.4.10 → 编译器 2.4.10。**编译器与 Kotlin 版本必须一致**，否则构建失败。
+- **Material3 版本**：稳定版 `1.4.0`（2026-07-15）；预览 `1.5.0-alpha24`。**Material 3 Expressive** 截至 2026-07 **仍仅以 `ExperimentalMaterial3ExpressiveApi` 形式随 `1.5.0-alphaXX` 演进，未独立稳定、未纳入稳定 BOM**——生产代码勿依赖。
+- ⚠️ **前瞻告警**：自 Compose `1.12.0` 起要求 **compileSdk 37 + AGP 9**（Gradle 9.1 + JDK 17）。若本项目想追最新 BOM `2026.06.00`（含 Compose 1.12.x），必须同步抬升 compileSdk/targetSdk 到 37、AGP 到 9——这是一次**大版本跃迁**，见 §13 行动项 #7。
+
 ---
 
 ## 9. Koin 依赖注入 / DataStore 持久化
@@ -392,6 +408,7 @@
   ```
 - 模块：`module { single<Repo> { RepoImpl() }; viewModel { UserVM(get()) } }`；注入 `private val repo: Repo by inject()` / `get()`。
 - Compose VM：`val vm: UserVM = koinViewModel()`（来自 `koin-androidx-compose`）；导航共享用 `getViewModel()`。
+- 🔮 **kotlinx-coroutines 前瞻**：项目用 `1.8.1`；最新稳定 **`1.11.0`**（2026-05-07），`1.10.2`（2025-04）为与 Kotlin 2.1.0 匹配的稳妥点。`1.10.x` 重组了 `kotlinx-coroutines-debug` 包路径（升级注意）。建议先升到 `1.10.2` 验证兼容，再追 `1.11.0`。
 
 ### 9.2 DataStore
 
@@ -418,6 +435,7 @@
 - `buildToolsVersion`：AGP 通常自动推断。`ndkVersion`：仅含原生代码时需要。
 - `buildTypes`：`debug`/`release`。`isMinifyEnabled` → R8 缩减+混淆；`isShrinkResources` → 移除未引用资源（须先开 minify）。`proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")`。
 - `applicationId`：商店唯一标识（发布后不可改）。`namespace`：生成的 `R`/`BuildConfig` 包名。`versionCode`（整数递增）/`versionName`（展示串）。
+- 🔮 **工具链前瞻**：本项目 AGP **8.6.0**（Kotlin 插件 2.1.0、Compose 插件 2.1.0）。最新 **AGP 9.0.1**（2026-01）需 **Gradle 9.1 + JDK 17**；且 Compose `1.12.0+`/BOM `2026.06.00` 硬性要求 AGP 9。升级工具链属大跃迁，见 §13 #7。
 
 ### 10.2 签名
 
@@ -440,8 +458,9 @@
 
 ### 10.5 Compose BOM / BaselineProfile
 
-- **BOM**：`platform("androidx.compose:compose-bom:2024.12.01")` 统一 Compose 库版本（编译器不在 BOM 内）。
+- **BOM**：`platform("androidx.compose:compose-bom:2024.12.01")` 统一 Compose 库版本（**编译器自 Kotlin 2.0 起已并入 Kotlin，不在 BOM 内**，见 §8.6）。
 - **BaselineProfile**：`BaselineProfileRule`（Macrobenchmark）`collect()` 采集；`./gradlew app:generateBaselineProfile`；`profileinstaller` 于安装/首启写入。建议 release `isMinifyEnabled=true`（AGP 8.2+ R8 重写规则）。收益：首次启动代码执行 ~30% 提速，Startup Profiles 再 +~15%。
+- 🔮 **BOM 前瞻**：最新稳定 BOM **`2026.06.00`**（官方示例已用），对应 Compose `1.12.x`，**需 compileSdk 37 + AGP 9**（见 §13 #7）。Material3 稳定版 `1.4.0`，Material 3 Expressive 仍未稳定（§8.6）。
 
 ---
 
@@ -471,14 +490,63 @@
 
 ## 12. 各 API 级别行为变更（对监控类 App 的影响）
 
-> 来源：[Android 13 行为变更](https://developer.android.com/about/versions/13/behavior-changes-13) · [Android 14](https://developer.android.com/about/versions/14/behavior-changes-14) · [Android 12](https://developer.android.com/about/versions/12/behavior-changes-12) · [Android 11](https://developer.android.com/about/versions/11/behavior-changes-11)
+> 来源：[Android 11](https://developer.android.com/about/versions/11/behavior-changes-11) · [12](https://developer.android.com/about/versions/12/behavior-changes-12) · [13](https://developer.android.com/about/versions/13/behavior-changes-13) · [14](https://developer.android.com/about/versions/14/behavior-changes-14) · [15](https://developer.android.com/about/versions/15) · [16](https://developer.android.com/about/versions/16) · [17](https://developer.android.com/about/versions/17) · [非 SDK 限制](https://developer.android.com/guide/app-compatibility/restrictions-non-sdk-interfaces) · [non-sdk-16](https://developer.android.com/about/versions/16/changes/non-sdk-16)
 
+### 12.1 已发布版本（本项目需重点关注）
+
+- **API 31 (Android 12)**：`SCHEDULE_EXACT_ALARM` 精确闹钟权限（设置→特殊应用访问→闹钟和提醒）；后台启动 FGS 受限；通知 trampoline 被禁；**应用休眠**（数月不交互权限自动重置）。
 - **API 33 (Android 13)**：`POST_NOTIFICATIONS` 运行时权限（拒绝后前台服务通知不显示在抽屉，仍显示在任务管理器）；`NEARBY_WIFI_DEVICES` 取代 Wi-Fi 定位权限；细粒度媒体权限。
 - **API 34 (Android 14)**：前台服务**必须**声明 `android:foregroundServiceType`（`FGS_TYPE_DATA_SYNC` 等，新增 `health`/`remoteMessaging`/`shortService`/`specialUse`/`systemExempted`），否则崩溃；JobScheduler 须 `ACCESS_NETWORK_STATE`。
-- **API 31 (Android 12)**：`SCHEDULE_EXACT_ALARM` 精确闹钟权限（设置→特殊应用访问→闹钟和提醒）；后台启动 FGS 受限；通知 trampoline 被禁；**应用休眠**（数月不交互权限自动重置）。
+- **API 35 (Android 15，本项目 targetSdk)**：
+  - **Edge-to-edge 强制**：`statusBarColor`/`navigationBarColor`(手势)/`setDecorFitsSystemWindows` **废弃并失效**，默认全面屏；仪表盘/悬浮读数须用 `WindowInsets` 避让状态栏/挖孔。
+  - **前台服务类型收紧**：新增 `mediaProcessing`（6h/24h 上限、`BOOT_COMPLETED` 不可启动）；`dataSync` 同 6h 上限且开机不可拉起 → 后台同步健康数据须换 `WorkManager`。
+  - **OpenJDK 核心库对齐**：`SequencedCollection`/`List.removeFirst()` 与 Kotlin 冲突易 `NoSuchMethodError`（**minSdk≤34 须用 `removeAt(0)`**）；`String.format` 更严、`Arrays.asList().toArray()` 返回 `Object[]`。
+  - **停止态（Force Stop）**：进入 stopped 即取消**所有 PendingIntent**、禁用小组件；`ApplicationStartInfo.wasForceStopped()` 可诊断。
+  - **预测性返回**：开发者选项移除，已 opt-in 应用显示系统动画。
+- **API 36 (Android 16，已正式发布 2025-06-10)**：
+  - **ART 运行时更新**（Play System 推送到 12+）：依赖内部 ART 结构/非 SDK 的库可能崩溃。
+  - **隐私/安全加固**：默认防御 Intent 重定向攻击；Companion 应用不再收到 `RESULT_DISCOVERY_TIMEOUT`（位置隐私）。
+  - **🔴 健康权限迁移（target 36）**：`BODY_SENSORS`/`BODY_SENSORS_BACKGROUND` 被 `android.permission.health.*`（如 `READ_HEART_RATE`、`READ_HEALTH_DATA_IN_BACKGROUND`）取代；`FOREGROUND_SERVICE_TYPE_HEALTH` 需对应健康权限；**移动端须声明隐私政策 Activity，否则权限被撤**。本项目心率/体温卡片须迁移。
+  - **大屏自适应强制（target 36）**：`sw≥600dp` 上 `screenOrientation`/`resizableActivity`/`setRequestedOrientation()` **被忽略**，应用填满窗口；临时退路 `PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY`（**API 37 移除**）。
+  - **Edge-to-edge 退路移除**：`windowOptOutEdgeToEdgeEnforcement` 废弃并失效（target 36 不可退出）。预测性返回默认开启（可 `enableOnBackInvokedCallback=false` 退出）。
+  - **废弃/移除**：`setImportantWhileForeground` 忽略（`isImportantWhileForeground()` 返 false）；`announceForAccessibility`/`TYPE_ANNOUNCEMENT` 废弃；`MediaStore.getVersion()` 改为应用唯一串；`scheduleAtFixedRate` 最多补 1 次。
+
+### 12.2 前瞻版本（Beta / 路线图）
+
+- **API 37 (Android 17，Beta 预览)**：
+  - **IME 可见性**：旋转/配置变更未处理时不再恢复键盘，须显式请求。
+  - **隐私/安全**：SMS OTP（WebOTP）对非目标应用延迟 3 小时；每应用 Keystore 上限 **5 万键**（target 37+，超限 `ERROR_TOO_MANY_KEYS`）；跨 Profile 回环流量默认拒绝；`usesCleartextTraffic` 计划废弃；隐式 URI 授权将于 **Android 18** 移除（17 起 `StrictMode.detectImplicitUriPermissionGrant()` 可探测）。
+  - **后台音频硬化（target 37）**：前台服务需 `while-in-use` 能力（精确闹钟+`USAGE_ALARM` 除外），否则静默失败。
+  - 健康/传感器、非 SDK 限制：官方页未明确 → **未定/待发布**。
+- **Google Play targetSdk 要求时间线**：
+  - **2026-08-31 起**：新应用/更新须 **target API 36（Android 16）+**；既有应用须 **target API 35+** 才能触达更高系统新用户（Wear/Auto 35+，TV/XR 34+）。
+  - 可申延至 **2026-11-01**。
+  - **本项目压力**：`targetSdk 35` 目前仍能服务新用户，但 **2026-08-31 后提交更新必须升到 36**——需在此前完成健康权限迁移、大屏自适应、edge-to-edge、预测性返回改造（见 §13）。
+- **非 SDK 接口限制演进**：分黑名单/深灰/浅灰名单，每版持续收紧。`android.os.SystemProperties`（@hide 隐藏 API，本项目 SoC 识别反射调用）属非 SDK，受 `greylist-max-*` 约束，随版本升级逐步不可访问；建议改用公开替代（`Build` 字段、`DeviceConfig` 或申请公开 API），并接入 StrictMode/veridex 检测。Android 16 已更新受限列表（[non-sdk-16](https://developer.android.com/about/versions/16/changes/non-sdk-16)）。
 - **包可见性 `<queries>`**（API 30+）：跨包查询被过滤，须显式声明。
 - **Scoped Storage**（API 29 / 强制 30）：外部存储仅限应用专属目录+媒体；读系统文件（sysfs/proc）通常**不需**存储权限，但受 SELinux/文件读权限约束（官网未专门说明）。
 - **后台限制**（API 29+）：后台启动 Activity 受限；受限电池状态不投递 `BOOT_COMPLETED`——监控类需求应结合前台服务或 `setExactAndAllowWhileIdle`（受 9 分钟限频）。
+
+---
+
+## 13. 版本前瞻与升级路线图（本项目行动项）
+
+> 基于 §0–§12 的前瞻性结论，汇总本项目需在 2026 年内落地的升级动作。优先级：🔴 阻塞商店更新 / 🟠 强相关 / 🟡 可选。
+
+| # | 优先级 | 事项 | 触发条件 | 影响范围 |
+|---|--------|------|----------|----------|
+| 1 | 🔴 | **targetSdk 35 → 36** | 2026-08-31 商店更新硬性要求（可延 2026-11-01） | 全量；触发 §12.1 全部 36 变更 |
+| 2 | 🔴 | **健康权限迁移** `BODY_SENSORS` → `android.permission.health.READ_HEART_RATE` 等 + 隐私政策 Activity | target 36 | 心率/体温传感器卡片 |
+| 3 | 🟠 | **Edge-to-edge 改造**：移除 `setDecorFitsSystemWindows`、用 `WindowInsets` 避让状态栏/挖孔 | target 35 已强制、36 退路移除 | 概览/详情页全屏布局 |
+| 4 | 🟠 | **大屏自适应**：`sw≥600dp` 下 `screenOrientation` 失效，需响应式布局 | target 36 | 平板/折叠屏 |
+| 5 | 🟠 | **预测性返回**：接入 `OnBackInvokedCallback` | target 35+ 默认开启 | 返回手势 |
+| 6 | 🟡 | **Kotlin 2.1.0 → 2.2.x/2.4.x**：改用 `org.jetbrains.kotlin.plugin.compose`，删旧 `kotlinCompilerExtensionVersion` | 追最新语言特性 | 全工程（编译器一致） |
+| 7 | 🟡 | **Compose BOM 2024.12.01 → 2026.06.00**：需 compileSdk 37 + AGP 9 + Gradle 9.1 + JDK 17 | 升 BOM 前 | Compose 全部 |
+| 8 | 🟡 | **kotlinx-coroutines 1.8.1 → 1.10.2/1.11.0** | 追 bug 修复 | 协程层 |
+| 9 | 🟡 | **非 SDK 依赖替换**：`SystemProperties` 反射 → 公开 `Build`/`DeviceConfig` 或申请 API | 长期抗版本收紧 | SoC 识别 |
+| 10 | 🟡 | **非 SDK 检测**：接入 StrictMode / veridex 定期扫描 | 持续 | 全工程健壮性 |
+
+> **升级顺序建议**：先在不升 targetSdk 的前提下做 Kotlin/Compose/BOM 库版本升级（低风险）→ 再做 edge-to-edge / 预测性返回 / 大屏自适应（target 35 已部分强制）→ 最后冲 targetSdk 36 + 健康权限迁移（绑定 2026-08-31 deadline）。每一步单独验证、单独提交。
 
 ---
 
@@ -493,10 +561,11 @@
 | 内存 | [MemoryInfo](https://developer.android.com/reference/android/app/ActivityManager.MemoryInfo) · [ActivityManager](https://developer.android.com/reference/android/app/ActivityManager) · [Debug](https://developer.android.com/reference/android/os/Debug) |
 | 传感器 | [传感器概览](https://developer.android.com/guide/topics/sensors/sensors_overview) · [SensorManager](https://developer.android.com/reference/android/hardware/SensorManager) · [Sensor](https://developer.android.com/reference/android/hardware/Sensor) |
 | 权限 | [请求权限](https://developer.android.com/training/permissions/requesting) · [使用说明](https://developer.android.com/training/permissions/usage-notes) |
-| Compose/M3 | [Material3](https://developer.android.com/develop/ui/compose/designsystems/material3) · [主题](https://developer.android.com/develop/ui/compose/theme) · [动态取色](https://developer.android.com/develop/ui/compose/designsystems/material3#dynamic-color) · [性能](https://developer.android.com/develop/ui/compose/performance) |
-| Koin/DataStore | [Koin Android](https://insert-koin.io/docs/quickstart/android) · [DataStore](https://developer.android.com/topic/libraries/architecture/datastore) · [ViewModel Compose](https://developer.android.com/topic/libraries/architecture/viewmodel#compose) |
-| 构建/签名 | [配置模块](https://developer.android.com/build/configure-app-module) · [缩减](https://developer.android.com/build/shrink-code) · [脱糖](https://developer.android.com/studio/write/java8-support) · [BaselineProfile](https://developer.android.com/topic/performance/baselineprofiles) · [签名](https://developer.android.com/studio/publish/app-signing) |
+| Compose/M3 | [Material3](https://developer.android.com/develop/ui/compose/designsystems/material3) · [主题](https://developer.android.com/develop/ui/compose/theme) · [动态取色](https://developer.android.com/develop/ui/compose/designsystems/material3#dynamic-color) · [性能](https://developer.android.com/develop/ui/compose/performance) · [Compose 编译器](https://developer.android.com/develop/ui/compose/compiler) · [BOM](https://developer.android.com/develop/ui/compose/bom) · [WindowInsets](https://developer.android.com/develop/ui/compose/layouts/insets) |
+| Kotlin 版本 | [Releases](https://kotlinlang.org/docs/releases.html) · [What's new 2.2](https://kotlinlang.org/docs/whatsnew22.html) · [Context Parameters](https://kotlinlang.org/docs/context-parameters.html) |
+| Koin/DataStore | [Koin Android](https://insert-koin.io/docs/quickstart/android) · [Koin Compose](https://insert-koin.io/docs/quickstart/android-compose/) · [DataStore](https://developer.android.com/topic/libraries/architecture/datastore) · [ViewModel Compose](https://developer.android.com/topic/libraries/architecture/viewmodel#compose) |
+| 构建/签名 | [配置模块](https://developer.android.com/build/configure-app-module) · [缩减](https://developer.android.com/build/shrink-code) · [脱糖](https://developer.android.com/studio/write/java8-support) · [BaselineProfile](https://developer.android.com/topic/performance/baselineprofiles) · [签名](https://developer.android.com/studio/publish/app-signing) · [AGP 9.0](https://developer.android.com/build/releases/agp-9-0-0-release-notes) |
 | i18n | [每应用语言](https://developer.android.com/guide/topics/resources/app-languages) · [本地化](https://developer.android.com/guide/topics/resources/localization) |
-| 行为变更 | [13](https://developer.android.com/about/versions/13/behavior-changes-13) · [14](https://developer.android.com/about/versions/14/behavior-changes-14) · [12](https://developer.android.com/about/versions/12/behavior-changes-12) · [11](https://developer.android.com/about/versions/11/behavior-changes-11) |
+| 版本/行为变更 | [11](https://developer.android.com/about/versions/11/behavior-changes-11) · [12](https://developer.android.com/about/versions/12/behavior-changes-12) · [13](https://developer.android.com/about/versions/13/behavior-changes-13) · [14](https://developer.android.com/about/versions/14/behavior-changes-14) · [15](https://developer.android.com/about/versions/15) · [16](https://developer.android.com/about/versions/16) · [17](https://developer.android.com/about/versions/17) · [非 SDK 限制](https://developer.android.com/guide/app-compatibility/restrictions-non-sdk-interfaces) · [non-sdk-16](https://developer.android.com/about/versions/16/changes/non-sdk-16) · [Play targetSdk](https://developer.android.com/distribute/best-practices/develop/target-sdk) |
 
-> 本知识包为单一事实源，关键结论（尤其 §1.2 `BATTERY_PROPERTY_CAPACITY` 系百分比、§10.4 脱糖不覆盖 `Process.waitFor(timeout)`、§6.4 常量精确值）已与官方/AOSP 核对。开发前先查对应章节，避免凭经验臆测。
+> 本知识包为单一事实源，关键结论（尤其 §1.2 `BATTERY_PROPERTY_CAPACITY` 系百分比、§10.4 脱糖不覆盖 `Process.waitFor(timeout)`、§6.4 常量精确值）已与官方/AOSP 核对；前瞻性章节（§0 前瞻摘要、§4.4、§8.6、§12.2、§13）基于 2026-07 最新官方信息整理，Beta/路线图项已标注「未定/预览」。开发前先查对应章节，避免凭经验臆测。
