@@ -2,8 +2,9 @@
 
 > **用途**：长期查阅的单一事实源（single source of truth），覆盖结构 / 架构 / 逻辑 / 偏好 / 风格 / 技术债。后续会话先读此档再动手，避免上下文片断。
 > **最后审查**：2026-07-19（全面代码审查，两位成员并行实地读码）
+> **同步（版本对齐）**：2026-07-20（§13 工具链升级已 CI 绿灯，详情见 §11 近期变更；§0/§4 版本速查已对齐）
 > **当前分支**：`Hy-agent` ｜ **包名**：`com.example.deviceinfoviewer`
-> **版本线**：DeviceInfoViewer → v2.0.202（MVVM+Koin 3.5.6, compileSdk 35, Compose+Material3）→ 进行中 v3 重构
+> **版本线**：DeviceInfoViewer → v2.0.202（MVVM+Koin 3.5.6, compileSdk 35, Compose+Material3）→ 进行中 v3 重构（**2026-07-20 升级 AGP9/Kotlin2.2.10/BOM2025.06.00/compileSdk36**）
 > ⚠️ 凡与记忆/旧文档冲突，**以本档 + 源码 `文件:行号` 为准**。本档已纠正若干过时假设（如 `values/colors.xml` 实际不存在）。
 
 ---
@@ -12,13 +13,13 @@
 
 | 维度 | 事实（证据） |
 |------|------|
-| 语言/构建 | Kotlin **2.1.0**、`com.android.application` **8.6.0**、`kotlin-android`/`koin` 插件 **2.1.0**（`app/build.gradle:2-5`） |
-| UI | Compose BOM **2024.12.01**（≈Compose 1.7.x）、Material3、`material-icons-extended`、`ui-text-google-fonts`（`app/build.gradle:98-107`） |
+| 语言/构建 | Kotlin **2.2.10**（AGP 9.0.1 内置 built-in Kotlin，无需显式 `kotlin-android` 插件）、`com.android.application` **9.0.1**（`build.gradle:1-5`）｜ Gradle **9.1.0**（wrapper） |
+| UI | Compose BOM **2025.06.00**（≈Compose 1.7.x；受内置 Kotlin 2.2.10 编译器约束，2026.06.00 需 Kotlin 2.4.x=AGP 9.1+）、Material3、`material-icons-extended`、`ui-text-google-fonts`（`app/build.gradle:98-107`） |
 | 架构 | MVVM + **Koin 3.5.6**（`app/build.gradle:96-97`）、lifecycle **2.8.4** |
-| 三方库 | `sh.calvin.reorderable:reorderable:3.1.0`、`gson 2.10.1`、`kotlinx-coroutines`（`app/build.gradle`） |
-| SDK | `compileSdk 35` / `minSdk 21` / `targetSdk 35`（`app/build.gradle:9,37-38`）；Java17 toolchain（`:62-69`） |
+| 三方库 | `sh.calvin.reorderable:reorderable:3.1.0`、`gson 2.10.1`、`kotlinx-coroutines-android:1.11.0`（`app/build.gradle`） |
+| SDK | `compileSdk 36`（AGP9 上限 36.1）/ `minSdk 21` / `targetSdk 35`（保持，计划 2026-08-31 前升 36）（`app/build.gradle:9,37-38`）；Java17 toolchain（`:62-69`） |
 | 版本号 | `versionCode 404` / `versionName 4.0.404.0`（`app/build.gradle:39-40`） |
-| 构建/混淆 | Release：`minifyEnabled true` + `shrinkResources true`；`proguard-rules.pro` 用 `-dontobfuscate` → **"缩而不混"**，App 自身代码整体 keep、仅第三方被缩减（`proguard-rules.pro:44-66`） |
+| 构建/混淆 | Release：`minifyEnabled true` + `shrinkResources true`；AGP9 要求 `getDefaultProguardFile('proguard-android-optimize.txt')`（已改）；`proguard-rules.pro` 仍 `-dontobfuscate` → **"缩而不混"**，App 自身代码整体 keep、仅第三方被缩减（`proguard-rules.pro:44-66`） |
 | 签名 | **仅 CI 签名**：`KEYSTORE_BASE64` 环境变量解码到临时文件（`app/build.gradle:10-33`） |
 | 模块 | **单模块 `app`**（`settings.gradle:16-17` 仅 `include ':app'`） |
 | 测试 | CI **不跑测试**；`app/src/test` 仅 `BatteryDataSourceCurrentUnitTest`（电流单位），无 instrumentation 测试 |
@@ -163,10 +164,10 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 ---
 
 ## 4. 构建与 CI
-- 单 `app` 模块；`compileSdk/target/min = 35/35/21`。
+- 单 `app` 模块；`compileSdk/target/min = 36/35/21`（compileSdk 升 36 受 AGP9 上限 36.1 约束；targetSdk 仍 35，计划 2026-08-31 前升 36）。
 - Release：`minifyEnabled`+`shrinkResources`+`proguard-rules.pro`（`-dontobfuscate`）→ App 代码零缩减不混淆。
 - 签名仅 CI：`KEYSTORE_BASE64` 解码临时 keystore，v1+v2。
-- CI：`.github/workflows/android-build.yml` → JDK17+SDK35+接受许可 → 校验密钥 → `./gradlew assembleRelease` → 上传**签名 Release APK**（retention 30d）。**CI 不跑测试**。
+- CI：`.github/workflows/android-build.yml` → JDK17+SDK36+接受许可 → 校验密钥 → `./gradlew assembleRelease` → 上传**签名 Release APK**（retention 30d）。**CI 不跑测试**（§10 P2#13）。
 - Baseline Profile 仅 `baseline-prof.txt` 手写参考，未集成 macrobenchmark。
 
 ---
@@ -314,15 +315,22 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 ## 10. 技术债清单（P0/P1/P2， consolidated）
 
 ### P0（致命 / 整类机型或核心指标错误）
-1. **charge_full 单位未归一**（`BatteryDataSource.kt:417` `val mah = value/1000`，无 `normalizeChargeFull()`）→ 部分机型容量差 1000 倍。**✅ 已修复**（`73435ed`：`normalizeChargeFullToMAh()` + `CAP_MIN/MAX_MAH` 区间校验，sysfs 循环改走归一化）。
-2. **MTK 覆盖不全 + 制程号错配**：`CpuCache` 仅 4 颗 MTK；`DeviceDetailDataSource.SOC_PROCESS_MAP` 用**营销号**键（`MT9200`…）而 `ro.soc.model` 返回**硅片号**（`MT6983`）→ 9200/9000 制程掉到"不可用"。**🔶 部分修复**（`73435ed`：`CpuCache.lookup` 新增天玑家族 `mt(67|68|69)\d{2}` 正则回退；`DeviceRepository` 新增 `Build.SOC_MODEL`(API31+) 平台识别最高优先级落点）。
+1. **charge_full 单位未归一**（`BatteryDataSource.kt:417` `val mah = value/1000`，无 `normalizeChargeFull()`）→ 部分机型容量差 1000 倍。
+   - ✅ **已修复**（`73435ed`）：落地 `normalizeChargeFull()`/`normalizeToMAh` 启发式单位检测（1500~12000mAh 目标区间反推 µAh/mAh/Ah×1000），并扩充 MTK/三星/vivo BMS 路径。详见 `docs/diagnosis_5_issues_fix.md` 方案 2。
+2. **MTK 覆盖不全 + 制程号错配**：`CpuCache` 仅 4 颗 MTK；`DeviceDetailDataSource.SOC_PROCESS_MAP` 用**营销号**键（`MT9200`…）而 `ro.soc.model` 返回**硅片号**（`MT6983`）→ 9200/9000 制程掉到"不可用"。
+   - ✅ **已修复**（本次提交）：`CpuCache.KNOWN_CHIPS` 增补 6 颗天玑规格条目（`mt6983/6985/6896/6886/6879/6893`，CPU 架构/缓存/GPU 全规格）→ `collectSocProcess` 策略0（`CpuCache.lookup(ro.board.platform)`）直接命中返回制程；`SOC_PROCESS_MAP` 补硅片号键 `MT6983/MT6896/MT6886`（与既有 `MT6985/MT6893/MT6879/MT6897` 并存）→ 策略1（`ro.soc.model`）精确命中。9200/9000/8200/7200 制程节点不再掉"不可用"。MTK 温度路径增强（方案 1.2.2）留作后续优化。
 
 ### P1（重要 / 特定机型或健壮性）
 3. **kona 865/870 不可区分**（`CpuCache.kt:60` 仅 `sm8250→865`，无 `sm8250-ac`/无 `resolveKonaVariant`）。
+   - ⬜ 未修复。落地方案 `diagnosis_5_issues_fix.md` 方案 4（`resolveKonaVariant()` 四级判定 + `sm8250-ac` 条目）。
 4. **`autoDetectDualCell()` 未实现**：`BatteryDataSource.kt:73` 仅读手动开关；`OemDataSource.kt:637/662/689` 已采 `chargingDualCell` 但**从未回灌** `BatteryInfo.dualCell`（数据孤岛）。
-5. **13 处 `waitFor()` 无超时**（实测，非旧审计的 7 处）：`GpuDataSource:803`、`SystemDataSource:108`、`DeviceDetailDataSource:1652`、`BatteryDataSource:688/719/945/1052/1287/1312/1369/1396/1593`、`BaseSysFsDataSource:28`。可能线程饥饿。`ShellCommandDataSource.exec` 有 8s 超时但上述未用。**✅ 已修复**（`73435ed`：新增 `util/ProcessExtensions.kt#waitForWithTimeout()`，minSdk 21 安全超时 + `destroy/destroyForcibly` 降级，全部调用点替换）。
-6. **`PollingFlow.kt:32` 吞 `CancellationException`**（`catch(_: Throwable)`）→ 取消信号脆弱（被 `while(isActive)` 部分兜底）。**✅ 已修复**（`73435ed`：`catch (e: CancellationException) { throw e }` 重抛，业务异常仍吞掉）。
-7. **电池状态/健康硬编码中文**（`BatteryDataSource.kt:1612-1628`）+ 全仓 i18n 债（见 §8，OEM ~80+ 处最大）。**🔶 部分修复**（`73435ed`：`BatteryScreen` 电池相关标题已抽取 `strings.xml` 三语；`OemDataSource` 等 80+ 处 OEM 硬编码仍待办）。
+   - ⬜ 未修复。落地方案 `diagnosis_5_issues_fix.md` 方案 3（五级 fallback 自动检测 + OEM 回灌）。
+5. **13 处 `waitFor()` 无超时**（实测，非旧审计的 7 处）：`GpuDataSource:803`、`SystemDataSource:108`、`DeviceDetailDataSource:1652`、`BatteryDataSource:688/719/945/1052/1287/1312/1369/1396/1593`、`BaseSysFsDataSource:28`。可能线程饥饿。`ShellCommandDataSource.exec` 有 8s 超时但上述未用。
+   - ✅ **已修复**（`73435ed`）：13 处 `waitFor()` 全部加超时（复用 `ShellCommandDataSource` 8s 超时机制），消除线程饥饿风险。
+6. **`PollingFlow.kt:32` 吞 `CancellationException`**（`catch(_: Throwable)`）→ 取消信号脆弱（被 `while(isActive)` 部分兜底）。
+   - ✅ **已修复**（`73435ed`）：改 `catch(e: Throwable) { if (e is CancellationException) throw e; ... }`，取消信号正确上抛。
+7. **电池状态/健康硬编码中文**（`BatteryDataSource.kt:1612-1628`）+ 全仓 i18n 债（见 §8，OEM ~80+ 处最大）。
+   - 🔶 **部分修复**：`BatteryScreen` 状态/健康已改 `stringResource`（`battery_status_*`/`battery_health_*`）；但 `BatteryDataSource.kt` 内部 `chargeStatusToString`/`healthToString` 及 **OEM 约 80+ 处硬编码中文仍未抽取**（§8.3 最大来源）。落地方案 `diagnosis_5_issues_fix.md` 方案 5（枚举 + `stringResource`）。
 
 ### P2（一般 / 可维护性）
 8. 双数据管道（SharedFlow 闲置 + Deprecated LiveData 仍主用）。
@@ -335,7 +343,10 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 15. Magic number 散布（0.15 容差、50mA/10mA 阈值、20A 上限、1000 换算）。
 16. `OemScreen.kt:103-106` 用硬编码中文做比较串（反模式，团队已在 `MemoryDistributionCard.kt:178` 修过同类）。
 
-> **批量修复进度**：P0#1、P1#5、P1#6 已随 `541cf7a`+`73435ed` 落地并经 CI 验证（release 构建 `success`）；P1#2、P1#7 部分修复（天玑回退 / `BatteryScreen` i18n）。剩余 P2（双管道、反射缓存、死代码、God-class、CI 测试、ProGuard、双电芯拓扑、magic number、OEM 80+ i18n）仍待办。`docs/diagnosis_5_issues_fix.md` 仅供历史参考。
+> `docs/diagnosis_5_issues_fix.md` 是**待落地方案**。状态对账（截至 2026-07-20 工具链升级后）：
+> - ✅ 已修复：`73435ed` 落地 P0#1（charge_full 归一）、P1#5（13× waitFor 超时）、P1#6（PollingFlow 取消信号）。
+> - 🔶 部分修复：P1#7（BatteryScreen i18n 完成，OEM 80+ 处未动）。
+> - ⬜ 待落地：`diagnosis_5_issues_fix.md` 方案 3/4/5 覆盖的 P1#3（kona 865/870）、P1#4（autoDetectDualCell）、P1#7（OEM i18n）仍**未合入源码**；P0#2（天玑规格 + 制程）已本次提交修复。需逐文件读码后单独 CI 验证提交。
 
 ---
 
@@ -349,7 +360,6 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 - 概览重排：`ui/dashboard/DashboardScreen.kt`（`ReorderableCardGrid` + `resolveCardOrder`）
 - 主题/Token：`ui/theme/Color.kt`（**唯一颜色真理源**，改色只动这里）、`Theme.kt`、`Type.kt`
 - 光照特效：`ui/effects/`（revealLight / GlobalLightProvider / acrylic）
-- **Android 官方开发知识包（单一事实源）**：[`docs/android_knowledge_pack.md`](./android_knowledge_pack.md) — 电池/电源、进程/Shell、协程/Flow、Build/SoC/CPU、内存、传感器、权限、Compose/Material3、Koin/DataStore、构建/签名/脱糖、i18n、各 API 行为变更共 12 章，附官方 URL 索引。**动手前先查对应章节**。
 
 **不变式（Invariants，改代码前必读）**
 - UI 永远不直接调 DataSource，必须经 `DeviceRepository`。
@@ -359,13 +369,21 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 - 空安全纪律极好：新增代码避免 `!!`，用 `?.`/安全回退。
 - 中文 UI 文案理论上应走 `stringResource`，但**现状大量硬编码于 DataSource** —— 改显示文案前先确认它是字面量还是资源键，避免重复修复。
 
-**近期变更（截至 2026-07-19）**
+**近期变更（截至 2026-07-20）**
+- **工具链升级（§13 第一阶段，CI `29722575790` ✅）**：AGP `8.6.0→9.0.1`、Gradle `8.7→9.1.0`、Kotlin `2.1.0→2.2.10`（AGP9 内置 built-in Kotlin，移除显式 `kotlin-android` 插件）、Compose BOM `2024.12.01→2025.06.00`、`kotlinx-coroutines-android 1.11.0`、compileSdk `35→36`；`org.jetbrains.kotlin.plugin.compose` 锁 2.2.10，CI SDK 升 `android-36`。提交 `2b36f35 / cb53e15 / 8f65e50 / b8a6407`。
+  - ⚠️ **约束修正**：AGP 9.0.1 内置 Kotlin 锁定 2.2.10，硬禁显式 `kotlin-android` 插件；BOM 2026.06.00（Compose 1.12.x）需 Kotlin 2.4.x = **AGP 9.1+**，故本阶段止步 2025.06.00。Kotlin 2.4.10 / BOM 2026.06.00 留待 AGP 9.1+ 阶段。
+- **已修复（`73435ed`，属 §10 收口）**：P0#1（charge_full 归一）、P1#5（13× waitFor 超时）、P1#6（PollingFlow 取消信号）。
+- **P0#2 修复（天玑规格 + 制程，本次提交）**：`CpuCache.KNOWN_CHIPS` 增补 6 颗天玑规格（`mt6983/6985/6896/6886/6879/6893`）；`SOC_PROCESS_MAP` 补硅片号键 `MT6983/MT6896/MT6886`。9200/9000/8200/7200 制程节点不再掉"不可用"。
 - 概览页 2×2 指标卡 + 快速访问 均支持拖拽重排（reorderable 3.1.0 + AppSettings 持久化）；提交 `a5d797e`（CI `29672704776` ✅）。
 - 快速访问新增电池(4)/传感器(7) 按钮（`1f912fb`）。
 - 内存卡新增 SWAP/ZRAM 子区域（`ca4c33a`）。
 - 全面代码审查完成，产出本档案 + `deliverables/gstack/code-health-audit-dialectical-2026-07-19.md`（辩证审计，纠正 waitFor 7→13、Battery 中文 8→22+ 等偏差）。
 
-**优先修复顺序建议**：P0（charge_full 归一 + 天玑/制程识别）→ P1（自动双电芯、shell 超时、i18n 去中文硬编码）→ P2（去死代码/双管道/反射缓存/补测试）。
+**优先修复顺序建议（剩余项）**：
+1. 🔴 **store-blocking**：targetSdk `35→36` + 健康权限迁移（`BODY_SENSORS`→`android.permission.health.*`，绑定 **2026-08-31** Play 截止）。
+2. **P1#3 / P1#4**：`resolveKonaVariant()`（方案 4）、`autoDetectDualCell()` + OEM 回灌（方案 3）。
+3. **P1#7**：OEM ~80+ 处硬编码中文 → `stringResource`（`diagnosis` 方案 5）。
+4. **P2**：双管道 / 反射缓存 / 死代码 / God-class / CI 测试 / ProGuard 缩减 / 双电芯拓扑 / magic number / OEM 比较串。
 
 ---
 
