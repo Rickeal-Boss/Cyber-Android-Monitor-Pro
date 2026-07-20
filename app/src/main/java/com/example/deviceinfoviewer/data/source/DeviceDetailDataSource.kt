@@ -116,7 +116,10 @@ class DeviceDetailDataSource(private val context: Context) {
             // ═══════════════════════════════════════════
             "MT9400" to "3nm TSMC N3E",     // Dimensity 9400 (2024)
             "MT9300" to "4nm TSMC N4P",     // Dimensity 9300 (2023)
-            "MT9200" to "4nm TSMC N4P",     // Dimensity 9200 (2022)
+            "MT9200" to "4nm TSMC N4P",     // Dimensity 9200 (2022) — 营销号别名
+            "MT6983" to "4nm TSMC N4P",     // Dimensity 9200 (2022) — 硅片号 (ro.soc.model 实际返回)
+            "MT6896" to "4nm TSMC N4P",     // Dimensity 8200 (2022) — 硅片号
+            "MT6886" to "4nm TSMC N4P",     // Dimensity 7200 (2023) — 硅片号
             "MT6989" to "4nm TSMC N4P",     // Dimensity 9000+ (2022)
             "MT6985" to "4nm TSMC N4",      // Dimensity 9000 (2022)
             "MT6897" to "4nm TSMC N4",      // Dimensity 8300 (2023)
