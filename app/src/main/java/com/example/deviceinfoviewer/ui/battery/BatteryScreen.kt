@@ -82,6 +82,8 @@ fun BatteryScreen(
     val nowCap = batteryInfo?.effectiveChargeFullMAh?.takeIf { it > 0 }
     val capSource = batteryInfo?.chargeFullSource?.takeIf { it.isNotEmpty() && it != "无法获取" }
     val counter = batteryInfo?.chargeCounterUAh?.takeIf { it > 0 }
+    // 通过容量预估的电量百分比 (chargeCounter ÷ chargeFull)
+    val estLevel = batteryInfo?.capacityEstimatedLevelPercent?.takeIf { it >= 0 }
     val cycleCount = batteryInfo?.cycleCount?.takeIf { it >= 0 }
     val cycleSource = batteryInfo?.cycleCountSource?.takeIf { it.isNotEmpty() && it != "无法获取" }
     val health = batteryInfo?.health?.takeIf { it.isNotEmpty() } ?: stringResource(R.string.battery_health_unknown)
@@ -176,15 +178,28 @@ fun BatteryScreen(
             ) { }
         }
 
-        // === 电池容量详情 ===
-        if (nowCap != null || designCap != null) {
+        // === 电池容量详情 (设计容量 / 额定容量) ===
+        // 设计容量: charge_full_design (出厂标称)；额定容量: charge_full (当前满充)
+        if (designCap != null) {
             MetricCard(
-                title = "Battery capacity",
-                value = "${nowCap ?: "?"} mAh",
+                title = stringResource(R.string.battery_design_capacity_title),
+                value = "$designCap mAh",
+                valueColor = NeonPurpleBright,
+                subtitle = capSource ?: ""
+            ) { }
+        }
+
+        if (nowCap != null) {
+            MetricCard(
+                title = stringResource(R.string.battery_rated_capacity_title),
+                value = "$nowCap mAh",
                 valueColor = NeonPurpleBright,
                 subtitle = buildString {
-                    if (designCap != null) append(stringResource(R.string.battery_design_capacity_format, designCap))
-                    if (capSource != null) append("  ·  $capSource")
+                    if (estLevel != null) append(stringResource(R.string.battery_capacity_estimate_format, estLevel))
+                    if (capSource != null) {
+                        if (estLevel != null) append("  ·  ")
+                        append(capSource)
+                    }
                 }
             ) { }
         }

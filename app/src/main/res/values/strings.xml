@@ -450,6 +450,9 @@
     <string name="battery_health_title">Battery Health</string>
     <string name="battery_capacity_title">Battery Capacity</string>
     <string name="battery_design_capacity_format">Design Capacity: %1$d mAh</string>
+    <string name="battery_design_capacity_title">Design Capacity</string>
+    <string name="battery_rated_capacity_title">Rated Capacity</string>
+    <string name="battery_capacity_estimate_format">Estimate via capacity: %1$d%%</string>
     <string name="battery_cycle_count_title">Cycle Count</string>
     <string name="battery_cycle_count_value">%1$d cycles</string>
     <string name="battery_estimated_health_format">Estimated Health: %1$d%%</string>
@@ -962,6 +965,7 @@
     <string name="cpu_title_supported_abis">Supported ABIs</string>
     <string name="dashboard_core_suffix">cores</string>
     <string name="dashboard_metric_battery_level">Battery Level</string>
+    <string name="dashboard_metric_battery_temp">Battery Temperature</string>
     <string name="dashboard_metric_cpu_temp">CPU Temperature</string>
     <string name="dashboard_metric_gpu_load">GPU Load</string>
     <string name="dashboard_metric_mem_usage">Memory Usage</string>

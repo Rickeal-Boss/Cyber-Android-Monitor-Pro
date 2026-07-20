@@ -113,6 +113,9 @@
     <string name="battery_dual_cell_subtitle">手动覆盖 — 测量电压翻倍以计算准确功率</string>
     <string name="battery_capacity_title">Battery capacity</string>
     <string name="battery_design_capacity_format">设计容量: %1$d mAh</string>
+    <string name="battery_design_capacity_title">设计容量</string>
+    <string name="battery_rated_capacity_title">额定容量</string>
+    <string name="battery_capacity_estimate_format">通过容量预估: %1$d%%</string>
     <string name="battery_cycle_count_title">Cycle count</string>
     <string name="battery_cycle_count_value">%1$d 次</string>
     <string name="battery_estimated_health_format">预估健康: %1$d%%</string>
@@ -954,6 +957,7 @@
     <string name="cpu_title_supported_abis">支持的 ABI</string>
     <string name="dashboard_core_suffix">核</string>
     <string name="dashboard_metric_battery_level">电池电量</string>
+    <string name="dashboard_metric_battery_temp">电池温度</string>
     <string name="dashboard_metric_cpu_temp">CPU 温度</string>
     <string name="dashboard_metric_gpu_load">GPU 负载</string>
     <string name="dashboard_metric_mem_usage">内存用量</string>

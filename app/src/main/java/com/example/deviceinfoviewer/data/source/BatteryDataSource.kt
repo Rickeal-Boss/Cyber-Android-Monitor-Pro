@@ -150,6 +150,17 @@ class BatteryDataSource(private val context: Context) {
         // === 容量（多路径） ===
         readBatteryCapacity(info)
 
+        // === 通过容量预估电量百分比 (chargeCounterµAh ÷ chargeFullMAh) ===
+        //   公式: capacityEstimatedLevelPercent = (chargeCounterUAh/1000) / chargeFullMAh × 100
+        //   说明: chargeFullMAh 与 chargeCounterUAh 均为裸值，双电芯×2 对两者同步生效比率不变；
+        //        chargeCounter 为实时剩余电荷量，故此值为"按实测容量推算的当前电量"，
+        //        与系统 levelPercent 互为交叉校验。
+        if (info.chargeFullMAh > 0 && info.chargeCounterUAh > 0) {
+            val counterMAh = info.chargeCounterUAh / 1000.0
+            val pct = (counterMAh / info.chargeFullMAh * 100).toInt()
+            info.capacityEstimatedLevelPercent = pct.coerceIn(0, 100)
+        }
+
         // === 电流（多路径，带符号 µA） ===
         val (currentUA, currentSource) = getCurrentNowFull()
         info.currentNowUA = currentUA
