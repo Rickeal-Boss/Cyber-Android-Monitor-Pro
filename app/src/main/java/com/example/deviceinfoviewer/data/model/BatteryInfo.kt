@@ -51,6 +51,9 @@ data class BatteryInfo(
     var capacityLockLevel: Int = -1,                  // 锁容百分比 (如 80)
     var powerProfileCapacityMAh: Long = -1L,          // power_profile.xml 配置容量
 
+    // 通过容量预估的电量百分比 (chargeCounterµAh/1000 ÷ chargeFullMAh × 100)
+    var capacityEstimatedLevelPercent: Int = -1,
+
     // ── 电池增强指标 (2026-06-18) ──
     // 电源来源分类标签 — 从 EXTRA_PLUGGED + dumpsys 综合判定
     var powerSourceLabel: String = "",                // 电源来源: AC/USB/无线/底座/电池

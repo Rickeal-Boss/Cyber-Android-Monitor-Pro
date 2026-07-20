@@ -65,6 +65,7 @@ fun DashboardScreen(
     val deviceName = cpuInfo?.architecture?.let { "$it · ${cpuInfo?.coreCount ?: 0}${stringResource(R.string.dashboard_core_suffix)}" } ?: stringResource(R.string.common_detecting)
     val cpuTemp = cpuInfo?.temperatureCelsius?.let { if (it.isNaN()) "---" else "${it.toInt()}°C" } ?: "---"
     val batteryLevel = batteryInfo?.levelPercent?.let { "${it}%" } ?: "---"
+    val batteryTemp = batteryInfo?.temperatureCelsius?.let { if (it.isNaN()) "---" else "${it.toInt()}°C" } ?: "---"
     val memUsed = memoryInfo?.let { FormatUtils.formatBytes(it.usedKB * 1024) } ?: "---"
     val memTotal = memoryInfo?.let { FormatUtils.formatBytes(it.totalKB * 1024) } ?: "---"
     // SWAP/ZRAM 数据（利用内存卡片下部空间）
@@ -169,7 +170,7 @@ fun DashboardScreen(
                     memUsed = memUsed, memTotal = memTotal, memProgress = memProgress,
                     swapzramUsedKB = swapzramUsedKB, swapzramTotalKB = swapzramTotalKB, swapzramPct = swapzramPct,
                     hasSwapZram = hasSwapZram,
-                    batteryLevel = batteryLevel, batterySubtitle = batterySubtitle,
+                    batteryLevel = batteryLevel, batterySubtitle = batterySubtitle, batteryTemp = batteryTemp,
                     gpuLoadText = gpuLoadText, gpuLoadChart = gpuLoadChart
                 )
                 if (reorderEnabled) {
@@ -340,7 +341,7 @@ private fun MetricCardByType(
     cpuTemp: String, cpuTempChart: List<Float>,
     memUsed: String, memTotal: String, memProgress: Float,
     swapzramUsedKB: Long, swapzramTotalKB: Long, swapzramPct: Float, hasSwapZram: Boolean,
-    batteryLevel: String, batterySubtitle: String,
+    batteryLevel: String, batterySubtitle: String, batteryTemp: String,
     gpuLoadText: String, gpuLoadChart: List<Float>,
 ) {
     val memValueColor = NeonPurpleBright
@@ -384,7 +385,20 @@ private fun MetricCardByType(
         "battery_level" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_battery_level), value = batteryLevel,
             valueColor = SuccessNeon, modifier = Modifier.fillMaxWidth(), subtitle = batterySubtitle
-        )
+        ) {
+            // 利用卡片下部剩余空间显示电池温度（与 mem_usage 的 SWAP/ZRAM 区块同构）
+            if (batteryTemp != "---") {
+                Spacer(Modifier.height(10.dp))
+                HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.dashboard_metric_battery_temp),
+                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f), letterSpacing = 0.5.sp)
+                Spacer(Modifier.height(3.dp))
+                Text(batteryTemp,
+                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                    color = SuccessNeon, fontFamily = FontFamily.Monospace)
+            }
+        }
 
         "gpu_load" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_gpu_load), value = gpuLoadText,
