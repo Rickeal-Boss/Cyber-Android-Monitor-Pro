@@ -152,7 +152,7 @@ fun BatteryScreen(
         // 省电模式开启时系统会自动降频/限制后台，对游戏和性能影响显著
         if (batteryInfo?.isPowerSaveMode == true) {
             MetricCard(
-                title = "Power save mode",
+                title = stringResource(R.string.battery_card_power_save_mode),
                 value = "\uD83D\uDD0B ON",  // 电池图标
                 valueColor = Color(0xFFFFA726),  // 橙色警示
                 subtitle = "System performance throttled — refresh rate auto-reduced"
@@ -167,7 +167,7 @@ fun BatteryScreen(
         if (healthPercent != null) {
             val sohSource = if (designCap != null && nowCap != null && designCap > 0) stringResource(R.string.battery_soh_source_capacity_ratio) else stringResource(R.string.battery_soh_source_standard_api)
             MetricCard(
-                title = "Battery health",
+                title = stringResource(R.string.battery_health_title),
                 value = "$healthPercent%",
                 valueColor = when {
                     healthPercent >= 90 -> NeonPurpleBright
@@ -220,7 +220,7 @@ fun BatteryScreen(
                 else -> Color(0xFFEF5350)
             }
             MetricCard(
-                title = "Cycle count",
+                title = stringResource(R.string.battery_cycle_count_title),
                 value = stringResource(R.string.battery_cycle_value, cycleCount),
                 valueColor = NeonPurpleBright,
                 subtitle = buildString {
@@ -231,7 +231,7 @@ fun BatteryScreen(
         } else {
             // 循环次数不可用时给出提示
             MetricCard(
-                title = "Cycle count",
+                title = stringResource(R.string.battery_cycle_count_title),
                 value = stringResource(R.string.battery_cycle_not_detected),
                 valueColor = Color(0xFFFFA726),
                 subtitle = stringResource(R.string.battery_cycle_no_data)
@@ -241,7 +241,7 @@ fun BatteryScreen(
         // === 充电协议检测 (P1) ===
         if (protocolDetected != null) {
             MetricCard(
-                title = "Charging protocol",
+                title = stringResource(R.string.battery_charging_protocol_title),
                 value = protocolDetected,
                 valueColor = SuccessNeon
             ) { }
@@ -264,7 +264,7 @@ fun BatteryScreen(
                 else -> Color(0xFFFFA726)
             }
             MetricCard(
-                title = "Power source",
+                title = stringResource(R.string.battery_card_power_source),
                 value = psText,
                 valueColor = psColor
             ) { }
@@ -273,7 +273,7 @@ fun BatteryScreen(
         // === 预计算实时瓦特数 (2026-06-18) ===
         if (wattageNow != null) {
             MetricCard(
-                title = "Real wattage",
+                title = stringResource(R.string.battery_card_real_wattage),
                 value = "%.2f W".format(wattageNow),
                 valueColor = if (isCharging) SuccessNeon else NeonPurpleBright
             ) { }
@@ -282,7 +282,7 @@ fun BatteryScreen(
         // === 电池内阻 (P2) ===
         if (internalR != null) {
             MetricCard(
-                title = "Internal resistance",
+                title = stringResource(R.string.battery_internal_resistance_title),
                 value = "%.0f mΩ".format(internalR),
                 valueColor = NeonPurpleBright,
                 subtitle = if (internalR < 100) stringResource(R.string.battery_resistance_excellent) else if (internalR < 200) stringResource(R.string.battery_resistance_good) else stringResource(R.string.battery_resistance_average)
@@ -292,7 +292,7 @@ fun BatteryScreen(
         // === 电量趋势图 ===
         if (level != null) {
             MetricCard(
-                title = "Battery level",
+                title = stringResource(R.string.battery_level_title),
                 value = "${level}%",
                 valueColor = NeonPurpleBright
             ) {
@@ -303,7 +303,7 @@ fun BatteryScreen(
         // === 充放电功率 ===
         if (power != null && power > 0) {
             MetricCard(
-                title = if (isCharging) "Charging power" else "Discharge power",
+                title = if (isCharging) stringResource(R.string.battery_charging_power_title) else stringResource(R.string.battery_discharge_power_title),
                 value = "${(power / 1000f).let { "%.1f".format(it) }} W",
                 valueColor = NeonPurpleBright
             ) {
@@ -317,7 +317,7 @@ fun BatteryScreen(
                 stringResource(R.string.battery_current_normalized_format, kotlin.math.abs(currentNormalizedMa))
             } else null
             MetricCard(
-                title = if (isCharging) "Charging current" else "Discharge current",
+                title = if (isCharging) stringResource(R.string.battery_charging_current_title) else stringResource(R.string.battery_discharge_current_title),
                 value = "${kotlin.math.abs(current / 1000)} mA",
                 valueColor = NeonPurpleBright,
                 subtitle = listOfNotNull(currentSource, normalizedInfo).joinToString("  ·  ")
@@ -330,7 +330,7 @@ fun BatteryScreen(
             val currentA = kotlin.math.abs(current) / 1_000_000f
             val realTimePowerW = voltageV * currentA
             MetricCard(
-                title = "Real-time power",
+                title = stringResource(R.string.battery_realtime_power_title),
                 value = "%.2f W".format(realTimePowerW),
                 valueColor = if (isCharging) SuccessNeon else NeonPurpleBright,
                 subtitle = "%.3fV × %.0fmA = %.0fmW".format(voltageV, currentA * 1000, realTimePowerW * 1000)
@@ -340,7 +340,7 @@ fun BatteryScreen(
         // === 电压 ===
         if (voltage != null) {
             MetricCard(
-                title = "Battery voltage",
+                title = stringResource(R.string.battery_voltage_title),
                 value = "%.3f V".format(voltage / 1000f),
                 valueColor = NeonPurpleBright
             ) { }
@@ -349,7 +349,7 @@ fun BatteryScreen(
         // === 已充电量 ===
         if (counter != null) {
             MetricCard(
-                title = "Charge counter",
+                title = stringResource(R.string.battery_charge_counter_title),
                 value = "${counter / 1000} mAh",
                 valueColor = NeonPurpleBright
             ) { }
@@ -358,7 +358,7 @@ fun BatteryScreen(
         // === 电池温度 ===
         if (temp != null) {
             MetricCard(
-                title = "Battery temperature",
+                title = stringResource(R.string.battery_temperature_title),
                 value = "${temp.toInt()}°C",
                 valueColor = NeonPurpleBright
             ) {
@@ -368,7 +368,7 @@ fun BatteryScreen(
 
         // === 电池状态 ===
         MetricCard(
-            title = "Health",
+            title = stringResource(R.string.battery_health_status_title),
             value = health,
             valueColor = NeonPurpleBright
         ) { }

@@ -3,6 +3,7 @@ package com.example.deviceinfoviewer.data.source
 import android.os.Build
 
 import com.example.deviceinfoviewer.data.model.SystemInfo
+import com.example.deviceinfoviewer.util.waitForWithTimeout
 
 /**
  * 系统信息数据源，通过反射读取 Build 字段 + 深度待机统计
@@ -105,7 +106,7 @@ class SystemDataSource {
                     arrayOf("/system/bin/sh", "-c", "dumpsys batterystats --checkin 2>/dev/null")
                 )
                 val output = proc.inputStream.bufferedReader().readText()
-                proc.waitFor()
+                proc.waitForWithTimeout()
 
                 // "ds" (device sleep): ds,<duration_ms>,<count>
                 val dsMatch = Regex("""^ds,(\d+),(\d+)""", RegexOption.MULTILINE).find(output)

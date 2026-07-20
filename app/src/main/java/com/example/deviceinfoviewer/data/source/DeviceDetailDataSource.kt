@@ -22,6 +22,7 @@ import android.util.Log
 import android.view.WindowManager
 import com.example.deviceinfoviewer.data.model.CameraSensorInfo
 import com.example.deviceinfoviewer.data.model.DeviceDetailInfo
+import com.example.deviceinfoviewer.util.waitForWithTimeout
 import java.io.File
 import java.util.UUID
 
@@ -1649,7 +1650,7 @@ class DeviceDetailDataSource(private val context: Context) {
                     try {
                         val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "openssl version 2>/dev/null"))
                         val output = proc.inputStream.bufferedReader().readText().trim()
-                        proc.waitFor()
+                        proc.waitForWithTimeout()
                         if (output.isNotEmpty()) {
                             info.opensslVersion = output.removePrefix("OpenSSL").trim()
                                 .let { if (it.isNotEmpty()) "OpenSSL $it" else output }

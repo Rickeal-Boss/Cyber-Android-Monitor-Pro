@@ -2,7 +2,8 @@ package com.example.deviceinfoviewer.data.source
 
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.util.concurrent.TimeUnit
+
+import com.example.deviceinfoviewer.util.waitForWithTimeout
 
 /**
  * Shell 命令数据源 — 通过 ProcessBuilder 执行 dumpsys / logcat 等系统命令，
@@ -51,7 +52,7 @@ object ShellCommandDataSource {
                     output.append(line).append("\n")
                 }
             }
-            val finished = process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            val finished = process.waitForWithTimeout(TIMEOUT_SECONDS * 1000L)
             if (!finished) {
                 process.destroyForcibly()
             }

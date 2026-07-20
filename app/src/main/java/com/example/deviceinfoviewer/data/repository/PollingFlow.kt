@@ -29,7 +29,13 @@ object PollingFlow {
                         if (delayMs > 0) delay(delayMs)
                     }
                     val start = System.currentTimeMillis()
-                    try { fetcher() } catch (_: Throwable) {}
+                    try {
+                        fetcher()
+                    } catch (e: CancellationException) {
+                        throw e // 官方铁律: 必须重抛, 否则破坏结构化并发的取消传播
+                    } catch (_: Throwable) {
+                        // 业务异常按原样吞掉, 不影响下一轮轮询
+                    }
                     isFirstOverallEmission = false
                     val elapsed = System.currentTimeMillis() - start
                     val remaining = (delayMs - elapsed).coerceAtLeast(0L)
