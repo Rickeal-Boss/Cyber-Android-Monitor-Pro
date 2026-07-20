@@ -744,7 +744,11 @@ class DeviceDetailDataSource(private val context: Context) {
         try {
             // 策略0: CpuCache 已知芯片数据库 (最精确)
             val platform = SysFsReader.readProp("ro.board.platform")
-            val knownChip = CpuCache.lookup(platform)
+            // kona 平台需细分 865 / 870（SM8250 / SM8250-AC），否则 870 会被误判为 865
+            val lookupKey = if (platform.equals("kona", ignoreCase = true)) {
+                if (CpuCache.resolveKonaVariant() == "870") "sm8250-ac" else "sm8250"
+            } else platform
+            val knownChip = CpuCache.lookup(lookupKey)
             if (knownChip != null && knownChip.processNode.isNotEmpty()) {
                 info.socProcessNode = knownChip.processNode
                 info.socProcessNodeSource = "chipdb:${knownChip.chipName}"
