@@ -314,15 +314,15 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 ## 10. 技术债清单（P0/P1/P2， consolidated）
 
 ### P0（致命 / 整类机型或核心指标错误）
-1. **charge_full 单位未归一**（`BatteryDataSource.kt:417` `val mah = value/1000`，无 `normalizeChargeFull()`）→ 部分机型容量差 1000 倍。
-2. **MTK 覆盖不全 + 制程号错配**：`CpuCache` 仅 4 颗 MTK；`DeviceDetailDataSource.SOC_PROCESS_MAP` 用**营销号**键（`MT9200`…）而 `ro.soc.model` 返回**硅片号**（`MT6983`）→ 9200/9000 制程掉到"不可用"。
+1. **charge_full 单位未归一**（`BatteryDataSource.kt:417` `val mah = value/1000`，无 `normalizeChargeFull()`）→ 部分机型容量差 1000 倍。**✅ 已修复**（`73435ed`：`normalizeChargeFullToMAh()` + `CAP_MIN/MAX_MAH` 区间校验，sysfs 循环改走归一化）。
+2. **MTK 覆盖不全 + 制程号错配**：`CpuCache` 仅 4 颗 MTK；`DeviceDetailDataSource.SOC_PROCESS_MAP` 用**营销号**键（`MT9200`…）而 `ro.soc.model` 返回**硅片号**（`MT6983`）→ 9200/9000 制程掉到"不可用"。**🔶 部分修复**（`73435ed`：`CpuCache.lookup` 新增天玑家族 `mt(67|68|69)\d{2}` 正则回退；`DeviceRepository` 新增 `Build.SOC_MODEL`(API31+) 平台识别最高优先级落点）。
 
 ### P1（重要 / 特定机型或健壮性）
 3. **kona 865/870 不可区分**（`CpuCache.kt:60` 仅 `sm8250→865`，无 `sm8250-ac`/无 `resolveKonaVariant`）。
 4. **`autoDetectDualCell()` 未实现**：`BatteryDataSource.kt:73` 仅读手动开关；`OemDataSource.kt:637/662/689` 已采 `chargingDualCell` 但**从未回灌** `BatteryInfo.dualCell`（数据孤岛）。
-5. **13 处 `waitFor()` 无超时**（实测，非旧审计的 7 处）：`GpuDataSource:803`、`SystemDataSource:108`、`DeviceDetailDataSource:1652`、`BatteryDataSource:688/719/945/1052/1287/1312/1369/1396/1593`、`BaseSysFsDataSource:28`。可能线程饥饿。`ShellCommandDataSource.exec` 有 8s 超时但上述未用。
-6. **`PollingFlow.kt:32` 吞 `CancellationException`**（`catch(_: Throwable)`）→ 取消信号脆弱（被 `while(isActive)` 部分兜底）。
-7. **电池状态/健康硬编码中文**（`BatteryDataSource.kt:1612-1628`）+ 全仓 i18n 债（见 §8，OEM ~80+ 处最大）。
+5. **13 处 `waitFor()` 无超时**（实测，非旧审计的 7 处）：`GpuDataSource:803`、`SystemDataSource:108`、`DeviceDetailDataSource:1652`、`BatteryDataSource:688/719/945/1052/1287/1312/1369/1396/1593`、`BaseSysFsDataSource:28`。可能线程饥饿。`ShellCommandDataSource.exec` 有 8s 超时但上述未用。**✅ 已修复**（`73435ed`：新增 `util/ProcessExtensions.kt#waitForWithTimeout()`，minSdk 21 安全超时 + `destroy/destroyForcibly` 降级，全部调用点替换）。
+6. **`PollingFlow.kt:32` 吞 `CancellationException`**（`catch(_: Throwable)`）→ 取消信号脆弱（被 `while(isActive)` 部分兜底）。**✅ 已修复**（`73435ed`：`catch (e: CancellationException) { throw e }` 重抛，业务异常仍吞掉）。
+7. **电池状态/健康硬编码中文**（`BatteryDataSource.kt:1612-1628`）+ 全仓 i18n 债（见 §8，OEM ~80+ 处最大）。**🔶 部分修复**（`73435ed`：`BatteryScreen` 电池相关标题已抽取 `strings.xml` 三语；`OemDataSource` 等 80+ 处 OEM 硬编码仍待办）。
 
 ### P2（一般 / 可维护性）
 8. 双数据管道（SharedFlow 闲置 + Deprecated LiveData 仍主用）。
@@ -335,7 +335,7 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 15. Magic number 散布（0.15 容差、50mA/10mA 阈值、20A 上限、1000 换算）。
 16. `OemScreen.kt:103-106` 用硬编码中文做比较串（反模式，团队已在 `MemoryDistributionCard.kt:178` 修过同类）。
 
-> `docs/diagnosis_5_issues_fix.md` 是**待落地方案**，上述 P0/P1 代码仍是原状 —— 6 项已知问题均未修复。
+> **批量修复进度**：P0#1、P1#5、P1#6 已随 `541cf7a`+`73435ed` 落地并经 CI 验证（release 构建 `success`）；P1#2、P1#7 部分修复（天玑回退 / `BatteryScreen` i18n）。剩余 P2（双管道、反射缓存、死代码、God-class、CI 测试、ProGuard、双电芯拓扑、magic number、OEM 80+ i18n）仍待办。`docs/diagnosis_5_issues_fix.md` 仅供历史参考。
 
 ---
 
