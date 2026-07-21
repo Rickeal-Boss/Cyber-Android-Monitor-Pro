@@ -257,7 +257,7 @@
     <string name="sensor_unknown_vendor">未知厂商</string>
     <string name="sensor_wake_up">唤醒</string>
     <string name="sensor_dynamic">动态</string>
-    <string name="sensor_range_format">范围: 0 – %.2f %1$s</string>
+    <string name="sensor_range_format">范围: 0 – %1$.2f %2$s</string>
     <string name="sensor_realtime_waveform">实时波形</string>
     <string name="sensor_realtime_value_format">实时: %1$s</string>
     <string name="sensor_sample_rate_format">采样率: %1$d Hz</string>
@@ -1305,7 +1305,7 @@
     <string name="sensor_mode_one_shot">单次 (ONE_SHOT)</string>
     <string name="sensor_mode_special_trigger">特殊触发 (SPECIAL_TRIGGER)</string>
     <string name="sensor_mode_unknown">未知 (%1$d)</string>
-    <string name="sensor_range_label">范围: 0 – %.2f %s</string>
+    <string name="sensor_range_label">范围: 0 – %1$.2f %2$s</string>
     <string name="sensor_tag_dynamic">动态</string>
     <string name="sensor_tag_wakeup">唤醒</string>
     <string name="sensor_type_ambient_temp">环境温度传感器</string>
