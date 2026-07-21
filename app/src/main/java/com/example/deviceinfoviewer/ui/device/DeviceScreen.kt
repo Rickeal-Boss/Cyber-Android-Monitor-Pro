@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import android.os.Build
 import com.example.deviceinfoviewer.data.model.CameraSensorInfo
 import com.example.deviceinfoviewer.data.model.DeviceDetailInfo
+import com.example.deviceinfoviewer.data.model.OemPowerMode
 import com.example.deviceinfoviewer.FormatUtils
 import com.example.deviceinfoviewer.ui.components.hdrHighlight
 import com.example.deviceinfoviewer.ui.oem.OemViewModel
@@ -479,7 +480,7 @@ fun DeviceScreen(
             // 性能模式
             SectionCard(stringResource(R.string.device_section_perf_mode)) {
                 RowItem(stringResource(R.string.device_game_mode), if (oem!!.gameModeSupported) stringResource(R.string.common_yes) else stringResource(R.string.device_not_activated))
-                RowItem(stringResource(R.string.device_current_scheduler), oem!!.powerModeCurrent.ifEmpty { stringResource(R.string.device_balanced_mode) })
+                RowItem(stringResource(R.string.device_current_scheduler), stringResource(oem!!.powerMode.labelRes))
             }
 
             // 厂商子系统

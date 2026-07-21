@@ -1,5 +1,21 @@
 package com.example.deviceinfoviewer.data.model
 
+import androidx.annotation.StringRes
+import com.example.deviceinfoviewer.R
+
+/**
+ * 性能/调度模式枚举 — 取代原数据源写死的中文显示串(powerModeCurrent / hyperOsPerformanceGrade)，
+ * UI 层通过 [labelRes] 走 stringResource 实现 i18n（P1#7）。
+ */
+enum class OemPowerMode(@StringRes val labelRes: Int) {
+    BALANCED(R.string.oem_mode_balanced),
+    PERFORMANCE(R.string.oem_mode_performance),
+    POWER_SAVE(R.string.oem_mode_power_save),
+    ULTRA_POWER_SAVE(R.string.oem_mode_ultra_power_save),
+    BOOST(R.string.oem_mode_boost),
+    REDMI_FURY(R.string.oem_redmi_fury_engine)
+}
+
 /**
  * OEM 定制系统信息 — v3 深度增强
  *
@@ -37,7 +53,8 @@ data class OemInfo(
     // HyperOS 3.0 新特性
     var hyperOsAIModel: String = "",        // 大模型: HyperMind/小爱AI
     var hyperOsCrossDevice: String = "",    // 跨端互联: HyperConnect
-    var hyperOsPerformanceGrade: String = "",// 性能评级: 性能模式/省电/均衡
+    /** Redmi 狂暴引擎 (Xiaomi 性能模式子态, 用于 UI 特殊高亮与标签) */
+    var redmiFuryEngine: Boolean = false,
 
     // ══════════════════════════════════════════
     //  OPPO ColorOS 专用
@@ -124,8 +141,8 @@ data class OemInfo(
     var ultraPowerSaveMode: Boolean = false,
     /** Vivo Boost 模式 (厂商特有) */
     var vivoBoostMode: Boolean = false,
-    /** 当前活跃的调度模式名称 (用于显示) */
-    var powerModeCurrent: String = "",
+    /** 当前活跃的调度模式枚举 (取代原写死中文串, UI 经 labelRes 本地化) */
+    var powerMode: OemPowerMode = OemPowerMode.BALANCED,
 
     // ══════════════════════════════════════════
     //  厂商子系统特性 (保留)
