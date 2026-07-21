@@ -533,19 +533,26 @@ class BatteryDataSource(private val context: Context) {
         private enum class UnitHint { ASSUME_UA, ASSUME_MA, AUTO }
 
         // Initialized once per companion to avoid per-tick list rebuild.
+        // 注意: firstOrNull { pathHint.contains(key) } 按插入顺序取第一个匹配。
+        // 通用键 "battery" 是 "oplus_chg/battery/..."、".../battery/vivo_current" 等
+        // 路径的子串，若排在专用键之前会产生【子串遮蔽】(shadowing)，误判为 ASSUME_UA。
+        // 故专用 / OEM / AUTO 键必须排在通用键之前。
         private val CURRENT_PATH_REGISTRY: Map<String, UnitHint> = mapOf(
-            // === 标准 power_supply class — 始终 µA ===
-            // Source: AOSP kernel/Documentation/ABI/testing/sysfs-class-power-supply
-            "battery" to UnitHint.ASSUME_UA,
-            "bms"    to UnitHint.ASSUME_UA,
-            "main"   to UnitHint.ASSUME_UA,
-            "usb"    to UnitHint.ASSUME_UA,
-            // === OPPO/OnePlus/Realme oplus_chg 驱动 — 始终 mA ===
+            // === OPPO/OnePlus/Realme oplus_chg 驱动 — 始终 mA (优先于通用 battery 子串) ===
             // Source: OPPO 内核源码 drivers/power/supply/oplus/oplus_chg.c
             // XDA: https://forum.xda-developers.com/t/oplus-chg-current-sysfs-unit
             "oplus_chg" to UnitHint.ASSUME_MA,
             "oplus"     to UnitHint.ASSUME_MA,
             "vooc"      to UnitHint.ASSUME_MA,
+            // === 其他 OEM 专属 — 使用启发式 AUTO (优先于通用 battery 子串) ===
+            "vivo"  to UnitHint.AUTO,
+            "batt_" to UnitHint.AUTO,
+            // === 标准 power_supply class — 始终 µA (通用键放最后，避免遮蔽上面的专用键) ===
+            // Source: AOSP kernel/Documentation/ABI/testing/sysfs-class-power-supply
+            "battery" to UnitHint.ASSUME_UA,
+            "bms"    to UnitHint.ASSUME_UA,
+            "main"   to UnitHint.ASSUME_UA,
+            "usb"    to UnitHint.ASSUME_UA,
             // === 高通 BMS (qpnp-vm-bms) — 标准 µA ===
             // Source: CodeLinaro kernel/msm power_supply qpnp-vm-bms.c
             "qcom"      to UnitHint.ASSUME_UA,
@@ -554,9 +561,6 @@ class BatteryDataSource(private val context: Context) {
             // Source: MediaTek kernel drivers/power/supply/mtk_battery.c
             "mt-battery"    to UnitHint.ASSUME_UA,
             "battery_meter" to UnitHint.ASSUME_UA,
-            // === 其他 OEM 专属 — 使用启发式 AUTO ===
-            "vivo"  to UnitHint.AUTO,
-            "batt_" to UnitHint.AUTO,
         )
 
         private const val UA_SANITY_LOW  = 100L          // 低于此值可能是噪声
@@ -575,7 +579,11 @@ class BatteryDataSource(private val context: Context) {
             val absRaw = kotlin.math.abs(rawValue)
             return when (unitHint) {
                 UnitHint.ASSUME_UA -> {
-                    if (absRaw in UA_SANITY_LOW until NON_OPPO_MA_THRESHOLD) rawValue * 1000
+                    // 小值(<50)极可能是 mA 上报(如 30mA)，按 mA→µA 放大；
+                    // 否则视为标准 µA 直出。
+                    // 注: 原 `UA_SANITY_LOW until NON_OPPO_MA_THRESHOLD` = 100 until 50 为
+                    // 空区间，恒为假，导致永不做单位放大 —— 已修正为 absRaw < 阈值。
+                    if (absRaw < NON_OPPO_MA_THRESHOLD) rawValue * 1000
                     else rawValue
                 }
                 UnitHint.ASSUME_MA -> {
