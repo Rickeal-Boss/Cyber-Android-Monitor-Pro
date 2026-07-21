@@ -28,6 +28,7 @@ import com.example.deviceinfoviewer.data.model.CpuInfo
 import com.example.deviceinfoviewer.data.model.GpuInfo
 import com.example.deviceinfoviewer.data.model.MemoryInfo
 import com.example.deviceinfoviewer.data.repository.DeviceRepository
+import kotlin.math.maxOf
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -75,7 +76,7 @@ class FloatingWindowService : Service() {
     // ★ 性能优化 (2026-06-23): 预计算 CPU 频率标签数组 — 原 refreshAllMetrics 每 tick
     //   调用 8 次 getString(R.string.float_svc_cpu_freq_header, idx) 进行格式化，
     //   改为预计算标签数组后每次直接数组索引，减少 String.format 开销
-    private val cpuFreqHeaders = Array(8) { "" }
+    private val cpuFreqHeaders = Array(maxOf(8, Runtime.getRuntime().availableProcessors())) { "" }
     private var collectionJob: kotlinx.coroutines.Job? = null
 
     // ★ 统一 baseTickMs，由 RefreshPolicy 驱动
@@ -99,8 +100,8 @@ class FloatingWindowService : Service() {
             powerUp = getString(R.string.float_svc_power_up)
             powerDown = getString(R.string.float_svc_power_down)
             fpsLabel = getString(R.string.float_svc_fps_label)
-            // ★ 预计算 CPU 频率标签 (0-7) — 避免每 tick 8 次 getString 格式化
-            for (i in 0..7) {
+            // ★ 预计算 CPU 频率标签 — 按实际核心数（下限 8）填充，避免每 tick 重复 getString 格式化
+            for (i in cpuFreqHeaders.indices) {
                 cpuFreqHeaders[i] = getString(R.string.float_svc_cpu_freq_header, i)
             }
 

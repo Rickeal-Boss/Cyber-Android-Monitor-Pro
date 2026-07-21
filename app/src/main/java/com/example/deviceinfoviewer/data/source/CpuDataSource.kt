@@ -264,14 +264,7 @@ class CpuDataSource(private val context: Context) {
             }
         }
 
-        // === Level 4: SensorManager 温度传感器 ===
-        val sensorTemp = getTempFromSensor()
-        if (!sensorTemp.isNaN()) {
-            Log.i(TAG, "CPU temp via Sensor: $sensorTemp°C")
-            return Pair(sensorTemp, "温度传感器 (SensorManager)")
-        }
-
-        // === Level 4.5: dumpsys thermalservice 温控数据 (P1) ===
+        // === Level 4: dumpsys thermalservice 温控数据 (P1) ===
         try {
             val thermalOutput = ShellCommandDataSource.getDumpsysThermal()
             val temps = ShellCommandDataSource.extractThermalTemperatures(thermalOutput)
@@ -496,29 +489,6 @@ class CpuDataSource(private val context: Context) {
                 if (celsius in 10f..150f) return celsius
             }
         }
-        return Float.NaN
-    }
-
-    /**
-     * 通过 SensorManager 获取温度传感器值
-     * 注: 大部分手机没有 CPU 专用温度传感器，此方法成功率低
-     */
-    private fun getTempFromSensor(): Float {
-        try {
-            val sm = appContext.getSystemService(Context.SENSOR_SERVICE) as? android.hardware.SensorManager
-                ?: return Float.NaN
-            val sensors = sm.getSensorList(android.hardware.Sensor.TYPE_ALL)
-            for (s in sensors) {
-                val type = s.stringType.uppercase()
-                if (type.contains("TEMP") || type.contains("CPU") || type.contains("AMBIENT")) {
-                    // 无法在非回调模式下获取传感器的当前值
-                    // 这里只能返回 NaN，实际生产代码需要注册 SensorEventListener
-                    // 但这会增加架构复杂度，保留框架代码供未来扩展
-                    Log.d(TAG, "Temperature sensor found: ${s.name} (type=$type)")
-                    // 如果未来实现：注册 SensorEventListener 并等待首次回调
-                }
-            }
-        } catch (_: Throwable) { /* fall through */ }
         return Float.NaN
     }
 
