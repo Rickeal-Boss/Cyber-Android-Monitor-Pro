@@ -39,9 +39,13 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -92,6 +96,21 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
         mt.key to remember { mutableStateOf(FloatingWindowConfig.isVisible(mt.key)) }
     }.toMap()
 
+    // ★ 用户主动开启但缺少悬浮窗权限 → 跳转设置页；pending 标记待返回时 resume 复查
+    var pendingEnable by remember { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && pendingEnable && canDrawOverlays(ctx)) {
+                FloatingWindowConfig.enabled = true
+                ctx.startService(Intent(ctx, FloatingWindowService::class.java))
+                pendingEnable = false
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     Column(
         modifier = Modifier.padding(top = 56.dp).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -118,6 +137,7 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
                                 FloatingWindowConfig.enabled = true
                                 ctx.startService(Intent(ctx, FloatingWindowService::class.java))
                             } else {
+                                pendingEnable = true
                                 Toast.makeText(ctx, ctx.getString(R.string.float_permission_toast), Toast.LENGTH_LONG).show()
                                 ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                                     Uri.parse("package:${ctx.packageName}")).apply {
