@@ -25,7 +25,6 @@ import com.example.deviceinfoviewer.data.model.GpsStatusInfo
  * 2. Handler 参数使用 Looper.getMainLooper() 而非 null
  * 3. 修复位置更新覆盖卫星数据的时序问题
  * 4. 增加权限诊断日志
- * 5. 增加 ACCESS_BACKGROUND_LOCATION 检测
  */
 class GpsDataSource(private val context: Context) {
 
@@ -64,22 +63,13 @@ class GpsDataSource(private val context: Context) {
         val hasCoarseLocation = ContextCompat.checkSelfPermission(appContext,
             Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         
-        // 检查后台定位权限（Android 10+）
-        val hasBackgroundLocation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(appContext,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
-        } else true
-
-        Log.d("GpsDS", "startListening: fine=$hasFineLocation coarse=$hasCoarseLocation bg=$hasBackgroundLocation")
+        Log.d("GpsDS", "startListening: fine=$hasFineLocation coarse=$hasCoarseLocation")
 
         // 输出诊断信息
         if (!hasFineLocation) {
             Log.w("GpsDS", "ACCESS_FINE_LOCATION not granted — GPS satellite data will NOT be available")
             Log.w("GpsDS", "READ_PHONE_STATE=" + (ContextCompat.checkSelfPermission(appContext,
                 Manifest.permission.READ_PHONE_STATE) == PackageManager.PERMISSION_GRANTED))
-        }
-        if (!hasBackgroundLocation && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            Log.w("GpsDS", "ACCESS_BACKGROUND_LOCATION not granted — may affect satellite callbacks")
         }
         Log.d("GpsDS", "SDK_INT=${Build.VERSION.SDK_INT}, BRAND=${Build.BRAND}, MODEL=${Build.MODEL}")
 
