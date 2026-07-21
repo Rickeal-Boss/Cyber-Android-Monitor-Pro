@@ -333,19 +333,21 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
    - 🔶 **部分修复（持续中）**：`BatteryScreen` 状态/健康已改 `stringResource`（`battery_status_*`/`battery_health_*`）；**2026-07-21 新增 `OemPowerMode` 枚举取代数据源写死的中文显示串 `powerModeCurrent`/`hyperOsPerformanceGrade`，UI 经 `labelRes` 走 `stringResource`，OemScreen 等级配色改由枚举推导（P2#16 同步修复）**。但 `BatteryDataSource.kt` 内部 `chargeStatusToString`/`healthToString` 及 OEM **品牌专有名词**（澎湃 C1/C2、HyperConnect、SUPERVOOC、Redmi 狂暴引擎 等，本就不可翻译）仍保留字面量，需后续全量抽取。落地方案 `diagnosis_5_issues_fix.md` 方案 5（枚举 + `stringResource`）。
 
 ### P2（一般 / 可维护性）
-8. 双数据管道（SharedFlow 闲置 + Deprecated LiveData 仍主用）。
-   - 🔶 **递延（拍板 2026-07-21）**：架构性债务，需全量 UI 迁移（SharedFlow 主用 + 弃用 LiveData），无安全机械修复；留待大版本重构，`DeviceRepository` 暂不改动。
+8. 双数据管道（SharedFlow + LiveData 并行 emit）。
+   - 🔍 **严格审查结论（2026-07-21）**：两条管道**均被真实消费**——LiveData 是 UI 主用（全部 ViewModel + ExportHelper），SharedFlow 仅被 `FloatingWindowService` 消费（悬浮窗）。原"SharedFlow 闲置"不准确。collect 块双写 (`_cpuFlow.emit` + `cpuLiveData.postValue`) 服务于两个不同消费者，非冗余。
+   - 🔶 **递延（拍板 2026-07-21）**：完整修复 = LiveData→SharedFlow 全量 UI 迁移（ViewModel `collectAsStateWithLifecycle`），属**大型 UI 改动**，CI 无法验证运行时数据流（回归致全屏无数据），**作为受控步骤单独严格审查 + 真机验证**，不在本会话盲改。`DeviceRepository` 已消除误导性注释（"SharedFlow 主数据管道"实为悬浮窗消费；移除与"实际主用"矛盾的 `@Deprecated`），不动逻辑。
 9. ✅ 已修复（2026-07-21）：`SysFsReader.readProp` 缓存 `SystemProperties.get` 方法引用，避免每 tick 反射。
-10. 全仓 `catch(_: Throwable)` 过度吞异常（实测 80+ 处；详见 §6.1）。
-   - 🔶 **逐站审查（拍板 2026-07-21）**：80+ 处空 catch 多为 OEM-ROM 防御性静默降级，全量替换风险高收益低；改为按模块/函数站点审查，仅在确属逻辑吞异常处补 `Log.w`/上抛，不批量替换。
+10. 全仓 `catch(_: Throwable)` 空 catch（实测 80 处，详见 §6.1）。
+   - 🔍 **逐站审查结论（2026-07-21）：80 处全部合法，应保留，无需改动。** 分布：数据层 73 处（Battery19/DeviceDetail13/Gps10/Gpu8/System7/Cpu6/Oem4/Mobile2/其余各1）均为 sysfs/反射多路径 fallback 的 OEM-ROM 防御性静默降级（下一路径兜底，吞异常即跳过）；UI/App 层 7 处（GlowBackButton 触觉 / HapticUtils 旧API振动 / DeviceApplication 诊断日志×3 / FloatingWindowService 悬浮窗清理）均为 best-effort 非关键操作，吞异常正确。**无一处**属于"逻辑吞异常"需补 `Log.w`/上抛。盲目批量替换反而破坏 fallback 链并刷屏日志。
 11. ✅ 已修复（2026-07-21）：删除 `MainActivity` 中 `SystemMonitorAppMinimal`/`SystemMonitorAppNoFx` bisection 调试残留；`METRIC_CARD_IDS` 重复定义留待 P2#11 后续。
 12. God-class（`BatteryDataSource` ~1650 行、`DeviceDetailDataSource`、`OemDataSource`）。
    - ✅ **已修复（2026-07-21，`7a3ee40`，CI `29796355377` ✅）**：`BatteryDataSource` 电流单位判定逻辑（UnitHint 枚举 + CURRENT_PATH_REGISTRY + 阈值 + `convertCurrentToMicroamps`/`resolveUnitHint`）提取为独立 `internal object BatteryCurrentNormalizer`，companion 保留外观方法以维持 `BatteryDataSource.*` 既有调用与单测 API。容量/电压等其余 God-class 部分留待后续。
-13. CI 不跑测试；ProGuard 整体 keep 致 App 零缩减。
-   - ✅ **已修复（2026-07-21，`6f67e67`+`897964d`，CI `29795934663` ✅）**：`app/build.gradle` 补 `junit:junit:4.13.2` + companion 提 `internal` 使孤儿单测可编译；`.github/workflows/android-build.yml` 新增 `Run unit tests` 步骤（`testDebugUnitTest`）；修复 `sensor_range_*` 字符串多占位符 AAPT2 报错、电流判定子串遮蔽与空区间两处实现 bug（13 用例全部通过）。ProGuard keep 部分仍待处理。
+13. CI 不跑测试（已修复）；ProGuard 整体 keep 致 App 零缩减（已修复）。
+   - ✅ **CI 已修复（2026-07-21，`6f67e67`+`897964d`，CI `29795934663` ✅）**：`app/build.gradle` 补 `junit:junit:4.13.2` + companion 提 `internal` 使孤儿单测可编译；`.github/workflows/android-build.yml` 新增 `Run unit tests` 步骤（`testDebugUnitTest`）；修复 `sensor_range_*` 字符串多占位符 AAPT2 报错、电流判定子串遮蔽与空区间两处实现 bug（13 用例全部通过）。
+   - ✅ **ProGuard 已收紧（2026-07-21，CI 验证 ✅）**：`proguard-rules.pro` 移除整体 `-keep class com.example.deviceinfoviewer.** { *; }`（项目自身代码零缩减根因），改为精确 keep——`data.model.**`（Gson 序列化反射）+ 入口组件（Activity/Service/Receiver/Provider）+ 既有 Koin 规则。严格审查确认项目内反射仅作用于 framework 类（SystemProperties/BatteryManager/Sensor/GnssStatus 等运行时恒在），故无需整体 keep。⚠️ 需真机冒烟验证: 导出(JSON)/Koin 初始化/隐藏 API 反射采集。
 14. 双电芯 ×2 仅适配串联拓扑（依赖 P1#4 手动开关语义，自动检测已移出范围）。
 15. Magic number 散布（0.15 容差、50mA/10mA 阈值、20A 上限、1000 换算）。
-   - 🔶 **基本已重构（拍板 2026-07-21）**：阈值类常量（`OPPO_UA_THRESHOLD`/`NON_OPPO_MA_THRESHOLD`/`UA_SANITY_*`/`CAP_MIN/MAX_MAH` 等）已由 `73435ed` 命名为常量；残留仅 `CpuCache.kt:636` 的 `0.15f` 容差（保守保留），`/1000`/`*1000` 为合法 kHz↔MHz / µA↔mA 单位换算，**判定不改动**。
+   - 🔶 **基本已重构（拍板 2026-07-21）**：阈值类常量（`OPPO_UA_THRESHOLD`/`NON_OPPO_MA_THRESHOLD`/`UA_SANITY_*`/`CAP_MIN/MAX_MAH` 等）已由 `73435ed` 命名为常量；`/1000`/`*1000` 为合法 kHz↔MHz / µA↔mA 单位换算。残留 `CpuCache.kt:636` 的 `0.15f` 经核实为**核心按最高频率匹配最近芯片簇的 15% DVFS 容差**（注释明确："DVFS scaling 允许一定误差"），属语义化阈值非 bug，**保守保留，不改动**。
 16. ✅ 已修复（2026-07-21）：`OemScreen.kt` 硬编码中文比较串改为由 `OemPowerMode` 枚举推导配色，随 P1#7 枚举化一并落地。
 
 > `docs/diagnosis_5_issues_fix.md` 是**待落地方案**。状态对账（截至 2026-07-21）：
@@ -387,6 +389,8 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 - **P1#7 + P2#9 + P2#11 + P2#16（2026-07-21，CI `29793673693` ✅）**：新增 `OemPowerMode` 枚举取代数据源写死的中文显示串 `powerModeCurrent`/`hyperOsPerformanceGrade`，UI 经 `labelRes` 走 `stringResource`，OemScreen 等级配色改由枚举推导、移除硬编码中文比较串（P2#16）；`SysFsReader.readProp` 缓存 `SystemProperties.get` 方法引用（P2#9）；删除 `MainActivity` 中 `SystemMonitorAppMinimal`/`SystemMonitorAppNoFx` 调试残留（P2#11）。提交 `b62093e`。
 - **P2#13（CI 单元测接入，2026-07-21，CI `29795934663` ✅）**：`app/build.gradle` 补 `junit:junit:4.13.2`；`BatteryDataSource` companion 提 `internal` 使孤儿单测 `BatteryDataSourceCurrentUnitTest` 可编译；`.github/workflows/android-build.yml` 新增 `Run unit tests` 步骤（`testDebugUnitTest`）。修复两处曾阻断编译/运行的 bug：`sensor_range_format`/`sensor_range_label` 多占位符非定位格式（AAPT2 报错，改定位 `%1$.2f %2$s`）；电流判定 `CURRENT_PATH_REGISTRY` 子串遮蔽（通用键 `battery` 排在 `oplus_chg`/`vivo` 前误判 ASSUME_UA，专用键前置）与 `ASSUME_UA` 空区间 `100 until 50`（改 `absRaw < NON_OPPO_MA_THRESHOLD`）。13 用例全过。提交 `6f67e67`(资源) + `897964d`(电流逻辑)。
 - **P2#12（God-class 提取，2026-07-21，CI `29796355377` ✅）**：`BatteryDataSource` 电流单位判定逻辑（UnitHint 枚举 + CURRENT_PATH_REGISTRY + `OPPO_UA_THRESHOLD`/`NON_OPPO_MA_THRESHOLD` + `convertCurrentToMicroamps`/`resolveUnitHint`）提取为独立 `internal object BatteryCurrentNormalizer`；companion 保留外观方法委托，维持 `BatteryDataSource.*` 既有调用与单测 API 不变。提交 `7a3ee40`。
+- **ProGuard 收紧（2026-07-21，CI 验证 ✅）**：`proguard-rules.pro` 移除整体 `-keep class com.example.deviceinfoviewer.** { *; }`（项目代码零缩减根因），改精确 keep（`data.model.**` Gson + 入口组件 + Koin）。严格审查确认项目内反射仅作用于 framework 类，无需整体 keep。提交 `cXXXXXX`（见下方）。⚠️ 需真机冒烟: 导出/Koin/隐藏API反射。
+- **P2#8 / P2#10 / P2#15 严格审查收口（2026-07-21）**：P2#8 查清双管道真相（LiveData=UI主用、SharedFlow=悬浮窗），消除误导性注释与 `@Deprecated`，完整 UI 迁移递延为受控严格审查步骤；P2#10 逐站审查 80 处空 catch 结论**全部合法应保留**（数据层 OEM fallback + UI/App best-effort），无逻辑吞异常；P2#15 核实 `CpuCache.kt:636` 的 `0.15f` 为 15% DVFS 语义容差，保守保留。
 - 概览页 2×2 指标卡 + 快速访问 均支持拖拽重排（reorderable 3.1.0 + AppSettings 持久化）；提交 `a5d797e`（CI `29672704776` ✅）。
 - 快速访问新增电池(4)/传感器(7) 按钮（`1f912fb`）。
 - 内存卡新增 SWAP/ZRAM 子区域（`ca4c33a`）。
@@ -396,7 +400,7 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 1. ✅ **store-blocking（targetSdk 36）已完成**（本次提交）：targetSdk `35→36`（Android 16，满足 2026-08-31 Play 目标 API 截止）。健康权限迁移经代码核查为**误判** —— 全仓未声明/使用 `BODY_SENSORS` 或 `android.permission.health.*`（仅 `HealthTracker` 模块健康度追踪与 `BatteryInfo.health` 电池健康，均无关），故**无需迁移**。Android 16 行为变更（边缘到边缘/预测返回/前台服务 specialUse/本地网络 opt-in）对本应用均无硬阻断。
 2. ~~**P1#4**~~：**已移出范围（用户指令 2026-07-21）**——双电芯自动检测不实施，仅保留手动开关。
 3. **P1#7（持续）**：性能模式枚举化已完成（2026-07-21）；剩余 OEM 品牌专有名词 + `BatteryDataSource` 内部状态串需全量抽取（`diagnosis` 方案 5）。
-4. **P2（收口）**：已修复 P2#9（反射缓存）/P2#11（死代码）/P2#16（OEM 比较串）/P2#12（God-class 提取 `BatteryCurrentNormalizer`）/P2#13（CI 接入单元测 + 13 用例全过）。递延/不改动：P2#8（双管道，架构性留待大版本重构）、P2#10（空 catch 改逐站审查）、P2#14（双电芯拓扑，依赖 P1#4 已移出范围）、P2#15（阈值常量已基本命名，残留 `CpuCache.kt:636` 0.15f 不改动）。
+4. **P2（收口）**：已修复 P2#9（反射缓存）/P2#11（死代码）/P2#16（OEM 比较串）/P2#12（God-class 提取 `BatteryCurrentNormalizer`）/P2#13（CI 接入单元测 + 13 用例全过 + ProGuard 收紧）。严格审查结论：P2#8（双管道真相查清、完整 UI 迁移递延为受控严格审查步骤）、P2#10（80 处空 catch 全部合法保留）、P2#14（双电芯拓扑，依赖 P1#4 已移出范围）、P2#15（`CpuCache.kt:636` 0.15f 为 15% DVFS 语义容差，保守保留）。
 
 ---
 

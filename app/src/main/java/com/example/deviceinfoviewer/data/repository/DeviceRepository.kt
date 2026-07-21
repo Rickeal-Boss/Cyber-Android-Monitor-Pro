@@ -59,8 +59,10 @@ class DeviceRepository(context: Context) {
     // ═══════ History + 静态数据 ═══════
     val historyCache = HistoryCache()
 
-    // ═══════ SharedFlow 输出 (主数据管道) ═══════
+    // ═══════ SharedFlow 输出 (悬浮窗消费) ═══════
     // replay=1 ensures new subscribers get latest value; DROP_OLDEST prevents backpressure
+    // 注: SharedFlow 当前仅被 FloatingWindowService 消费 (悬浮窗实时刷新);
+    //     UI 主屏经下方 LiveData 消费 (P2#8 见说明)。
     private val _cpuFlow = MutableSharedFlow<CpuInfo>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val cpuFlow: SharedFlow<CpuInfo> = _cpuFlow.asSharedFlow()
 
@@ -73,14 +75,14 @@ class DeviceRepository(context: Context) {
     private val _batteryFlow = MutableSharedFlow<BatteryInfo>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val batteryFlow: SharedFlow<BatteryInfo> = _batteryFlow.asSharedFlow()
 
-    // ═══════ LiveData (向后兼容层 — 已废弃) ═══════
-    @Deprecated("迁移到 cpuFlow", ReplaceWith("cpuFlow"))
+    // ═══════ LiveData (UI 主用 — 暂保留) ═══════
+    // 全部 ViewModel (Dashboard/Cpu/Gpu/Memory/Battery) + ExportHelper 经此消费,
+    // 故为当前 UI 主数据管道; SharedFlow 并行 emit 以服务悬浮窗。
+    // P2#8: 完整迁移 (LiveData → SharedFlow + collectAsStateWithLifecycle) 属大型 UI 改动,
+    //       需严格审查 + 真机验证, 当前保留双管道 (collect 块内双写在后续去重)。
     val cpuLiveData = MutableLiveData<CpuInfo>()
-    @Deprecated("迁移到 gpuFlow", ReplaceWith("gpuFlow"))
     val gpuLiveData = MutableLiveData<GpuInfo>()
-    @Deprecated("迁移到 memoryFlow", ReplaceWith("memoryFlow"))
     val memoryLiveData = MutableLiveData<MemoryInfo>()
-    @Deprecated("迁移到 batteryFlow", ReplaceWith("batteryFlow"))
     val batteryLiveData = MutableLiveData<BatteryInfo>()
 
     // 辅助模块 LiveData (委托 AuxiliaryCollector)
