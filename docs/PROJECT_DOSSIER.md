@@ -17,7 +17,7 @@
 | UI | Compose BOM **2025.06.00**（≈Compose 1.7.x；受内置 Kotlin 2.2.10 编译器约束，2026.06.00 需 Kotlin 2.4.x=AGP 9.1+）、Material3、`material-icons-extended`、`ui-text-google-fonts`（`app/build.gradle:98-107`） |
 | 架构 | MVVM + **Koin 3.5.6**（`app/build.gradle:96-97`）、lifecycle **2.8.4** |
 | 三方库 | `sh.calvin.reorderable:reorderable:3.1.0`、`gson 2.10.1`、`kotlinx-coroutines-android:1.11.0`（`app/build.gradle`） |
-| SDK | `compileSdk 36`（AGP9 上限 36.1）/ `minSdk 21` / `targetSdk 35`（保持，计划 2026-08-31 前升 36）（`app/build.gradle:9,37-38`）；Java17 toolchain（`:62-69`） |
+| SDK | `compileSdk 36` / `minSdk 21` / `targetSdk 36`（已升，Android 16，满足 2026-08-31 Play 目标 API 截止）（`app/build.gradle:9,37-38`）；Java17 toolchain（`:62-69`） |
 | 版本号 | `versionCode 404` / `versionName 4.0.404.0`（`app/build.gradle:39-40`） |
 | 构建/混淆 | Release：`minifyEnabled true` + `shrinkResources true`；AGP9 要求 `getDefaultProguardFile('proguard-android-optimize.txt')`（已改）；`proguard-rules.pro` 仍 `-dontobfuscate` → **"缩而不混"**，App 自身代码整体 keep、仅第三方被缩减（`proguard-rules.pro:44-66`） |
 | 签名 | **仅 CI 签名**：`KEYSTORE_BASE64` 环境变量解码到临时文件（`app/build.gradle:10-33`） |
@@ -369,19 +369,21 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 - 空安全纪律极好：新增代码避免 `!!`，用 `?.`/安全回退。
 - 中文 UI 文案理论上应走 `stringResource`，但**现状大量硬编码于 DataSource** —— 改显示文案前先确认它是字面量还是资源键，避免重复修复。
 
-**近期变更（截至 2026-07-20）**
+**近期变更（截至 2026-07-21）**
 - **工具链升级（§13 第一阶段，CI `29722575790` ✅）**：AGP `8.6.0→9.0.1`、Gradle `8.7→9.1.0`、Kotlin `2.1.0→2.2.10`（AGP9 内置 built-in Kotlin，移除显式 `kotlin-android` 插件）、Compose BOM `2024.12.01→2025.06.00`、`kotlinx-coroutines-android 1.11.0`、compileSdk `35→36`；`org.jetbrains.kotlin.plugin.compose` 锁 2.2.10，CI SDK 升 `android-36`。提交 `2b36f35 / cb53e15 / 8f65e50 / b8a6407`。
   - ⚠️ **约束修正**：AGP 9.0.1 内置 Kotlin 锁定 2.2.10，硬禁显式 `kotlin-android` 插件；BOM 2026.06.00（Compose 1.12.x）需 Kotlin 2.4.x = **AGP 9.1+**，故本阶段止步 2025.06.00。Kotlin 2.4.10 / BOM 2026.06.00 留待 AGP 9.1+ 阶段。
 - **已修复（`73435ed`，属 §10 收口）**：P0#1（charge_full 归一）、P1#5（13× waitFor 超时）、P1#6（PollingFlow 取消信号）。
-- **P0#2 修复（天玑规格 + 制程，本次提交）**：`CpuCache.KNOWN_CHIPS` 增补 6 颗天玑规格（`mt6983/6985/6896/6886/6879/6893`）；`SOC_PROCESS_MAP` 补硅片号键 `MT6983/MT6896/MT6886`。9200/9000/8200/7200 制程节点不再掉"不可用"。
+- **P0#2 修复（天玑规格 + 制程，CI `29734507239` ✅）**：`CpuCache.KNOWN_CHIPS` 增补 6 颗天玑规格（`mt6983/6985/6896/6886/6879/6893`）；`SOC_PROCESS_MAP` 补硅片号键 `MT6983/MT6896/MT6886`。9200/9000/8200/7200 制程节点不再掉"不可用"。
+- **P1#3 修复（kona 865/870，CI `29734939802` ✅）**：`CpuCache` 增补 `sm8250-ac`（870）规格 + `resolveKonaVariant()` 四级判定；`collectSocProcess` 策略0 在 `kona` 平台按 variant 选 `sm8250`/`sm8250-ac`。提交 `7d29407`。
+- **store-blocking：targetSdk `35→36`（Android 16，本次提交）**：仅改 `app/build.gradle` `targetSdk 35→36`（compileSdk 已 36）。代码核查确认全仓**未使用** `BODY_SENSORS` / `android.permission.health.*`，故 android-developers 文档所述的「健康权限迁移」硬阻断**不适用**，无需改动 manifest。Android 16 其余行为变更（边缘到边缘/预测返回/`FOREGROUND_SERVICE_SPECIAL_USE`/本地网络 opt-in）对本应用均无硬阻断。满足 2026-08-31 Play 目标 API 截止。
 - 概览页 2×2 指标卡 + 快速访问 均支持拖拽重排（reorderable 3.1.0 + AppSettings 持久化）；提交 `a5d797e`（CI `29672704776` ✅）。
 - 快速访问新增电池(4)/传感器(7) 按钮（`1f912fb`）。
 - 内存卡新增 SWAP/ZRAM 子区域（`ca4c33a`）。
 - 全面代码审查完成，产出本档案 + `deliverables/gstack/code-health-audit-dialectical-2026-07-19.md`（辩证审计，纠正 waitFor 7→13、Battery 中文 8→22+ 等偏差）。
 
 **优先修复顺序建议（剩余项）**：
-1. 🔴 **store-blocking**：targetSdk `35→36` + 健康权限迁移（`BODY_SENSORS`→`android.permission.health.*`，绑定 **2026-08-31** Play 截止）。
-2. **P1#3 / P1#4**：`resolveKonaVariant()`（方案 4）、`autoDetectDualCell()` + OEM 回灌（方案 3）。
+1. ✅ **store-blocking（targetSdk 36）已完成**（本次提交）：targetSdk `35→36`（Android 16，满足 2026-08-31 Play 目标 API 截止）。健康权限迁移经代码核查为**误判** —— 全仓未声明/使用 `BODY_SENSORS` 或 `android.permission.health.*`（仅 `HealthTracker` 模块健康度追踪与 `BatteryInfo.health` 电池健康，均无关），故**无需迁移**。Android 16 行为变更（边缘到边缘/预测返回/前台服务 specialUse/本地网络 opt-in）对本应用均无硬阻断。
+2. **P1#4**：`autoDetectDualCell()` + OEM 回灌（方案 3）。
 3. **P1#7**：OEM ~80+ 处硬编码中文 → `stringResource`（`diagnosis` 方案 5）。
 4. **P2**：双管道 / 反射缓存 / 死代码 / God-class / CI 测试 / ProGuard 缩减 / 双电芯拓扑 / magic number / OEM 比较串。
 

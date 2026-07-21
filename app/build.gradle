@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace 'com.example.deviceinfoviewer'
-    compileSdk 36   // ↑ AGP9 上限 36.1；BOM 2025.06.00 + 内置 Kotlin 2.2.10 要求 compileSdk ≥ 36（targetSdk 仍 35，行为变更见 §13 单独增量）
+    compileSdk 36   // AGP9 上限 36.1；BOM 2025.06.00 + 内置 Kotlin 2.2.10 要求 compileSdk ≥ 36；targetSdk 同步 36（Android 16，满足 2026-08-31 Play 目标 API 截止）
     def ksBase64  = System.getenv("KEYSTORE_BASE64")
     def ksPassword = System.getenv("KEYSTORE_PASSWORD")
     def ksAlias   = System.getenv("KEY_ALIAS")
@@ -35,7 +35,7 @@ android {
 defaultConfig {
     applicationId "com.example.deviceinfoviewer"
     minSdk 21
-    targetSdk 35
+    targetSdk 36   // Android 16 (API 36)；2026-08-31 Play 目标 API 截止。健康权限: 本应用未声明/使用 BODY_SENSORS 或 android.permission.health.*，无需迁移。
     versionCode 404
     versionName "4.0.404.0"
 
