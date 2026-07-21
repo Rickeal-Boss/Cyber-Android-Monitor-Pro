@@ -37,6 +37,94 @@ import kotlinx.coroutines.flow.callbackFlow
  * - qpnp-vm-bms: /sys/class/power_supply/bms/ (Qualcomm PMIC BMS)
  * - OPlus chg: /sys/class/oplus_chg/battery/ (OPPO/OnePlus/Realme 充电 IC)
  */
+
+/**
+ * P2#12 — 电流单位归一化器（从 BatteryDataSource God-class 提取）
+ *
+ * 职责: 将各 OEM 内核 sysfs 上报的原始电流值(raw)按路径特征判定单位(mA / µA)，
+ * 统一归一化为 µA。所有"单位分类"逻辑与阈值集中于此，便于单测与维护。
+ *
+ * 注意:
+ * - [convertCurrentToMicroamps] / [resolveUnitHint] 在 companion 中保留外观方法，
+ *   以维持 `BatteryDataSource.convertCurrentToMicroamps(...)` 的既有调用与单测 API。
+ * - firstOrNull { pathHint.contains(key) } 按插入顺序取第一个匹配；通用键 "battery"
+ *   是 "oplus_chg/battery/..." 等路径的子串，必须排在专用键之后以避免【子串遮蔽】。
+ */
+internal object BatteryCurrentNormalizer {
+
+    // 单位提示: 各路径已知单位（避免启发式误判）
+    // ASSUME_UA: 标准 Linux power_supply 路径，直接 µA
+    // ASSUME_MA: OEM 驱动(mA 上报)
+    // AUTO: 未知路径，走阈值启发式
+    private enum class UnitHint { ASSUME_UA, ASSUME_MA, AUTO }
+
+    // 专用 / OEM / AUTO 键排在前，通用键(battery/bms...)排在后，避免子串遮蔽
+    private val CURRENT_PATH_REGISTRY: Map<String, UnitHint> = mapOf(
+        // === OPPO/OnePlus/Realme oplus_chg 驱动 — 始终 mA (优先于通用 battery 子串) ===
+        // Source: OPPO 内核源码 drivers/power/supply/oplus/oplus_chg.c
+        // XDA: https://forum.xda-developers.com/t/oplus-chg-current-sysfs-unit
+        "oplus_chg" to UnitHint.ASSUME_MA,
+        "oplus"     to UnitHint.ASSUME_MA,
+        "vooc"      to UnitHint.ASSUME_MA,
+        // === 其他 OEM 专属 — 使用启发式 AUTO (优先于通用 battery 子串) ===
+        "vivo"  to UnitHint.AUTO,
+        "batt_" to UnitHint.AUTO,
+        // === 标准 power_supply class — 始终 µA (通用键放最后，避免遮蔽上面的专用键) ===
+        // Source: AOSP kernel/Documentation/ABI/testing/sysfs-class-power-supply
+        "battery" to UnitHint.ASSUME_UA,
+        "bms"    to UnitHint.ASSUME_UA,
+        "main"   to UnitHint.ASSUME_UA,
+        "usb"    to UnitHint.ASSUME_UA,
+        // === 高通 BMS (qpnp-vm-bms) — 标准 µA ===
+        // Source: CodeLinaro kernel/msm power_supply qpnp-vm-bms.c
+        "qcom"      to UnitHint.ASSUME_UA,
+        "bcl"       to UnitHint.ASSUME_UA,
+        // === MTK — 标准 µA ===
+        // Source: MediaTek kernel drivers/power/supply/mtk_battery.c
+        "mt-battery"    to UnitHint.ASSUME_UA,
+        "battery_meter" to UnitHint.ASSUME_UA,
+    )
+
+    private const val OPPO_UA_THRESHOLD = 15_000L    // 15A 以上必为 µA
+    private const val NON_OPPO_MA_THRESHOLD = 50L    // 低于 50 可能是 mA
+
+    /** 将原始 sysfs 电流值按路径提示归一化为 µA (正=充电 / 负=放电) */
+    internal fun convertCurrentToMicroamps(rawValue: Long, pathHint: String): Long {
+        if (rawValue == 0L) return 0L
+
+        val unitHint = CURRENT_PATH_REGISTRY.entries.firstOrNull {
+            (key, _) -> pathHint.contains(key)
+        }?.value ?: UnitHint.AUTO
+
+        val absRaw = kotlin.math.abs(rawValue)
+        return when (unitHint) {
+            UnitHint.ASSUME_UA -> {
+                // 小值(<50)极可能是 mA 上报(如 30mA)，按 mA→µA 放大；否则视为标准 µA 直出
+                if (absRaw < NON_OPPO_MA_THRESHOLD) rawValue * 1000
+                else rawValue
+            }
+            UnitHint.ASSUME_MA -> {
+                if (absRaw > OPPO_UA_THRESHOLD) rawValue
+                else rawValue * 1000
+            }
+            UnitHint.AUTO -> {
+                when {
+                    absRaw > OPPO_UA_THRESHOLD -> rawValue
+                    absRaw < NON_OPPO_MA_THRESHOLD -> rawValue * 1000
+                    else -> rawValue
+                }
+            }
+        }
+    }
+
+    /** 路径 → 单位提示枚举名，暴露给单测验证路径匹配逻辑 */
+    internal fun resolveUnitHint(pathHint: String): String {
+        return CURRENT_PATH_REGISTRY.entries.firstOrNull {
+            (key, _) -> pathHint.contains(key)
+        }?.value?.name ?: UnitHint.AUTO.name
+    }
+}
+
 class BatteryDataSource(private val context: Context) {
 
     private var dumpsysBatteryTickCounter = 0  // ★ dumpsys 节流计数器
@@ -522,92 +610,22 @@ class BatteryDataSource(private val context: Context) {
      * @return Pair<电流µA (正=充电/负=放电), 来源描述>
      */
     internal companion object {
-        // 典型手机电芯容量合理区间 (mAh) — 技术债修复新增
+        // 典型手机电芯容量合理区间 (mAh)
         private const val CAP_MIN_MAH = 1500L
         private const val CAP_MAX_MAH = 9000L
 
-        // Maps each path keyword to its known unit to avoid heuristic misclassification.
-        // UnitHint.ASSUME_UA: Standard Linux power_supply path, directly µA.
-        // UnitHint.ASSUME_MA: OEM driver known to use mA.
-        // UnitHint.AUTO: Unknown, use heuristic threshold.
-        private enum class UnitHint { ASSUME_UA, ASSUME_MA, AUTO }
-
-        // Initialized once per companion to avoid per-tick list rebuild.
-        // 注意: firstOrNull { pathHint.contains(key) } 按插入顺序取第一个匹配。
-        // 通用键 "battery" 是 "oplus_chg/battery/..."、".../battery/vivo_current" 等
-        // 路径的子串，若排在专用键之前会产生【子串遮蔽】(shadowing)，误判为 ASSUME_UA。
-        // 故专用 / OEM / AUTO 键必须排在通用键之前。
-        private val CURRENT_PATH_REGISTRY: Map<String, UnitHint> = mapOf(
-            // === OPPO/OnePlus/Realme oplus_chg 驱动 — 始终 mA (优先于通用 battery 子串) ===
-            // Source: OPPO 内核源码 drivers/power/supply/oplus/oplus_chg.c
-            // XDA: https://forum.xda-developers.com/t/oplus-chg-current-sysfs-unit
-            "oplus_chg" to UnitHint.ASSUME_MA,
-            "oplus"     to UnitHint.ASSUME_MA,
-            "vooc"      to UnitHint.ASSUME_MA,
-            // === 其他 OEM 专属 — 使用启发式 AUTO (优先于通用 battery 子串) ===
-            "vivo"  to UnitHint.AUTO,
-            "batt_" to UnitHint.AUTO,
-            // === 标准 power_supply class — 始终 µA (通用键放最后，避免遮蔽上面的专用键) ===
-            // Source: AOSP kernel/Documentation/ABI/testing/sysfs-class-power-supply
-            "battery" to UnitHint.ASSUME_UA,
-            "bms"    to UnitHint.ASSUME_UA,
-            "main"   to UnitHint.ASSUME_UA,
-            "usb"    to UnitHint.ASSUME_UA,
-            // === 高通 BMS (qpnp-vm-bms) — 标准 µA ===
-            // Source: CodeLinaro kernel/msm power_supply qpnp-vm-bms.c
-            "qcom"      to UnitHint.ASSUME_UA,
-            "bcl"       to UnitHint.ASSUME_UA,
-            // === MTK — 标准 µA ===
-            // Source: MediaTek kernel drivers/power/supply/mtk_battery.c
-            "mt-battery"    to UnitHint.ASSUME_UA,
-            "battery_meter" to UnitHint.ASSUME_UA,
-        )
-
+        // 电流最终 sanity 边界 (µA)，用于读取后的合理性校验
         private const val UA_SANITY_LOW  = 100L          // 低于此值可能是噪声
         private const val UA_SANITY_HIGH = 20_000_000L   // 20A = 手机物理上限
-        private const val OPPO_UA_THRESHOLD = 15_000L    // 15A 以上必为 µA
-        private const val NON_OPPO_MA_THRESHOLD = 50L    // 低于 50 可能是 mA
 
-        /** Converts raw sysfs current value to µA based on path hint */
-        internal fun convertCurrentToMicroamps(rawValue: Long, pathHint: String): Long {
-            if (rawValue == 0L) return 0L
+        // === P2#12: 电流单位分类逻辑已提取至 BatteryCurrentNormalizer ===
+        // 以下为外观方法，维持 `BatteryDataSource.convertCurrentToMicroamps` 既有
+        // 调用与单测 API（实现委托给 BatteryCurrentNormalizer）
+        internal fun convertCurrentToMicroamps(rawValue: Long, pathHint: String): Long =
+            BatteryCurrentNormalizer.convertCurrentToMicroamps(rawValue, pathHint)
 
-            val unitHint = CURRENT_PATH_REGISTRY.entries.firstOrNull {
-                (key, _) -> pathHint.contains(key)
-            }?.value ?: UnitHint.AUTO
-
-            val absRaw = kotlin.math.abs(rawValue)
-            return when (unitHint) {
-                UnitHint.ASSUME_UA -> {
-                    // 小值(<50)极可能是 mA 上报(如 30mA)，按 mA→µA 放大；
-                    // 否则视为标准 µA 直出。
-                    // 注: 原 `UA_SANITY_LOW until NON_OPPO_MA_THRESHOLD` = 100 until 50 为
-                    // 空区间，恒为假，导致永不做单位放大 —— 已修正为 absRaw < 阈值。
-                    if (absRaw < NON_OPPO_MA_THRESHOLD) rawValue * 1000
-                    else rawValue
-                }
-                UnitHint.ASSUME_MA -> {
-                    if (absRaw > OPPO_UA_THRESHOLD) rawValue
-                    else rawValue * 1000
-                }
-                UnitHint.AUTO -> {
-                    when {
-                        absRaw > OPPO_UA_THRESHOLD -> rawValue
-                        absRaw < NON_OPPO_MA_THRESHOLD -> rawValue * 1000
-                        else -> rawValue
-                    }
-                }
-            }
-        }
-
-        /**
-         * 单位提示枚举: 暴露给单元测试，用于验证路径匹配逻辑
-         */
-        internal fun resolveUnitHint(pathHint: String): String {
-            return CURRENT_PATH_REGISTRY.entries.firstOrNull {
-                (key, _) -> pathHint.contains(key)
-            }?.value?.name ?: UnitHint.AUTO.name
-        }
+        internal fun resolveUnitHint(pathHint: String): String =
+            BatteryCurrentNormalizer.resolveUnitHint(pathHint)
     }
 
     private fun getCurrentNowFull(): Pair<Long, String> {
