@@ -102,4 +102,6 @@ dependencies {
     implementation 'androidx.compose.ui:ui-text-google-fonts'
     debugImplementation 'androidx.compose.ui:ui-tooling'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
+    // 单元测试 (P2#13: 此前 BatteryDataSourceCurrentUnitTest 为孤儿测试, 无 junit 依赖无法运行)
+    testImplementation 'junit:junit:4.13.2'
 }
