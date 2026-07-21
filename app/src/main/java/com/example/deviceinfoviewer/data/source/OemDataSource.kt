@@ -7,6 +7,7 @@ import android.hardware.camera2.CameraManager
 import android.os.Build
 import android.util.Log
 import com.example.deviceinfoviewer.data.model.OemInfo
+import com.example.deviceinfoviewer.data.model.OemPowerMode
 import java.io.File
 import java.lang.reflect.Method
 
@@ -973,17 +974,7 @@ class OemDataSource(private val context: Context? = null) {
         val ultraOn = checkMode(ULTRA_SAVE_PROPS)
         val boostOn = checkMode(VIVO_BOOST_PROPS)
 
-        // ── Phase 2: OEM 专属属性补充检测 ──
-        // Xiaomi: power_mode=0 → 均衡 (不开启任何模式)
-        val xiaomiMode = if (oem == OEM_XIAOMI) {
-            val pm = prop("persist.sys.power_mode")
-            when {
-                pm == "0" -> "均衡模式"
-                pm == "1" -> "性能模式"
-                pm == "2" -> "省电模式"
-                else -> null
-            }
-        } else null
+        // ── Phase 2: OEM 专属属性补充检测 (已并入 Phase 4 枚举化, 见下) ──
 
         // ── Phase 3: 互斥规则 ──
         // 超级省电 与 省电 互斥: 超级省电优先级更高
@@ -996,36 +987,23 @@ class OemDataSource(private val context: Context? = null) {
         info.ultraPowerSaveMode = finalUltra
         info.vivoBoostMode = boostOn
 
-        // ── 构建显示名称 ──
-        info.powerModeCurrent = when {
-            // 优先级: 超级省电 → 省电 → 性能/高性能 → Vivo Boost → 均衡
-            finalUltra -> "超级省电模式"
-            finalSave -> "省电模式"
-            perfOn -> "性能/高性能模式"
-            boostOn -> "Boost 模式"
-            xiaomiMode != null -> xiaomiMode  // Xiaomi 均衡模式
-            else -> "均衡模式"
-        }
+        // ── 构建性能模式枚举 (取代原中文显示串, UI 经 labelRes 本地化, P1#7) ──
+        // Xiaomi 狂暴引擎子态: 性能模式 + Redmi 设备 + fury 属性
+        val isFury = oem == OEM_XIAOMI && perfOn && checkMode(arrayOf(
+            "persist.sys.redmi_fury" to setOf("1", "true"),
+            "persist.vendor.godzilla_mode" to setOf("1", "true"),
+            "persist.sys.fury_engine" to setOf("1", "true"),
+        )) && (Build.BRAND.contains("redmi", ignoreCase = true)
+                || Build.MODEL.contains("Redmi", ignoreCase = true)
+                || prop("ro.product.brand", "").contains("redmi", ignoreCase = true))
+        info.redmiFuryEngine = isFury
 
-        // Xiaomi 专用: 保持 hyperOsPerformanceGrade 兼容
-        if (oem == OEM_XIAOMI) {
-            info.hyperOsPerformanceGrade = when {
-                finalUltra -> "超级省电模式"
-                finalSave -> "省电模式"
-                perfOn -> {
-                    val isFury = checkMode(arrayOf(
-                        "persist.sys.redmi_fury" to setOf("1", "true"),
-                        "persist.vendor.godzilla_mode" to setOf("1", "true"),
-                        "persist.sys.fury_engine" to setOf("1", "true"),
-                    ))
-                    if (isFury && (Build.BRAND.contains("redmi", ignoreCase = true)
-                            || Build.MODEL.contains("Redmi", ignoreCase = true)
-                            || prop("ro.product.brand", "").contains("redmi", ignoreCase = true)))
-                        "Redmi 狂暴引擎"
-                    else "性能模式"
-                }
-                else -> "均衡模式"
-            }
+        info.powerMode = when {
+            finalUltra -> OemPowerMode.ULTRA_POWER_SAVE
+            finalSave -> OemPowerMode.POWER_SAVE
+            perfOn -> OemPowerMode.PERFORMANCE
+            boostOn -> OemPowerMode.BOOST
+            else -> OemPowerMode.BALANCED
         }
 
         // ── 游戏模式独立检测 (保持原有行为) ──

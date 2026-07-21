@@ -3,6 +3,7 @@ package com.example.deviceinfoviewer.data.source
 import android.content.Context
 import android.os.BatteryManager
 import java.io.BufferedReader
+import java.lang.reflect.Method
 import java.io.File
 import java.io.FileReader
 
@@ -17,6 +18,15 @@ import java.io.FileReader
  * 4. BatteryManager 隐藏 API 反射（BATTERY_PROPERTY_CHARGE_COUNTER 等）
  */
 object SysFsReader {
+
+    /**
+     * 反射缓存 SystemProperties.get 方法引用 — 避免每 tick 重复 Class.forName。
+     * 初始化失败（罕见，如非标准 ROM）回退为 null，readProp 降级返回空串。
+     */
+    private val systemPropertiesGet: Method? = try {
+        val cls = Class.forName("android.os.SystemProperties")
+        cls.getMethod("get", String::class.java, String::class.java)
+    } catch (_: Throwable) { null }
 
     fun readLine(path: String): String =
         try {
@@ -90,9 +100,7 @@ object SysFsReader {
 
     fun readProp(key: String): String =
         try {
-            val cls = Class.forName("android.os.SystemProperties")
-            cls.getMethod("get", String::class.java, String::class.java)
-                .invoke(null, key, "")?.toString() ?: ""
+            systemPropertiesGet?.invoke(null, key, "")?.toString() ?: ""
         } catch (_: Throwable) { "" }
 
     fun readPropInt(key: String): Int =

@@ -41,6 +41,7 @@ import com.example.deviceinfoviewer.ui.theme.WarningNeon
 import org.koin.androidx.compose.koinViewModel
 import com.example.deviceinfoviewer.R
 import com.example.deviceinfoviewer.FormatUtils
+import com.example.deviceinfoviewer.data.model.OemPowerMode
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -93,19 +94,21 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
             }
 
             // HyperOS 3.0 特性
-            val hasHyperFeatures = o.hyperOsAIModel.isNotEmpty() || o.hyperOsCrossDevice.isNotEmpty() || o.hyperOsPerformanceGrade.isNotEmpty()
+            val hasHyperFeatures = o.hyperOsAIModel.isNotEmpty() || o.hyperOsCrossDevice.isNotEmpty()
+                || o.powerMode != OemPowerMode.BALANCED || o.redmiFuryEngine
             if (hasHyperFeatures) {
                 SectionCard(stringResource(R.string.oem_section_hyper_features)) {
                     RowItem(stringResource(R.string.oem_ai_model), o.hyperOsAIModel.ifEmpty { "-" })
                     RowItem(stringResource(R.string.oem_cross_device), o.hyperOsCrossDevice.ifEmpty { "-" })
-                    RowItemWithColor(stringResource(R.string.oem_perf_grade), o.hyperOsPerformanceGrade.ifEmpty { "-" },
-                        when {
-                            o.hyperOsPerformanceGrade == "性能模式" -> NeonPurpleBright
-                            o.hyperOsPerformanceGrade == "高性能模式" -> NeonMagenta
-                            o.hyperOsPerformanceGrade == "省电模式" -> NeonCyan
-                            o.hyperOsPerformanceGrade == "超级省电模式" -> NeonCyan
-                            else -> MaterialTheme.colorScheme.onSurface
-                        })
+                    val gradeLabel = if (o.redmiFuryEngine) stringResource(R.string.oem_redmi_fury_engine)
+                        else stringResource(o.powerMode.labelRes)
+                    val gradeColor = when {
+                        o.redmiFuryEngine -> NeonMagenta
+                        o.powerMode == OemPowerMode.PERFORMANCE -> NeonPurpleBright
+                        o.powerMode == OemPowerMode.POWER_SAVE || o.powerMode == OemPowerMode.ULTRA_POWER_SAVE -> NeonCyan
+                        else -> MaterialTheme.colorScheme.onSurface
+                    }
+                    RowItemWithColor(stringResource(R.string.oem_perf_grade), gradeLabel, gradeColor)
                 }
             }
 
@@ -287,20 +290,13 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
             val gameColor = if (o?.gameModeSupported == true) SuccessNeon else WarningNeon
             RowItemWithColor(stringResource(R.string.oem_game_mode), if (o?.gameModeSupported == true) stringResource(R.string.oem_game_mode_activated) else stringResource(R.string.oem_game_mode_not_activated), gameColor)
             // 当前调度模式 (带等级颜色)
-            val modeName = o?.powerModeCurrent?.ifEmpty { stringResource(R.string.oem_balanced_mode) } ?: stringResource(R.string.oem_balanced_mode)
-            // 从独立布尔字段推导模式等级
-            val modeLevel = when {
-                o?.ultraPowerSaveMode == true -> 0
-                o?.powerSaveMode == true -> 1
-                o?.vivoBoostMode == true -> 2
-                o?.highPerformanceMode == true -> 3
-                else -> 2  // 默认均衡
-            }
-            val modeColor = when (modeLevel) {
-                0, 1 -> NeonCyan           // 省电类 → 青色
-                2 -> WarningNeon           // 均衡 → 橙色 (中性)
-                3 -> NeonPurpleBright      // 性能 → 亮紫
-                4 -> NeonMagenta           // 高性能 → 品红
+            val mode = o?.powerMode ?: OemPowerMode.BALANCED
+            val modeName = stringResource(mode.labelRes)
+            val modeColor = when (mode) {
+                OemPowerMode.ULTRA_POWER_SAVE, OemPowerMode.POWER_SAVE -> NeonCyan      // 省电类 → 青色
+                OemPowerMode.BALANCED -> WarningNeon                                     // 均衡 → 橙色 (中性)
+                OemPowerMode.PERFORMANCE -> NeonPurpleBright                            // 性能 → 亮紫
+                OemPowerMode.BOOST -> NeonMagenta                                       // Boost → 品红
                 else -> MaterialTheme.colorScheme.onSurface
             }
             RowItemWithColor(stringResource(R.string.oem_current_scheduler), modeName, modeColor)
