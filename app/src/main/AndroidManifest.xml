@@ -13,7 +13,6 @@
     <!-- GPS 卫星信息（本地设备） -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <!-- 悬浮窗（本地叠加层） -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
