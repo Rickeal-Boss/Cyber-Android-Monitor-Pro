@@ -44,11 +44,7 @@ class DeviceRepository(context: Context) {
             Build.SOC_MODEL.trim().lowercase()
         } else ""
         val platform = if (socModel.isNotEmpty()) socModel
-        else try {
-            Class.forName("android.os.SystemProperties")
-                .getMethod("get", String::class.java, String::class.java)
-                .invoke(null, "ro.board.platform", "") as? String ?: ""
-        } catch (_: Throwable) { "" }
+        else SysFsReader.readProp("ro.board.platform")
         val resolved = if (platform.isNotEmpty()) platform
         else SysFsReader.readProp("ro.board.platform")
         val finalPlatform = if (resolved.isNotEmpty()) resolved
