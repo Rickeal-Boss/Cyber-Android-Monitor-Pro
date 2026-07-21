@@ -395,6 +395,8 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 - 快速访问新增电池(4)/传感器(7) 按钮（`1f912fb`）。
 - 内存卡新增 SWAP/ZRAM 子区域（`ca4c33a`）。
 - 全面代码审查完成，产出本档案 + `deliverables/gstack/code-health-audit-dialectical-2026-07-19.md`（辩证审计，纠正 waitFor 7→13、Battery 中文 8→22+ 等偏差）。
+- **P0（外部代码审查 🔴2 收口，2026-07-21，CI `29800457867`/`f5b4384` ✅）**：移除 `AndroidManifest.xml` 的 `ACCESS_BACKGROUND_LOCATION` 声明 + 清理 `GpsDataSource` 仅做检测、无任何功能使用的 `hasBackgroundLocation` 块（含 kdoc 第5条）。GPS 仅前台 Tab 激活时监听、无后台定位场景；该权限是 Play 后台定位策略的**发布阻断项**且从未运行时申请，移除后前台定位（FINE/COARSE）链路完整保留。提交 `f5b4384`。
+  - 🔍 **辩证性复核结论（同次外部审查）**：报告所列 3 个 🔴 Blocker **仅 1 个为真**——🔴2 后台定位（已修）；🔴1 minSdk 21 与 Compose BOM 2025.06 不兼容＝**误报**（官方确认 `androidx.compose.ui:ui` 1.9.0 minSdk=21，提 23 仅见于 1.10.0-alpha01；CI 全绿印证无 manifest merger 冲突）；🔴3 内阻 irDrop 单位错误＝**误报**（算式 `|I|µA × R mΩ ÷ 1e6` 正确产出 mV，典型 1A×50mΩ→50mV 非恒 0，OCV/内阻精化逻辑正常）。9 个 🟡 中 🟡5（PendingIntent）为**非问题**（全仓仅 1 处且 `FLAG_IMMUTABLE` 正确），🟡1 计数虚高（实测 80 处非 100+）、🟡7 仅瑕疵级、🟡8 normalizer 测试已用 13 用例覆盖。真问题聚焦：🔴2（已修）+ 🟡2（PermissionHelper 废弃 API/不验证结果，P1）+ 🟡9（移除 `-dontobfuscate` 需配真机冒烟，P2）。
 
 **优先修复顺序建议（剩余项）**：
 1. ✅ **store-blocking（targetSdk 36）已完成**（本次提交）：targetSdk `35→36`（Android 16，满足 2026-08-31 Play 目标 API 截止）。健康权限迁移经代码核查为**误判** —— 全仓未声明/使用 `BODY_SENSORS` 或 `android.permission.health.*`（仅 `HealthTracker` 模块健康度追踪与 `BatteryInfo.health` 电池健康，均无关），故**无需迁移**。Android 16 行为变更（边缘到边缘/预测返回/前台服务 specialUse/本地网络 opt-in）对本应用均无硬阻断。
