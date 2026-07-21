@@ -521,7 +521,7 @@ class BatteryDataSource(private val context: Context) {
     /**
      * @return Pair<电流µA (正=充电/负=放电), 来源描述>
      */
-    private companion object {
+    internal companion object {
         // 典型手机电芯容量合理区间 (mAh) — 技术债修复新增
         private const val CAP_MIN_MAH = 1500L
         private const val CAP_MAX_MAH = 9000L
