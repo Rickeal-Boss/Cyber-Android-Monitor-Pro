@@ -114,3 +114,19 @@ jobs:
           name: device-info-viewer-release
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30
+
+      # ★ Debug 预发布包（minifyEnabled=false，默认 debug 签名）：用于真机 debug-vs-release 崩溃差异测试
+      - name: Build Debug APK (no R8 shrink)
+        run: ./gradlew assembleDebug
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      - name: Debug — list debug APK outputs
+        run: find app/build/outputs -path "*debug*.apk" -type f 2>/dev/null || echo "(no debug APK found)"
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: device-info-viewer-debug
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 30
