@@ -674,34 +674,6 @@ class BatteryDataSource(private val context: Context) {
             // Source: Xiaomi HyperOS 内核 — BMS 子目录 (标准 µA)
             "/sys/class/power_supply/bms/battery_current" to "bms/battery_current",
             "/sys/class/power_supply/bms/charge_current" to "bms/charge_current",
-            // Source: OPPO 内核 drivers/power/supply/oplus/oplus_chg.c — oplus_chg 驱动 mA
-            "/sys/class/oplus_chg/battery/current_now" to "oplus_chg/current_now",
-            "/sys/class/oplus_chg/battery/charging_current" to "oplus_chg/charging_current",
-            "/sys/class/oplus_chg/battery/battery_current" to "oplus_chg/battery_current",
-            // ColorOS 13+ 新增 (mA)
-            "/sys/class/oplus_chg/battery/real_icharging" to "oplus_chg/real_icharging",
-            "/sys/class/oplus_chg/battery/instant_charging_current" to "oplus_chg/instant_charge",
-            "/sys/class/oplus_chg/battery/input_current" to "oplus_chg/input_current",
-            "/sys/kernel/oplus_chg/battery/current_now" to "kernel/oplus_chg/current_now",
-            "/sys/kernel/oplus_chg/battery/charging_current" to "kernel/oplus_chg/charging",
-            "/sys/devices/platform/oplus_chg/battery/current_now" to "platform/oplus_chg/current_now",
-            // OPPO 内核级 oplus_chg 扩展 (mA)
-            "/sys/kernel/oplus_chg/battery/battery_current" to "kernel/oplus_chg/battery_cur",
-            "/sys/kernel/oplus_chg/battery/real_icharging" to "kernel/oplus_chg/real_ichg",
-            "/sys/kernel/oplus_chg/usb/current_now" to "kernel/oplus_chg/usb_current",
-            "/sys/devices/platform/soc/oplus_chg/battery/current_now" to "soc/oplus_chg/current",
-            "/sys/devices/platform/soc/oplus_chg/usb/current_now" to "soc/oplus_chg/usb_current",
-            "/sys/firmware/devicetree/base/oplus_chg/current_now" to "dt/oplus_chg/current",
-            "/sys/kernel/oplus_chg/bms/current_now" to "kernel/oplus_chg/bms_current",
-            // ColorOS 16 新增电流节点 (mA — oplus_chg 派生)
-            "/sys/class/oplus_chg/battery/charger_current" to "oplus_chg/charger_current",
-            "/sys/class/oplus_chg/battery/current_avg" to "oplus_chg/current_avg",
-            "/sys/devices/platform/soc/oplus_chg/battery/battery_current" to "soc/oplus_chg/battery_cur2",
-            // OPPO/Realme (mA — oplus_chg 派生路径)
-            "/sys/class/power_supply/battery/real_charging_current" to "battery/real_charge",
-            "/sys/class/power_supply/battery/fast_charge_current" to "battery/fast_charge",
-            "/sys/class/power_supply/battery/pd_charging_current" to "battery/pd_charge",
-            "/sys/class/power_supply/battery/vooc_charging_current" to "battery/vooc_charge",
             // Source: 华为/荣耀 内核 — 标准 µA
             "/sys/class/power_supply/battery/charging_current" to "battery/charging_current",
             // Source: 三星内核 — 标准 µA
