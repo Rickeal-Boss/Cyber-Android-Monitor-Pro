@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.weight
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -459,6 +459,7 @@ private fun DualCellToggleCard(
  * 偏大/偏小，由用户在此按真实值校正。范围由 AppSettings 钳制 [0.1, 10.0]。
  * Slider 步进 0.1×；预设 0.5×/1.0×/2.0× 覆盖常见校正场景；Reset 归位 1.0×。
  */
+@Composable
 private fun BatteryCurrentMultiplierCard(
     multiplier: Double,
     onMultiplierChange: (Double) -> Unit,
