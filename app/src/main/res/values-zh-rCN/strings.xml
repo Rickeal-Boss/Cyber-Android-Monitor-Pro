@@ -111,6 +111,9 @@
     <string name="battery_health_title">Battery health</string>
     <string name="battery_dual_cell_title">双电芯电池</string>
     <string name="battery_dual_cell_subtitle">手动覆盖 — 测量电压翻倍以计算准确功率</string>
+    <string name="battery_current_multiplier_title">电池电流校准</string>
+    <string name="battery_current_multiplier_subtitle">默认 1.0×。ColorOS 等 OEM ROM 电流读数常偏 scale，按真实值校正（如偏大 2× 填 0.5×）</string>
+    <string name="battery_current_multiplier_reset">重置 1.0×</string>
     <string name="battery_capacity_title">Battery capacity</string>
     <string name="battery_design_capacity_format">设计容量: %1$d mAh</string>
     <string name="battery_design_capacity_title">设计容量</string>

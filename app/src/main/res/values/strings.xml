@@ -117,6 +117,9 @@
     <string name="battery_title">Battery</string>
     <string name="battery_dual_cell_title">Dual-cell battery</string>
     <string name="battery_dual_cell_subtitle">Manual override — doubles measured voltage for accurate power</string>
+    <string name="battery_current_multiplier_title">Battery current calibration</string>
+    <string name="battery_current_multiplier_subtitle">Default 1.0×. ColorOS/OMS ROMs may mis-scale current — tune to real value (e.g. 0.5× if reported 2× too high)</string>
+    <string name="battery_current_multiplier_reset">Reset 1.0×</string>
     <string name="battery_level">Level</string>
     <string name="battery_status">Status</string>
     <string name="battery_health">Health</string>
