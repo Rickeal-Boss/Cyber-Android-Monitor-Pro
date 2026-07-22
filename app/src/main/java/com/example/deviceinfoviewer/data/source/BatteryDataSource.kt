@@ -129,6 +129,14 @@ class BatteryDataSource(private val context: Context) {
 
     private var dumpsysBatteryTickCounter = 0  // ★ dumpsys 节流计数器
 
+    // ★ SoC Δ 平均电流估计状态 (零权限兜底, 详见 estimateCurrentViaSocDelta)
+    @Volatile
+    private var socDeltaPrevLevelPct: Int = -1
+    @Volatile
+    private var socDeltaPrevCapacityMAh: Long = -1L
+    @Volatile
+    private var socDeltaPrevTimeMs: Long = 0L
+
     private val TAG = "BatteryDataSource"
     private val appContext = context.applicationContext
 
@@ -251,9 +259,32 @@ class BatteryDataSource(private val context: Context) {
         }
 
         // === 电流（多路径，带符号 µA） ===
-        val (currentUA, currentSource) = getCurrentNowFull()
+        // ★ PlusPlusBattery 思路: 最终读数统一乘以用户校准倍率 (默认 1.0 = 不修正)，
+        //   解决 ColorOS 等 OEM ROM 的 oplus_chg / BATTERY_PROPERTY_CURRENT_NOW 因单位或
+        //   增益偏差导致的读数不准。倍率在此单一总入口施加，自然流向瓦特/内阻等派生指标。
+        val (rawCurrentUA, source0) = getCurrentNowFull()
+        val currentMultiplier = AppSettings.getInstance(appContext).batteryCurrentMultiplier
+        // currentUA / currentSource 作为单一真源: 下游瓦特/内阻/充放电判定与归一化统一引用
+        var currentUA = (rawCurrentUA * currentMultiplier).toLong()
+        var currentSource = source0
         info.currentNowUA = currentUA
         info.currentNowSource = currentSource
+
+        // === SoC Δ 平均电流估计 (零权限兜底) ===
+        // 当所有路径(sysfs/property/hidden API/dumpsys)均返回0时启用 —— 这正是 ColorOS
+        // 下"检测不到电流"的典型场景(SELinux 拦截 sysfs + property 恒为0)。
+        // 原理: AccuBattery 同款 —— 由公开的电量百分比(level)与容量(capacity)随时间变化率
+        //   反推平均电流: ΔQ(mAh)=capacityMAh×Δlevel%/100 ; avg(mA)=ΔQ/Δt(h) ; ×1000→µA
+        if (currentUA == 0L && currentSource == "无法获取"
+            && info.levelPercent in 1..100 && info.effectiveChargeFullMAh > 0) {
+            val socEstUA = estimateCurrentViaSocDelta(info.levelPercent, info.effectiveChargeFullMAh)
+            if (socEstUA != null) {
+                currentUA = socEstUA
+                currentSource = "SoC Δ估计"
+                info.currentNowUA = currentUA
+                info.currentNowSource = currentSource
+            }
+        }
 
         // === BBK 电流归一化 (mA, 含方向) ===
         info.currentNormalizedMa = normalizeBbKCurrent(currentUA, currentSource)
@@ -725,7 +756,9 @@ class BatteryDataSource(private val context: Context) {
             val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
             if (bm != null) {
                 val current = bm.getIntProperty(2) // BATTERY_PROPERTY_CURRENT_NOW = 2
-                if (current > 0) {
+                // ★ P0 修复: 原 `if (current > 0)` 会丢弃放电(负值)电流，导致放电态读数为0。
+                //   按 AOSP 符号约定(正=充电/负=放电)接受非0值，与隐藏 API 分支(线743)对齐。
+                if (current != 0) {
                     Log.d(TAG, "current_now from BatteryManager.getIntProperty(2): $current µA")
                     return Pair(current.toLong(), "BatteryManager direct (prop 2)")
                 }
@@ -798,6 +831,59 @@ class BatteryDataSource(private val context: Context) {
         } catch (_: Throwable) { /* fall through */ }
 
         return Pair(0L, "无法获取")
+    }
+
+    /**
+     * SoC Δ 平均电流估计 (零权限兜底, AccuBattery 同款思路)。
+     *
+     * 借用 Android 默认公开的电量百分比(level)与容量(capacity)，由二者随时间的差分反推
+     * 平均电流。当 ColorOS 的 sysfs 被 SELinux 拦截、且 BATTERY_PROPERTY_CURRENT_NOW 恒为 0
+     * (即 getCurrentNowFull 返回 "无法获取") 时，此路仍能给出可用的平均电流估计。
+     *
+     * 公式: ΔQ(mAh) = capacityMAh × (levelNow% − levelPrev%) / 100
+     *       avg(mA) = ΔQ / Δt(hours) ;  ×1000 → µA (正=充电 / 负=放电)
+     *
+     * 设计约束 (防抖): 仅在 Δt ≥ 60s 时差分，避免整型 level 粒度(1%)与短间隔噪声放大。
+     * 样本不足 / 容量未知 / 间隔过短 / 超出 ±20A 合理范围时返回 null。
+     *
+     * @return 平均电流(µA, 带符号)，不满足条件时返回 null
+     */
+    private fun estimateCurrentViaSocDelta(levelPct: Int, capacityMAh: Long): Long? {
+        val now = System.currentTimeMillis()
+        val prevLevel = socDeltaPrevLevelPct
+        val prevCap = socDeltaPrevCapacityMAh
+        val prevTime = socDeltaPrevTimeMs
+
+        // 首样本: 仅记录, 不估计
+        if (prevLevel < 0 || prevCap <= 0L || prevTime <= 0L) {
+            socDeltaPrevLevelPct = levelPct
+            socDeltaPrevCapacityMAh = capacityMAh
+            socDeltaPrevTimeMs = now
+            return null
+        }
+
+        val dtMs = now - prevTime
+        if (dtMs < 60_000L) {
+            // 间隔不足: 保留旧样本继续累加, 等足够间隔再差分 (避免短间隔噪声放大)
+            return null
+        }
+
+        // 足够间隔 → 差分估计, 并滚动更新样本
+        val dqMAh = capacityMAh * (levelPct - prevLevel) / 100.0
+        val dtHours = dtMs / 3_600_000.0
+        val avgUA = (dqMAh / dtHours * 1000.0).toLong()
+
+        socDeltaPrevLevelPct = levelPct
+        socDeltaPrevCapacityMAh = capacityMAh
+        socDeltaPrevTimeMs = now
+
+        // sanity: 平均电流不应超 ±20A
+        if (kotlin.math.abs(avgUA) > 20_000_000L) {
+            Log.w(TAG, "SoC Δ estimate $avgUA µA exceeds ±20A sanity — discarded")
+            return null
+        }
+        Log.d(TAG, "SoC Δ estimate: $prevLevel%→$levelPct% cap ${capacityMAh}mAh dt ${dtMs}ms → $avgUA µA")
+        return avgUA
     }
 
     // ── 辅助: shell 读取 sysfs 整数 (绕过 Android 13+ SELinux) ──
