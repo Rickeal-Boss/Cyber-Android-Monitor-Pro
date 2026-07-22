@@ -67,6 +67,16 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getBoolean("dual_cell_battery", false)
         set(value) = prefs.edit { putBoolean("dual_cell_battery", value) }
 
+    // ── 电池电流校准倍率 (PlusPlusBattery 思路: 用户校准则准) ──
+    // 默认 1.0 = 不修正。ColorOS 等 OEM ROM 的 oplus_chg sysfs / BATTERY_PROPERTY_CURRENT_NOW
+    // 读数常因单位或增益偏差而偏大/偏小，由用户在设置中校准 (如读数偏大 2× 则填 0.5)。
+    // 钳制 [0.1, 10.0] 防止误配导致瓦特/内阻等派生指标失真。
+    var batteryCurrentMultiplier: Double
+        get() = prefs.getFloat("battery_current_multiplier", 1.0f).toDouble().coerceIn(0.1, 10.0)
+        set(value) = prefs.edit {
+            putFloat("battery_current_multiplier", value.toFloat().coerceIn(0.1f, 10.0f))
+        }
+
     // ── 概览页卡片排序 (逗号分隔的卡片 ID) ──
     // 指标卡: cpu_temp, mem_usage, battery_level, gpu_load
     // 快速访问: cpu, gpu, mem, net, gps, device, battery, sensor
