@@ -54,18 +54,6 @@ object PathRegistry {
             unit = CurrentUnit.MICROAMP
         ),
 
-        // ── OPPO/OnePlus/Realme (ColorOS 12/13/14, oplus_chg 驱动) ──
-        // Source: OPPO 内核 drivers/power/supply/oplus/oplus_chg.c
-        "oppo" to CurrentPathEntry(
-            primaryPath = "/sys/class/oplus_chg/battery/current_now",
-            fallbackPaths = listOf(
-                "/sys/class/oplus_chg/battery/real_icharging",
-                "/sys/class/oplus_chg/battery/charging_current",
-                "/sys/class/power_supply/battery/current_now",
-            ),
-            unit = CurrentUnit.MILLIAMP
-        ),
-
         // ── 小米 (HyperOS / MIUI, 高通 BMS + 扩展) ──
         // Source: Xiaomi HyperOS 内核, XDA 多设备实测
         "xiaomi" to CurrentPathEntry(
