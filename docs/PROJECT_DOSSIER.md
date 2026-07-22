@@ -409,6 +409,13 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
   - **修复 1（handler 提前）**：`DeviceApplication.onCreate` 首行即 `setupCrashHandler()`，**早于** `super.onCreate()`（全仓最早生效点），覆盖 `attachBaseContext` + `super.onCreate` 全部启动前路径。
   - **修复 2（attachBaseContext 守卫）**：`MainActivity.attachBaseContext` 原 `super.attachBaseContext(LocaleManager.wrapContext(newBase))` 无兜底，`wrapContext` 一旦在 OEM ROM 抛异常即静默闪退且无日志。改为 `try { LocaleManager.wrapContext(newBase) } catch (e) { Log.e + 回退 newBase }`，保证即便 locale 包装失败也能正常启动。
   - ⚠️ **说明**：此项为**可观测性 + 启动健壮性**修复，不保证是闪退根因（真机无 logcat 无法定论）。它确保：(a) 真机再崩必落 `crash.log` 可读；(b) `attachBaseContext` 这条最高危启动路径不再裸奔。下一步应结合真机 `adb logcat` / `crash.log` 或 **debug（minifyEnabled false）vs release APK 差异测试** 定位 R8 / OEM ROM 真正根因（见 HCP-2/HCP-3 待办）。
+- **HCP-5 收口（启动崩溃根因定位 + 修复，2026-07-22，CI `#574`/`0c0e9ef` ✅）**：HCP-1 让 vivo 真机（V2199A, SDK34）再崩时落 `crash.log`，据此**精确锁定根因**——并非 OEM ROM / 原生崩溃，而是纯 Compose 布局约束错误：
+  - **栈顶**：`IllegalStateException: Vertically scrollable component was measured with an infinity maximum height constraints`；
+  - **根因**：`DashboardScreen` 是 `Column(Modifier.verticalScroll())`，其内嵌的两个 `ReorderableCardGrid` 用了 `LazyVerticalGrid(userScrollEnabled=false)`。父 `verticalScroll` 给子节点传 `maxHeight=Infinity`，`LazyVerticalGrid` 即便禁用滚动也过不了 `CheckScrollableContainerConstraints` → 首帧合成即抛，进程被杀，表现为"启动即闪退"。
+  - **关键澄清**：**与 vivo/OEM / R8 均无关**（debug 无 R8、release 有 R8 都崩，恰好排除 R8）；是 Compose 经典"可滚动里嵌可滚动"坑，所有设备都会崩——只因 CI 只编译不运行从未暴露。`debug-vs-release` diff 测试的价值在于先排除 R8，把排查聚焦到布局逻辑。
+  - **修复**：在 `ReorderableCardGrid` 给两处 `LazyVerticalGrid` 加有限高度上限约束 `Modifier.fillMaxWidth().heightIn(max = gridMaxHeight)`（`gridMaxHeight` 基于 item 数按 `rowCount*400 + 行距` 计算，`if` 手写非负守卫**刻意避开 `maxOf`**——本项目构建链曾因 `kotlin.math.maxOf` 解析失败 CI `#568`）。`userScrollEnabled=false` 下网格仍按内容自适应高度，不拉伸/不截断，仅不再收到 `Infinity` → 通过约束检查。
+  - **范围核查**：全仓 `LazyVerticalGrid/LazyColumn` 仅此一处，其余屏幕均为 `verticalScroll + 非 lazy 子节点`（安全），无同类隐患。
+  - 提交 `0c0e9ef`；已用修复后构建更新 prerelease `v4.0.404.0-debug-pre` 供真机复测。
 
 **优先修复顺序建议（剩余项）**：
 1. ✅ **store-blocking（targetSdk 36）已完成**（本次提交）：targetSdk `35→36`（Android 16，满足 2026-08-31 Play 目标 API 截止）。健康权限迁移经代码核查为**误判** —— 全仓未声明/使用 `BODY_SENSORS` 或 `android.permission.health.*`（仅 `HealthTracker` 模块健康度追踪与 `BatteryInfo.health` 电池健康，均无关），故**无需迁移**。Android 16 行为变更（边缘到边缘/预测返回/前台服务 specialUse/本地网络 opt-in）对本应用均无硬阻断。
