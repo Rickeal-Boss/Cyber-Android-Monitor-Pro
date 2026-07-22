@@ -273,6 +273,17 @@ private fun ReorderableCardGrid(
     keyOf: (String) -> String,
     itemContent: @Composable (String, Modifier) -> Unit,
 ) {
+    // ★ 崩溃修复 (HCP-5): 静态 2 列网格(userScrollEnabled=false)必须处于有限高度约束下。
+    //   外层 DashboardScreen 是 Column(Modifier.verticalScroll), 会向子节点传 maxHeight=Infinity;
+    //   LazyVerticalGrid 即便禁用滚动也过不了 checkScrollableContainerConstraints → 抛
+    //   IllegalStateException("measured with an infinity maximum height")，即为 vivo 真机"启动即闪退"根因。
+    //   这里用基于 item 数的安全上限约束 maxHeight（网格仍按自身内容自适应高度，不拉伸/不截断）。
+    val itemCount = getItems().size
+    val rowCount = (itemCount + 1) / 2
+    // 避免 maxOf(本构建链曾因 kotlin.math.maxOf 解析失败 CI #568): 手写非负守卫
+    val rowSpacing = if (rowCount > 1) (rowCount - 1) * 16 else 0
+    val gridMaxHeight = (rowCount * 400 + rowSpacing).dp
+
     if (enabled) {
         val gridState = rememberLazyGridState()
         val reorderState = rememberReorderableLazyGridState(gridState) { from, to ->
@@ -284,7 +295,7 @@ private fun ReorderableCardGrid(
             columns = GridCells.Fixed(2),
             state = gridState,
             userScrollEnabled = false,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(max = gridMaxHeight),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -306,7 +317,7 @@ private fun ReorderableCardGrid(
             columns = GridCells.Fixed(2),
             state = rememberLazyGridState(),
             userScrollEnabled = false,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(max = gridMaxHeight),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
