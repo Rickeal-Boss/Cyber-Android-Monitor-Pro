@@ -46,7 +46,7 @@ import com.example.deviceinfoviewer.R
 import com.example.deviceinfoviewer.ui.AppViewModel
 import com.example.deviceinfoviewer.RefreshPolicy
 import com.example.deviceinfoviewer.ui.battery.BatteryScreen
-import com.example.deviceinfoviewer.ui.components.GlowBackButton
+import com.example.deviceinfoviewer.ui.components.LightCircleBackButton
 import com.example.deviceinfoviewer.ui.components.NeonDivider
 import com.example.deviceinfoviewer.ui.components.NeonHeaderDecoration
 import com.example.deviceinfoviewer.ui.components.neonBorderGlow
@@ -318,7 +318,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     )
                 ) {
                     SettingsScreen()
-                    GlowBackButton(
+                    LightCircleBackButton(
                         onClick = { showSettings = false },
                         btnSize = 48.dp,
                         modifier = Modifier.padding(top = 8.dp, start = 16.dp).align(Alignment.TopStart)
@@ -349,7 +349,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     )
                 ) {
                     FloatingWindowScreen(onBack = { showFloatConfig = false })
-                    GlowBackButton(
+                    LightCircleBackButton(
                         onClick = { showFloatConfig = false },
                         btnSize = 48.dp,
                         modifier = Modifier.padding(top = 8.dp, start = 16.dp).align(Alignment.TopStart)

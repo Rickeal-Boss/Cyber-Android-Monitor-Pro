@@ -26,6 +26,8 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -254,3 +256,90 @@ private fun Modifier.drawWithGlassReflection(btnSize: Dp): Modifier =
 
 // ── 涟漪数据 ──
 private data class RippleData(val startTime: Long)
+
+// ═════════════════════════════════════════════════════
+//  浅色圆形返回按钮 — 对齐 WorkBuddy Android 客户端风格
+//
+//  视频参考: WorkBuddy Android 客户端二层页面返回键
+//  特征:
+//  - 纯净圆形底座 (浅色半透明白底, 无渐变/无描边)
+//  - 轻微 elevation 阴影 (悬浮感)
+//  - Material3 标准返回箭头 (深色图标)
+//  - 按压弹性缩放 (0.90x spring) + 触觉反馈
+//  - 尺寸与 GlowBackButton 一致 (默认 40dp, 可覆盖层用 48dp)
+// ═════════════════════════════════════════════════════
+
+/**
+ * 浅色圆形返回按钮 — WorkBuddy Android 客户端同款样式。
+ *
+ * 与 [GlowBackButton] (暗玻璃霓虹风) 并列为两种可选返回键皮肤:
+ * - GlowBackButton → 暗色主题主屏 / 深色沉浸页
+ * - LightCircleBackButton → 浅色底二层页 (设置/悬浮窗/传感器详情)
+ *
+ * @param onClick 点击回调
+ * @param modifier 外部 Modifier
+ * @param btnSize 按钮直径, 默认 40.dp (覆盖层场景传 48.dp)
+ */
+@Composable
+fun LightCircleBackButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    btnSize: Dp = 40.dp,
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
+
+    // 按压缩放 (弹性反馈, 比 GlowBackButton 的 0.88x 更克制)
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.90f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "lightPressScale"
+    )
+
+    // 按压时背景微暗 (视觉反馈)
+    val pressAlpha by animateFloatAsState(
+        targetValue = if (isPressed) 0.80f else 0.92f,
+        animationSpec = tween(100),
+        label = "pressBgAlpha"
+    )
+
+    Box(
+        modifier = modifier
+            .size(btnSize)
+            .scale(pressScale)
+            .shadow(
+                elevation = 3.dp,
+                shape = CircleShape,
+                ambientColor = Color.Black.copy(alpha = 0.15f),
+                spotColor = Color.Black.copy(alpha = 0.10f)
+            )
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = pressAlpha))
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        tryAwaitRelease()
+                        isPressed = false
+                        scope.launch {
+                            delay(30)
+                            try { HapticUtils.standardTap(ctx) } catch (_: Exception) {}
+                            onClick()
+                        }
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = stringResource(R.string.common_back),
+            tint = Color(0xFF1A1A2E),  // 深墨色, 在浅底上清晰可辨
+            modifier = Modifier.size(btnSize * 0.50f)
+        )
+    }
+}
