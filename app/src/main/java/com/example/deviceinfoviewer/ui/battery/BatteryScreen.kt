@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -17,6 +19,9 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
@@ -146,6 +151,22 @@ fun BatteryScreen(
             },
             title = stringResource(R.string.battery_dual_cell_title),
             subtitle = stringResource(R.string.battery_dual_cell_subtitle)
+        )
+
+        // === 电池电流校准倍率 (PlusPlusBattery 思路: 用户校准则准) ===
+        // ColorOS 等 OEM ROM 的 oplus_chg / BATTERY_PROPERTY_CURRENT_NOW 读数常因单位或
+        // 增益偏差偏大/偏小，在此按真实值校正 (默认 1.0× 不修正；如偏大 2× 填 0.5×)。
+        // 范围由 AppSettings 钳制 [0.1, 10.0]，下次轮询即生效。
+        var currentMultiplier by remember { mutableStateOf(AppSettings.getInstance(context).batteryCurrentMultiplier) }
+        BatteryCurrentMultiplierCard(
+            multiplier = currentMultiplier,
+            onMultiplierChange = { value ->
+                currentMultiplier = value
+                AppSettings.getInstance(context).batteryCurrentMultiplier = value
+            },
+            title = stringResource(R.string.battery_current_multiplier_title),
+            subtitle = stringResource(R.string.battery_current_multiplier_subtitle),
+            resetLabel = stringResource(R.string.battery_current_multiplier_reset)
         )
 
         // === 系统省电模式 (PowerManager.isPowerSaveMode, API 21+) ===
@@ -427,6 +448,87 @@ private fun DualCellToggleCard(
                         uncheckedTrackColor = NeonSteelBlue.copy(alpha = 0.2f),
                     )
                 )
+            }
+        }
+    }
+}
+
+/**
+ * 电池电流校准倍率卡片 (PlusPlusBattery 思路: 用户校准则准)。
+ * 默认 1.0× = 不修正；ColorOS 等 OEM ROM 的 oplus_chg / property 读数常因单位或增益偏差
+ * 偏大/偏小，由用户在此按真实值校正。范围由 AppSettings 钳制 [0.1, 10.0]。
+ * Slider 步进 0.1×；预设 0.5×/1.0×/2.0× 覆盖常见校正场景；Reset 归位 1.0×。
+ */
+private fun BatteryCurrentMultiplierCard(
+    multiplier: Double,
+    onMultiplierChange: (Double) -> Unit,
+    title: String,
+    subtitle: String,
+    resetLabel: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+            .revealLight(radius = 160.dp, intensity = 0.22f)
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Box(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CardGradient).hdrHighlight(12.dp)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.padding(end = 12.dp).weight(1f)) {
+                        Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        if (subtitle.isNotBlank()) {
+                            Text(
+                                subtitle,
+                                fontSize = 12.sp,
+                                color = TextSecondary.copy(alpha = 0.75f),
+                                modifier = Modifier.padding(top = 2.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        "×${"%.1f".format(multiplier)}",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NeonPurpleBright
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Slider(
+                    value = multiplier.toFloat(),
+                    onValueChange = { onMultiplierChange(it.toDouble()) },
+                    valueRange = 0.1f..10.0f,
+                    steps = 99,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = NeonPurpleBright,
+                        activeTrackColor = NeonPurpleBright,
+                        inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
+                    )
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(0.5, 1.0, 2.0).forEach { preset ->
+                        TextButton(onClick = { onMultiplierChange(preset) }) {
+                            Text("${"%.1f".format(preset)}×", color = TextSecondary)
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    TextButton(onClick = { onMultiplierChange(1.0) }) {
+                        Text(resetLabel, color = NeonPurpleBright)
+                    }
+                }
             }
         }
     }
