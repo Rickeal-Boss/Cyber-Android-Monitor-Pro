@@ -43,14 +43,18 @@ class DeviceApplication : Application() {
     }
 
     override fun onCreate() {
+        // ★ HCP-1 修复: 崩溃 handler 提到 super.onCreate 之前（最早生效点）。
+        //   原位置在 super.onCreate 之后，导致 super.onCreate 及其之前的异常无法被
+        //   自定义 handler 捕获、也不写 crash.log，表现为"静默闪退、无日志"。
+        //   handler 仅注册 Thread.setDefaultUncaughtExceptionHandler（纯 JVM API，
+        //   super 之前调用安全；其内部写 filesDir 的逻辑仅在崩溃发生时执行，彼时 context 已就绪）。
+        setupCrashHandler()
+
         super.onCreate()
 
         // == 启动诊断: 仅主线程 Log.i，文件写入异步化 ==
         val startTime = System.currentTimeMillis()
         Log.i(TAG, "▶ STARTUP: enter onCreate | device=${Build.MODEL} sdk=${Build.VERSION.SDK_INT}")
-
-        // ★ 崩溃 handler 提前设置 — 确保 Koin/FloatingWindowConfig 初始化异常也能捕获
-        setupCrashHandler()
 
         // Koin DI 初始化 (主线程同步，必须先于其他初始化)
         try {

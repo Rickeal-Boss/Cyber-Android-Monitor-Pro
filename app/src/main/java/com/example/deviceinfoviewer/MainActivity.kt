@@ -76,8 +76,16 @@ import org.koin.androidx.compose.koinViewModel
 class MainActivity : ComponentActivity() {
 
     // 应用保存的语言偏好 — 在 attachBaseContext 中应用，确保 Compose stringResource() 加载正确语言
+    // ★ HCP-1 修复: wrapContext 加 try/catch 守卫。attachBaseContext 在 super.onCreate 之前执行，
+    //   若此处抛异常（例如 OEM ROM 资源/配置异常）会直接静默崩溃且无 crash.log。守卫后降级回退 base，保证可启动。
     override fun attachBaseContext(newBase: Context) {
-        super.attachBaseContext(LocaleManager.wrapContext(newBase))
+        val wrapped = try {
+            LocaleManager.wrapContext(newBase)
+        } catch (e: Throwable) {
+            Log.e("MainActivity", "attachBaseContext wrapContext failed, fallback to base", e)
+            newBase
+        }
+        super.attachBaseContext(wrapped)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
