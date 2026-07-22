@@ -3,6 +3,9 @@ name: Android Release Build
 on:
   push:
     branches: [ main, master, DLC, yingai, II, III, IIII, IIIII, IIIIII, preview, 4.0, 4.0icon, 4.0.404.0, Hy-agent ]
+    # ★ Debug 预发布包仅 tag 触发：打 v*-debug-pre* 标签时才构建并上传 debug APK，
+    #   避免每次分支 push 都多跑一次 assembleDebug + 上传，拖长 CI。
+    tags: [ 'v*-debug-pre*' ]
   workflow_dispatch:
 
 jobs:
@@ -115,16 +118,19 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           retention-days: 30
 
-      # ★ Debug 预发布包（minifyEnabled=false，默认 debug 签名）：用于真机 debug-vs-release 崩溃差异测试
+      # ★ Debug 预发布包（minifyEnabled=false，默认 debug 签名）：仅 tag 触发（v*-debug-pre*），用于真机 debug-vs-release 崩溃差异测试
       - name: Build Debug APK (no R8 shrink)
+        if: startsWith(github.ref, 'refs/tags/')
         run: ./gradlew assembleDebug
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
       - name: Debug — list debug APK outputs
+        if: startsWith(github.ref, 'refs/tags/')
         run: find app/build/outputs -path "*debug*.apk" -type f 2>/dev/null || echo "(no debug APK found)"
 
       - name: Upload Debug APK
+        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-artifact@v4
         with:
           name: device-info-viewer-debug
