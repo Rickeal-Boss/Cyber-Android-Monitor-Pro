@@ -35,7 +35,7 @@ import com.example.deviceinfoviewer.data.model.HistoryDataPoint
 import com.example.deviceinfoviewer.data.model.SensorItemInfo
 import com.example.deviceinfoviewer.data.model.SensorLiveData
 import com.example.deviceinfoviewer.data.model.SensorTypeMeta
-import com.example.deviceinfoviewer.ui.components.GlowBackButton
+import com.example.deviceinfoviewer.ui.components.LightCircleBackButton
 import com.example.deviceinfoviewer.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
 
@@ -155,8 +155,8 @@ fun SensorDetailScreen(
             SensorInfoCard(sensor = sensor, meta = meta)
         }
 
-        // ── 沉浸式返回按钮 (玻璃质感 + 辉光动效) ──
-        GlowBackButton(
+        // ── 沉浸式返回按钮 (浅色圆形, WorkBuddy Android 客户端同款) ──
+        LightCircleBackButton(
             onClick = onBack,
             btnSize = 48.dp,
             modifier = Modifier
