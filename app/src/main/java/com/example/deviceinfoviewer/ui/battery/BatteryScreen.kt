@@ -141,18 +141,6 @@ fun BatteryScreen(
             icon = Icons.Filled.Favorite, iconTint = NeonPurple
         )
 
-        // === 双电芯手动开关 (自动检测不可靠时的用户覆盖项) ===
-        DualCellToggleCard(
-            checked = dualCellEnabled,
-            onCheckedChange = { enabled ->
-                dualCellEnabled = enabled
-                AppSettings.getInstance(context).dualCellBattery = enabled
-                viewModel.refreshDualCell()
-            },
-            title = stringResource(R.string.battery_dual_cell_title),
-            subtitle = stringResource(R.string.battery_dual_cell_subtitle)
-        )
-
         // === 电池电流校准倍率 (PlusPlusBattery 思路: 用户校准则准) ===
         // ColorOS 等 OEM ROM 的 oplus_chg / BATTERY_PROPERTY_CURRENT_NOW 读数常因单位或
         // 增益偏差偏大/偏小，在此按真实值校正 (默认 1.0× 不修正；如偏大 2× 填 0.5×)。
@@ -393,6 +381,18 @@ fun BatteryScreen(
             value = health,
             valueColor = NeonPurpleBright
         ) { }
+
+        // === 双电芯手动开关 (自动检测不可靠时的用户覆盖项) — 移至页尾 ===
+        DualCellToggleCard(
+            checked = dualCellEnabled,
+            onCheckedChange = { enabled ->
+                dualCellEnabled = enabled
+                AppSettings.getInstance(context).dualCellBattery = enabled
+                viewModel.refreshDualCell()
+            },
+            title = stringResource(R.string.battery_dual_cell_title),
+            subtitle = stringResource(R.string.battery_dual_cell_subtitle)
+        )
     }
 }
 
