@@ -404,6 +404,11 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
   - 🟡7 `FloatingWindowService.cpuFreqHeaders`：复核发现原 `Array(8)` 硬编码对 >8 核设备不友好，但 L322 `getOrElse` 已做 "CPU$idx" 兜底（仅非本地化）。改为 `Array(if(availableProcessors()<8) 8 else availableProcessors())` 动态下限 + 填充循环改用 `indices`；显示 `take(4)/take(8)` 上限不变，>8 核设备标签本地化兜底更完整。
   - ⚠️ **编译插曲**：初版用 `kotlin.math.maxOf` + import，CI `#568` 报 `Unresolved reference 'maxOf'`（本构建链对 `maxOf` 顶层导入解析异常）；改为零依赖 `if` 表达式后 `#569` 通过。
   - 提交 `0a98b36`（三项清理）+ `ea76ab0`（maxOf 修复）。
+- **HCP-1 收口（崩溃可观测性 + 启动守卫，2026-07-22，CI `#571`/`170cb5d` ✅）**：真机"无任何启动即闪退"全面审查后落地的首条修复。
+  - **根因（崩溃日志盲点）**：`setupCrashHandler()` 原置于 `super.onCreate()` **之后**，导致 `Application.onCreate` 之前（即 `attachBaseContext`）及 `super.onCreate()` 内部抛出的任何异常都**无 handler 兜底、不写 `crash.log`**，真机瞬间崩溃成为黑盒。
+  - **修复 1（handler 提前）**：`DeviceApplication.onCreate` 首行即 `setupCrashHandler()`，**早于** `super.onCreate()`（全仓最早生效点），覆盖 `attachBaseContext` + `super.onCreate` 全部启动前路径。
+  - **修复 2（attachBaseContext 守卫）**：`MainActivity.attachBaseContext` 原 `super.attachBaseContext(LocaleManager.wrapContext(newBase))` 无兜底，`wrapContext` 一旦在 OEM ROM 抛异常即静默闪退且无日志。改为 `try { LocaleManager.wrapContext(newBase) } catch (e) { Log.e + 回退 newBase }`，保证即便 locale 包装失败也能正常启动。
+  - ⚠️ **说明**：此项为**可观测性 + 启动健壮性**修复，不保证是闪退根因（真机无 logcat 无法定论）。它确保：(a) 真机再崩必落 `crash.log` 可读；(b) `attachBaseContext` 这条最高危启动路径不再裸奔。下一步应结合真机 `adb logcat` / `crash.log` 或 **debug（minifyEnabled false）vs release APK 差异测试** 定位 R8 / OEM ROM 真正根因（见 HCP-2/HCP-3 待办）。
 
 **优先修复顺序建议（剩余项）**：
 1. ✅ **store-blocking（targetSdk 36）已完成**（本次提交）：targetSdk `35→36`（Android 16，满足 2026-08-31 Play 目标 API 截止）。健康权限迁移经代码核查为**误判** —— 全仓未声明/使用 `BODY_SENSORS` 或 `android.permission.health.*`（仅 `HealthTracker` 模块健康度追踪与 `BatteryInfo.health` 电池健康，均无关），故**无需迁移**。Android 16 行为变更（边缘到边缘/预测返回/前台服务 specialUse/本地网络 opt-in）对本应用均无硬阻断。
