@@ -401,7 +401,7 @@ fun LightCircleBackButton(
                     forEachGesture {
                         awaitPointerEventScope {
                             // 等待按下
-                            val down = awaitFirstDown(pass = false)
+                            val down = awaitFirstDown()
                             isInteracting = true
                             dragOffsetX = 0f
                             dragOffsetY = 0f
