@@ -282,8 +282,8 @@ private data class RippleData(val startTime: Long)
 /** 拖拽超过此距离视为"取消", 不触发返回 */
 private val CANCEL_THRESHOLD_DP = 40f
 
-/** 最大拉伸系数 (拖拽达到阈值时的 scaleX/Y) */
-private val MAX_STRETCH = 1.35f
+/** 最大拉伸系数 (拖拽达到阈值时的 scaleX/Y), 增至 1.5 以增强果冻体量感 */
+private val MAX_STRETCH = 1.50f
 
 /**
  * 浅色圆形返回按钮 — iOS 26 拖拽交互 + 毛玻璃材质。
@@ -327,16 +327,19 @@ fun LightCircleBackButton(
         label = "pressScale"
     )
 
-    // 取消态淡出 (拖距接近/超过阈值)
+    // 取消态淡出 (仅接近/超过阈值时才淡出, 拖拽过程中保持高可见度)
+    // 旧版: 1f - dragProgress → 拖动即淡出, 导致图2中按钮几乎消失
+    // 新版: dragProgress < 0.65 时完全不淡, 之后快速衰减
     val cancelAlpha by animateFloatAsState(
-        targetValue = 1f - dragProgress.coerceAtMost(1f),
+        targetValue = if (dragProgress < 0.65f) 1.0f
+        else (1f - (dragProgress - 0.65f) / 0.35f).coerceIn(0f, 1f),
         animationSpec = tween(150, easing = EaseOutCubic),
         label = "cancelAlpha"
     )
 
-    // 取消态缩小
+    // 取消态缩小 (仅在非常接近阈值时才缩小, 避免拖拽中过早收缩)
     val cancelScale by animateFloatAsState(
-        targetValue = if (dragProgress > 0.8f) 0.85f else 1.0f,
+        targetValue = if (dragProgress > 0.88f) 0.82f else 1.0f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "cancelScale"
     )
@@ -494,36 +497,33 @@ fun LightCircleBackButton(
 
                 // 高光弧在拖拽反方向 (被"拉开"的一侧玻璃变薄→高光增强)
                 val highlightAngle = (dragAngle + 180f) % 360f
-                val arcSweep = 95f * dragProgress.coerceAtMost(1f)   // 拖越远弧越长
+                val arcSweep = 100f * dragProgress.coerceAtMost(1f)   // 弧长
                 val arcIntensity = dragProgress.coerceAtMost(1f)
 
-                // ══ 分段渐变高光: 沿弧线从中心向两端亮度衰减 (非均匀) ══
-                // 三层粗度: 核心亮带 → 中层散射 → 外层光晕
-                val segCount = 36
-                val layers = listOf(
-                    Triple(3.5f, 0.92f, 0f),    // width(dp), peakAlpha, sweepPadding(度)
-                    Triple(7.0f, 0.42f, 10f),
-                    Triple(12f,  0.16f, 20f),
+                // ══ 连续多层重叠高光弧 (无分段条纹, 平滑渐变) ══
+                // 原理: 用 N 层不同 sweepAngle 的连续 drawArc 叠加,
+                //       中心层最宽最亮, 向两端逐层缩短变暗 → 视觉上形成平滑的
+                //       "中间亮两端暗"渐变效果 (类似 Gaussian 衰减)
+                // 每层参数: (sweepRatio 相对于 arcSweep 的比例, alpha峰值, width_dp)
+                val highlightLayers = listOf(
+                    Triple(1.00f, 0.95f, 4.5f),   // 核心亮带 — 最宽最亮
+                    Triple(0.78f, 0.60f, 7.0f),   // 内过渡 — 稍窄稍淡
+                    Triple(0.56f, 0.32f, 11.0f),  // 中过渡 — 更窄更淡
+                    Triple(0.34f, 0.14f, 16.0f),  // 外散射 — 宽而极淡
+                    Triple(0.16f, 0.05f, 24.0f),  // 最外光晕 — 最宽最淡
                 )
-                for ((width, peakAlpha, pad) in layers) {
-                    val fullSweep = arcSweep + pad * 2f
-                    for (i in 0 until segCount) {
-                        val t = i.toFloat() / segCount
-                        val segAngle = highlightAngle - fullSweep / 2f + fullSweep * t
-                        // 距高光中心越近越亮 → 沿弧线平滑渐变
-                        val distNorm = kotlin.math.abs(segAngle - highlightAngle) / (fullSweep / 2f)
-                        val segAlpha = (1f - distNorm) * arcIntensity * peakAlpha
-                        if (segAlpha <= 0.015f) continue
-                        drawArc(
-                            color = Color.White.copy(alpha = segAlpha),
-                            startAngle = segAngle,
-                            sweepAngle = fullSweep / segCount + 3f,  // 略重叠避免缝隙
-                            useCenter = false,
-                            style = Stroke(width = width.dp.toPx()),
-                            topLeft = Offset(cx - baseR, cy - baseR),
-                            size = Size(baseR * 2f, baseR * 2f)
-                        )
-                    }
+                for ((ratio, peakA, wDp) in highlightLayers) {
+                    val layerSweep = arcSweep * ratio
+                    if (layerSweep < 3f) continue
+                    drawArc(
+                        color = Color.White.copy(alpha = peakA * arcIntensity),
+                        startAngle = highlightAngle - layerSweep / 2f,
+                        sweepAngle = layerSweep,
+                        useCenter = false,
+                        style = Stroke(width = wDp.dp.toPx()),
+                        topLeft = Offset(cx - baseR, cy - baseR),
+                        size = Size(baseR * 2f, baseR * 2f)
+                    )
                 }
             }
         }
@@ -588,9 +588,9 @@ private fun Modifier.drawFrostedGlassV2(
         style = Stroke(width = 4.0f.dp.toPx())
     )
 
-    // ══ L1: 玻璃基面 — 半透明白 (用户要求更透: 0.42α → 0.30α) ══
+    // ══ L1: 玻璃基面 — 半透明白 (用户要求更透: 0.42α → 0.30α, 微调至 0.34α 平衡透度与可见性) ══
     drawCircle(
-        color = Color.White.copy(alpha = 0.30f + interactLift),
+        color = Color.White.copy(alpha = 0.34f + interactLift),
         radius = r,
         center = Offset(cX, cY)
     )
@@ -599,8 +599,8 @@ private fun Modifier.drawFrostedGlassV2(
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.52f - dragProgress * 0.20f),  // 中心最亮
-                Color.White.copy(alpha = 0.18f),                          // 中间过渡
+                Color.White.copy(alpha = 0.62f - dragProgress * 0.20f),  // 中心最亮 (提亮: 0.52→0.62)
+                Color.White.copy(alpha = 0.24f),                          // 中间过渡 (原0.18→0.24)
                 Color.Transparent,                                        // 边缘透明
             ),
             center = Offset(s * 0.30f, s * 0.28f),
@@ -632,7 +632,7 @@ private fun Modifier.drawFrostedGlassV2(
     )
 
     // ══ L5: 顶部镜面高光 — 1dp 内沿亮线 (specular highlight, 最关键深度线索) ══
-    val highlightAlpha = (0.55f - dragProgress * 0.30f).coerceAtLeast(0.08f)
+    val highlightAlpha = (0.68f - dragProgress * 0.30f).coerceAtLeast(0.10f)  // 提亮: 0.55→0.68
     // 用弧线模拟顶部边缘 caught light
     drawArc(
         color = Color.White.copy(alpha = highlightAlpha),
