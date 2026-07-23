@@ -8,7 +8,6 @@ import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.gestures.awaitPointerEventScope
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -17,14 +16,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.draw.innerShadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,7 +35,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.example.deviceinfoviewer.HapticUtils
 import com.example.deviceinfoviewer.R
@@ -399,16 +395,7 @@ fun LightCircleBackButton(
                     spotColor = Color.Black.copy(alpha = 0.06f)
                 )
                 .clip(CircleShape)
-                // ══ 内凹阴影 (核心深度感: 模拟玻璃被"压入"表面) ══
-                .innerShadow(
-                    shape = CircleShape,
-                    shadow = Shadow(
-                        color = Color.Black.copy(alpha = 0.14f),
-                        offset = DpOffset(3.dp, 3.5.dp),
-                        blurRadius = 6.dp,
-                    )
-                )
-                // ══ 7层毛玻璃底座 ══
+                // ══ 7层毛玻璃底座 (含手绘内阴影) ══
                 .drawFrostedGlassV2(btnSize, isInteracting, dragProgress)
                 .pointerInput(btnSize) {
                     forEachGesture {
@@ -578,6 +565,24 @@ private fun Modifier.drawFrostedGlassV2(
     val r = s * 0.5f
     // 交互时整体提亮 (按下态玻璃"变薄"更透光)
     val interactLift = if (isInteracting) dragProgress * 0.08f else 0f
+
+    // ══ L1: 玻璃基面 — 半透明白 (核心: 不透明度从 0.88 降至 0.42) ══
+    // ══ L0: 内凹阴影 (全周, 模拟玻璃被"压入"表面 — 替代 Modifier.innerShadow) ══
+    // 用沿内边缘的深色 Stroke 模拟光线在凹陷处的遮挡
+    val innerShadowAlpha = 0.13f * (1f - dragProgress * 0.5f)
+    drawCircle(
+        color = Color.Black.copy(alpha = innerShadowAlpha),
+        radius = r - 0.3f.dp.toPx(),
+        center = Offset(cX, cY),
+        style = Stroke(width = 2.5f.dp.toPx())
+    )
+    // 内阴影柔化层 (更宽更淡, 避免硬边)
+    drawCircle(
+        color = Color.Black.copy(alpha = innerShadowAlpha * 0.35f),
+        radius = r - 0.8f.dp.toPx(),
+        center = Offset(cX, cY),
+        style = Stroke(width = 4.0f.dp.toPx())
+    )
 
     // ══ L1: 玻璃基面 — 半透明白 (核心: 不透明度从 0.88 降至 0.42) ══
     drawCircle(
