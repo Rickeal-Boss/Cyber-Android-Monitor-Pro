@@ -4,6 +4,9 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.forEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitPointerEvent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
@@ -26,6 +29,7 @@ import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
@@ -258,25 +262,35 @@ private fun Modifier.drawWithGlassReflection(btnSize: Dp): Modifier =
 private data class RippleData(val startTime: Long)
 
 // ═════════════════════════════════════════════════════
-//  浅色圆形返回按钮 — 对齐 WorkBuddy Android 客户端风格
+//  浅色圆形返回按钮 — WorkBuddy Android / iOS 26 风格
 //
-//  视频参考: WorkBuddy Android 客户端二层页面返回键
-//  特征:
-//  - 纯净圆形底座 (浅色半透明白底, 无渐变/无描边)
-//  - 轻微 elevation 阴影 (悬浮感)
-//  - Material3 标准返回箭头 (深色图标)
-//  - 按压弹性缩放 (0.90x spring) + 触觉反馈
-//  - 尺寸与 GlowBackButton 一致 (默认 40dp, 可覆盖层用 48dp)
+//  交互模型 (仿 iOS 26 返回键):
+//  - 按下 → 记录起点, 进入交互态
+//  - 拖动 → 按钮随拖拽方向"果冻拉长", 显示高光边缘
+//  - 拖动超过阈值 (40dp) → 进入"取消态" (按钮淡出 + 缩小)
+//  - 松手:
+//    · 拖距 < 阈值 → 触发返回 (spring 回弹 + onClick)
+//    · 拖距 ≥ 阈值 → 取消 (spring 弹回原位, 不触发)
+//
+//  视觉特征:
+//  - 毛玻璃底座 (多层半透明白 + 内阴影 + 极细亮边)
+//  - 模糊质感箭头图标 (双层错位绘制模拟 soft-focus)
+//  - 拖拽时非对称拉伸 (drag方向 elongate ~1.35x)
+//  - 拉伸侧高光弧线 (jelly highlight)
 // ═════════════════════════════════════════════════════
 
+/** 拖拽超过此距离视为"取消", 不触发返回 */
+private val CANCEL_THRESHOLD_DP = 40f
+
+/** 最大拉伸系数 (拖拽达到阈值时的 scaleX/Y) */
+private val MAX_STRETCH = 1.35f
+
 /**
- * 浅色圆形返回按钮 — WorkBuddy Android 客户端同款样式。
+ * 浅色圆形返回按钮 — iOS 26 拖拽交互 + 毛玻璃材质。
  *
- * 与 [GlowBackButton] (暗玻璃霓虹风) 并列为两种可选返回键皮肤:
- * - GlowBackButton → 暗色主题主屏 / 深色沉浸页
- * - LightCircleBackButton → 浅色底二层页 (设置/悬浮窗/传感器详情)
+ * 与 [GlowBackButton] (暗玻璃霓虹风) 并列为两种可选返回键皮肤。
  *
- * @param onClick 点击回调
+ * @param onClick 仅在按下后松手且未拖出阈值时触发
  * @param modifier 外部 Modifier
  * @param btnSize 按钮直径, 默认 40.dp (覆盖层场景传 48.dp)
  */
@@ -286,60 +300,265 @@ fun LightCircleBackButton(
     modifier: Modifier = Modifier,
     btnSize: Dp = 40.dp,
 ) {
-    var isPressed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
 
-    // 按压缩放 (弹性反馈, 比 GlowBackButton 的 0.88x 更克制)
+    // ── 交互状态 ──
+    var dragOffsetX by remember { mutableFloatStateOf(0f) }
+    var dragOffsetY by remember { mutableFloatStateOf(0f) }
+    var isInteracting by remember { mutableStateOf(false) }
+
+    // 归一化拖距 [0..1], 1 = 达到取消阈值
+    val dragProgress = remember(dragOffsetX, dragOffsetY) {
+        kotlin.math.sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY)
+    }.let { raw ->
+        (raw / CANCEL_THRESHOLD_DP).coerceIn(0f, 1f)
+    }
+
+    // ── 动画状态 ──
+
+    // 基础按压缩小 (按下瞬间)
     val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.90f else 1.0f,
+        targetValue = if (isInteracting && dragProgress < 0.05f) 0.92f else 1.0f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMedium
+            stiffness = Spring.StiffnessHigh
         ),
-        label = "lightPressScale"
+        label = "pressScale"
     )
 
-    // 按压时背景微暗 (视觉反馈)
-    val pressAlpha by animateFloatAsState(
-        targetValue = if (isPressed) 0.80f else 0.92f,
-        animationSpec = tween(100),
-        label = "pressBgAlpha"
+    // 取消态淡出 (拖距接近/超过阈值)
+    val cancelAlpha by animateFloatAsState(
+        targetValue = 1f - dragProgress.coerceAtMost(1f),
+        animationSpec = tween(150, easing = EaseOutCubic),
+        label = "cancelAlpha"
     )
+
+    // 取消态缩小
+    val cancelScale by animateFloatAsState(
+        targetValue = if (dragProgress > 0.8f) 0.85f else 1.0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "cancelScale"
+    )
+
+    // 松手回弹 (非取消态时迅速归零)
+    val snapBackScale by animateFloatAsState(
+        targetValue = if (!isInteracting) 1.0f else pressScale,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "snapBack"
+    )
+
+    val density = LocalDensity.current
+    val thresholdPx = remember(density) { with(density) { CANCEL_THRESHOLD_DP.dp.toPx() } }
 
     Box(
-        modifier = modifier
-            .size(btnSize)
-            .scale(pressScale)
-            .shadow(
-                elevation = 3.dp,
-                shape = CircleShape,
-                ambientColor = Color.Black.copy(alpha = 0.15f),
-                spotColor = Color.Black.copy(alpha = 0.10f)
-            )
-            .clip(CircleShape)
-            .background(Color.White.copy(alpha = pressAlpha))
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        tryAwaitRelease()
-                        isPressed = false
-                        scope.launch {
-                            delay(30)
-                            try { HapticUtils.standardTap(ctx) } catch (_: Exception) {}
-                            onClick()
-                        }
-                    }
-                )
-            },
+        modifier = modifier.size(btnSize),
         contentAlignment = Alignment.Center
     ) {
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-            contentDescription = stringResource(R.string.common_back),
-            tint = Color(0xFF1A1A2E),  // 深墨色, 在浅底上清晰可辨
-            modifier = Modifier.size(btnSize * 0.50f)
+        // ── 按钮本体 (受拖拽影响变形) ──
+        val stretchX = if (isInteracting && dragProgress > 0.05f) {
+            1f + (MAX_STRETCH - 1f) * dragProgress * (kotlin.math.abs(dragOffsetX) /
+                kotlin.math.max(1f, kotlin.math.sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY)))
+        } else 1f
+        val stretchY = if (isInteracting && dragProgress > 0.05f) {
+            1f + (MAX_STRETCH - 1f) * dragProgress * (kotlin.math.abs(dragOffsetY) /
+                kotlin.math.max(1f, kotlin.math.sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY)))
+        } else 1f
+
+        // 综合缩放 = 按压 × 拉伸 × 取消 × 回弹
+        val finalScaleX = snapBackScale * stretchX.coerceIn(0.8f, MAX_STRETCH) * cancelScale
+        val finalScaleY = snapBackScale * stretchY.coerceIn(0.8f, MAX_STRETCH) * cancelScale
+
+        // 拖拽方向角度 (用于高光弧位置)
+        val dragAngle = remember(dragOffsetX, dragOffsetY) {
+            if (dragOffsetX == 0f && dragOffsetY == 0f) 0f
+            else kotlin.math.atan2(dragOffsetY, dragOffsetX).toFloat() * (180f / kotlin.math.PI.toFloat())
+        }
+
+        Box(
+            modifier = Modifier
+                .size(btnSize)
+                .graphicsLayer {
+                    scaleX = finalScaleX
+                    scaleY = finalScaleY
+                    alpha = cancelAlpha
+                    translationX = dragOffsetX * 0.25f * dragProgress
+                    translationY = dragOffsetY * 0.25f * dragProgress
+                }
+                .shadow(
+                    elevation = if (isInteracting) 6.dp else 3.dp,
+                    shape = CircleShape,
+                    ambientColor = Color.Black.copy(alpha = 0.12f),
+                    spotColor = Color.Black.copy(alpha = 0.08f)
+                )
+                .clip(CircleShape)
+                // ══ 毛玻璃底座 (三层叠加) ══
+                .drawFrostedGlassBackground(btnSize, isInteracting, dragProgress)
+                .pointerInput(btnSize) {
+                    forEachGesture {
+                        awaitPointerEventScope {
+                            // 等待按下
+                            val down = awaitFirstDown(pass = false)
+                            isInteracting = true
+                            dragOffsetX = 0f
+                            dragOffsetY = 0f
+
+                            // 触觉: 轻触反馈
+                            scope.launch {
+                                try { HapticUtils.standardTap(ctx) } catch (_: Exception) {}
+                            }
+
+                            // 拖拽循环
+                            do {
+                                val event = awaitPointerEvent()
+                                val pos = event.changes.firstOrNull()?.position ?: continue
+                                dragOffsetX = (pos.x - down.position.x)
+                                dragOffsetY = (pos.y - down.position.y)
+                            } while (
+                                event.changes.any { it.pressed } &&
+                                kotlin.math.sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY) < thresholdPx * 2.5f
+                            )
+
+                            // 松手判定
+                            isInteracting = false
+                            val totalDist = kotlin.math.sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY)
+
+                            // 清零偏移 (动画会平滑回弹)
+                            dragOffsetX = 0f
+                            dragOffsetY = 0f
+
+                            if (totalDist < thresholdPx) {
+                                // ✓ 未超出阈值 → 触发返回
+                                scope.launch {
+                                    delay(20)
+                                    onClick()
+                                }
+                            } else {
+                                // ✗ 超出阈值 → 已取消, 触觉提示
+                                scope.launch {
+                                    try { HapticUtils.lightTap(ctx) } catch (_: Exception) {}
+                                }
+                            }
+                        }
+                    }
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            // ══ 模糊质感箭头 (双层错位绘制模拟 soft-focus) ══
+            val iconSize = btnSize * 0.46f
+            val iconAlpha = (0.5f + 0.5f * (1f - dragProgress)).coerceIn(0.35f, 0.9f)
+
+            // 底层: 略大 + 更淡 (光晕/模糊层)
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.30f),
+                modifier = Modifier
+                    .size(iconSize * 1.18f)
+                    .graphicsLayer { translationX = 0.4f; translationY = 0.4f }
+            )
+            // 主层: 标准尺寸
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.common_back),
+                tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha),
+                modifier = Modifier.size(iconSize)
+            )
+        }
+
+        // ══ 拖拽高光弧线 (jelly highlight, 按钮上层) ══
+        if (isInteracting && dragProgress > 0.10f) {
+            Canvas(Modifier.matchParentSize()) {
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                val baseR = minOf(cx, cy) * 0.95f
+
+                // 高光弧在拖拽反方向 (被"拉开"的一侧)
+                val highlightAngle = (dragAngle + 180f) % 360f
+                val arcSweep = 70f * dragProgress.coerceAtMost(1f)  // 拖越远弧越长
+                val arcWidth = 1.8f.dp.toPx() * (1f + dragProgress * 0.5f)
+
+                drawArc(
+                    color = Color.White.copy(alpha = 0.65f * dragProgress),
+                    startAngle = highlightAngle - arcSweep / 2f,
+                    sweepAngle = arcSweep,
+                    useCenter = false,
+                    style = Stroke(width = arcWidth),
+                    topLeft = Offset(cx - baseR, cy - baseR),
+                    size = Size(baseR * 2f, baseR * 2f)
+                )
+                // 外层更淡的光晕
+                drawArc(
+                    color = Color.White.copy(alpha = 0.25f * dragProgress),
+                    startAngle = highlightAngle - arcSweep / 2f - 8f,
+                    sweepAngle = arcSweep + 16f,
+                    useCenter = false,
+                    style = Stroke(width = arcWidth * 2.2f),
+                    topLeft = Offset(cx - baseR, cy - baseR),
+                    size = Size(baseR * 2f, baseR * 2f)
+                )
+            }
+        }
+    }
+}
+
+// ═════════════════════════════════════════════════════
+//  毛玻璃底座绘制 (Modifier.drawWithContent 扩展)
+// ═════════════════════════════════════════════════════
+
+/** 三层毛玻璃: 底色 → 内渐变 → 极细亮边 + 内阴影 */
+private fun Modifier.drawFrostedGlassBackground(
+    btnSize: Dp,
+    isInteracting: Boolean,
+    dragProgress: Float
+): Modifier = this.drawWithContent {
+    drawContent()
+
+    val s = btnSize.toPx()
+
+    // 第1层: 半透明白底 (主背景)
+    drawCircle(
+        color = Color.White.copy(alpha = 0.88f - dragProgress * 0.15f),
+        radius = s * 0.50f,
+        center = Offset(s * 0.5f, s * 0.5f)
+    )
+
+    // 第2层: 径向微渐变 (左上角稍亮, 模拟曲面反光)
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.35f),
+                Color.Transparent,
+            ),
+            center = Offset(s * 0.32f, s * 0.32f),
+            radius = s * 0.55f
+        ),
+        radius = s * 0.50f,
+        center = Offset(s * 0.5f, s * 0.5f)
+    )
+
+    // 第3层: 极细亮边描边 (1px, 模拟玻璃边缘折射)
+    drawCircle(
+        color = Color.White.copy(alpha = 0.55f - dragProgress * 0.30f),
+        radius = s * 0.50f - 0.5f.dp.toPx(),
+        center = Offset(s * 0.5f, s * 0.5f),
+        style = Stroke(width = 0.75f.dp.toPx())
+    )
+
+    // 内侧微弱阴影 (底部深色弧, 增立体感)
+    if (!isInteracting || dragProgress < 0.5f) {
+        val innerShadowAlpha = 0.06f * (1f - dragProgress)
+        drawArc(
+            color = Color.Black.copy(alpha = innerShadowAlpha),
+            startAngle = 120f,
+            sweepAngle = 120f,
+            useCenter = false,
+            style = Stroke(width = 2.2f.dp.toPx()),
+            topLeft = Offset(s * 0.06f, s * 0.06f),
+            size = Size(s * 0.88f, s * 0.88f)
         )
     }
 }
