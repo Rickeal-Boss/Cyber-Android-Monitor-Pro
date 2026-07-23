@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.gestures.awaitPointerEventScope
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -16,12 +17,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.innerShadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -35,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.example.deviceinfoviewer.HapticUtils
 import com.example.deviceinfoviewer.R
@@ -389,14 +393,23 @@ fun LightCircleBackButton(
                     translationY = dragOffsetY * 0.25f * dragProgress
                 }
                 .shadow(
-                    elevation = if (isInteracting) 6.dp else 3.dp,
+                    elevation = if (isInteracting) 8.dp else 4.dp,
                     shape = CircleShape,
-                    ambientColor = Color.Black.copy(alpha = 0.12f),
-                    spotColor = Color.Black.copy(alpha = 0.08f)
+                    ambientColor = Color.Black.copy(alpha = 0.10f),
+                    spotColor = Color.Black.copy(alpha = 0.06f)
                 )
                 .clip(CircleShape)
-                // ══ 毛玻璃底座 (三层叠加) ══
-                .drawFrostedGlassBackground(btnSize, isInteracting, dragProgress)
+                // ══ 内凹阴影 (核心深度感: 模拟玻璃被"压入"表面) ══
+                .innerShadow(
+                    shape = CircleShape,
+                    shadow = Shadow(
+                        color = Color.Black.copy(alpha = 0.14f),
+                        offset = DpOffset(3.dp, 3.5.dp),
+                        blurRadius = 6.dp,
+                    )
+                )
+                // ══ 7层毛玻璃底座 ══
+                .drawFrostedGlassV2(btnSize, isInteracting, dragProgress)
                 .pointerInput(btnSize) {
                     forEachGesture {
                         awaitPointerEventScope {
@@ -447,20 +460,30 @@ fun LightCircleBackButton(
                 },
             contentAlignment = Alignment.Center
         ) {
-            // ══ 模糊质感箭头 (双层错位绘制模拟 soft-focus) ══
-            val iconSize = btnSize * 0.46f
-            val iconAlpha = (0.5f + 0.5f * (1f - dragProgress)).coerceIn(0.35f, 0.9f)
+            // ══ 模糊质感箭头 (三层错位绘制模拟 soft-focus / 景深) ══
+            val iconSize = btnSize * 0.44f
+            // 整体图标随拖拽淡出
+            val iconAlpha = (0.58f + 0.42f * (1f - dragProgress)).coerceIn(0.30f, 0.95f)
 
-            // 底层: 略大 + 更淡 (光晕/模糊层)
+            // 底层: 大幅模糊光晕 (最外层, 模拟透镜散射)
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = null,
-                tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.30f),
+                tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.12f),
                 modifier = Modifier
-                    .size(iconSize * 1.18f)
+                    .size(iconSize * 1.40f)
+                    .graphicsLayer { translationX = 0.8f; translationY = 0.8f }
+            )
+            // 中层: 轻微模糊 (soft-focus 层, 主要体积感来源)
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = null,
+                tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.28f),
+                modifier = Modifier
+                    .size(iconSize * 1.12f)
                     .graphicsLayer { translationX = 0.4f; translationY = 0.4f }
             )
-            // 主层: 标准尺寸
+            // 主层: 锐利焦点 (标准尺寸, 清晰可读)
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(R.string.common_back),
@@ -469,34 +492,45 @@ fun LightCircleBackButton(
             )
         }
 
-        // ══ 拖拽高光弧线 (jelly highlight, 按钮上层) ══
-        if (isInteracting && dragProgress > 0.10f) {
+        // ══ 拖拽高光弧线 (jelly highlight — 拉伸侧的镜面折射光带) ══
+        if (isInteracting && dragProgress > 0.08f) {
             Canvas(Modifier.matchParentSize()) {
                 val cx = size.width / 2f
                 val cy = size.height / 2f
-                val baseR = minOf(cx, cy) * 0.95f
+                val baseR = minOf(cx, cy) * 0.96f
 
-                // 高光弧在拖拽反方向 (被"拉开"的一侧)
+                // 高光弧在拖拽反方向 (被"拉开"的一侧玻璃变薄→高光增强)
                 val highlightAngle = (dragAngle + 180f) % 360f
-                val arcSweep = 70f * dragProgress.coerceAtMost(1f)  // 拖越远弧越长
-                val arcWidth = 1.8f.dp.toPx() * (1f + dragProgress * 0.5f)
+                val arcSweep = 75f * dragProgress.coerceAtMost(1f)   // 拖越远弧越长
+                val arcIntensity = dragProgress.coerceAtMost(1f)
 
+                // ── 核心高光带 (亮白, 窄) ──
                 drawArc(
-                    color = Color.White.copy(alpha = 0.65f * dragProgress),
+                    color = Color.White.copy(alpha = 0.72f * arcIntensity),
                     startAngle = highlightAngle - arcSweep / 2f,
                     sweepAngle = arcSweep,
                     useCenter = false,
-                    style = Stroke(width = arcWidth),
+                    style = Stroke(width = 1.6f.dp.toPx() * (1f + arcIntensity * 0.4f)),
                     topLeft = Offset(cx - baseR, cy - baseR),
                     size = Size(baseR * 2f, baseR * 2f)
                 )
-                // 外层更淡的光晕
+                // ── 中层散射 (稍宽, 更淡) ──
                 drawArc(
-                    color = Color.White.copy(alpha = 0.25f * dragProgress),
-                    startAngle = highlightAngle - arcSweep / 2f - 8f,
-                    sweepAngle = arcSweep + 16f,
+                    color = Color.White.copy(alpha = 0.30f * arcIntensity),
+                    startAngle = highlightAngle - arcSweep / 2f - 6f,
+                    sweepAngle = arcSweep + 12f,
                     useCenter = false,
-                    style = Stroke(width = arcWidth * 2.2f),
+                    style = Stroke(width = 3.5f.dp.toPx()),
+                    topLeft = Offset(cx - baseR, cy - baseR),
+                    size = Size(baseR * 2f, baseR * 2f)
+                )
+                // ── 外层极淡光晕 (最宽, 营造"发光"感) ──
+                drawArc(
+                    color = Color.White.copy(alpha = 0.10f * arcIntensity),
+                    startAngle = highlightAngle - arcSweep / 2f - 14f,
+                    sweepAngle = arcSweep + 28f,
+                    useCenter = false,
+                    style = Stroke(width = 6.0f.dp.toPx()),
                     topLeft = Offset(cx - baseR, cy - baseR),
                     size = Size(baseR * 2f, baseR * 2f)
                 )
@@ -506,59 +540,161 @@ fun LightCircleBackButton(
 }
 
 // ═════════════════════════════════════════════════════
-//  毛玻璃底座绘制 (Modifier.drawWithContent 扩展)
+//  毛玻璃底座 V2 — iOS 26 Liquid Glass 多层深度模型
+//
+//  渲染层级 (drawWithContent 内, drawContent() 之后):
+//  L1. 玻璃基面 — 半透明白 (0.42α, 非实心)
+//  L2. 主光斑 — 左上角径向渐变 (模拟曲面反光/光源)
+//  L3. 副光斑 — 右下角微弱补光 (增加体积感)
+//  L4. 色调叠加 — 极淡暖白 tint (统一层间色温)
+//  L5. 顶部镜面高光 — 1dp 亮白内沿线 (specular highlight)
+//  L6. 渐变描边 — 上亮(55%α) → 下暗(12%α) (rim light)
+//  L7. 底部暗角弧 — 微弱深色内弧 (增强凹陷感)
+//
+//  参考来源:
+//  - liquid-glass (NadeemIqbal): blur+tint+sheen+refraction
+//  - android-design-system-skills: mesh + innerHighlight + gradient border
+//  - CSS Liquid Glass: backdrop-filter + inset box-shadow multi-layer
+//  - Apple HIG Materials: reflection/refraction/shadow/highlight
 // ═════════════════════════════════════════════════════
 
-/** 三层毛玻璃: 底色 → 内渐变 → 极细亮边 + 内阴影 */
-private fun Modifier.drawFrostedGlassBackground(
+/**
+ * 7 层深度毛玻璃绘制.
+ *
+ * @param btnSize 按钮直径
+ * @param isInteracting 是否在交互中(按下/拖拽)
+ * @param dragProgress 归一化拖距 [0..1], 1=达到取消阈值
+ */
+private fun Modifier.drawFrostedGlassV2(
     btnSize: Dp,
     isInteracting: Boolean,
-    dragProgress: Float
+    dragProgress: Float,
 ): Modifier = this.drawWithContent {
     drawContent()
 
     val s = btnSize.toPx()
+    val cX = s * 0.5f
+    val cY = s * 0.5f
+    val r = s * 0.5f
+    // 交互时整体提亮 (按下态玻璃"变薄"更透光)
+    val interactLift = if (isInteracting) dragProgress * 0.08f else 0f
 
-    // 第1层: 半透明白底 (主背景)
+    // ══ L1: 玻璃基面 — 半透明白 (核心: 不透明度从 0.88 降至 0.42) ══
     drawCircle(
-        color = Color.White.copy(alpha = 0.88f - dragProgress * 0.15f),
-        radius = s * 0.50f,
-        center = Offset(s * 0.5f, s * 0.5f)
+        color = Color.White.copy(alpha = 0.42f + interactLift),
+        radius = r,
+        center = Offset(cX, cY)
     )
 
-    // 第2层: 径向微渐变 (左上角稍亮, 模拟曲面反光)
+    // ══ L2: 主光斑 — 左上角径向渐变 (光源模拟, 制造曲面凸起错觉) ══
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.35f),
+                Color.White.copy(alpha = 0.52f - dragProgress * 0.20f),  // 中心最亮
+                Color.White.copy(alpha = 0.18f),                          // 中间过渡
+                Color.Transparent,                                        // 边缘透明
+            ),
+            center = Offset(s * 0.30f, s * 0.28f),
+            radius = s * 0.60f
+        ),
+        radius = r,
+        center = Offset(cX, cY)
+    )
+
+    // ══ L3: 副光斑 — 右侧微弱补光 (打破对称, 增加真实体积感) ══
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.15f),
                 Color.Transparent,
             ),
-            center = Offset(s * 0.32f, s * 0.32f),
-            radius = s * 0.55f
+            center = Offset(s * 0.70f, s * 0.58f),
+            radius = s * 0.35f
         ),
-        radius = s * 0.50f,
-        center = Offset(s * 0.5f, s * 0.5f)
+        radius = r,
+        center = Offset(cX, cY)
     )
 
-    // 第3层: 极细亮边描边 (1px, 模拟玻璃边缘折射)
+    // ══ L4: 色调叠加 — 极淡冷白 tint (统一层间, 模拟玻璃厚度) ══
     drawCircle(
-        color = Color.White.copy(alpha = 0.55f - dragProgress * 0.30f),
-        radius = s * 0.50f - 0.5f.dp.toPx(),
-        center = Offset(s * 0.5f, s * 0.5f),
-        style = Stroke(width = 0.75f.dp.toPx())
+        color = Color(0xFFFAFCFF).copy(alpha = 0.06f),  // 极淡蓝白
+        radius = r,
+        center = Offset(cX, cY)
     )
 
-    // 内侧微弱阴影 (底部深色弧, 增立体感)
-    if (!isInteracting || dragProgress < 0.5f) {
-        val innerShadowAlpha = 0.06f * (1f - dragProgress)
+    // ══ L5: 顶部镜面高光 — 1dp 内沿亮线 (specular highlight, 最关键深度线索) ══
+    val highlightAlpha = (0.55f - dragProgress * 0.30f).coerceAtLeast(0.08f)
+    // 用弧线模拟顶部边缘 caught light
+    drawArc(
+        color = Color.White.copy(alpha = highlightAlpha),
+        startAngle = 200f,       // 左上起始
+        sweepAngle = 160f,      // 覆盖顶部大半圆弧
+        useCenter = false,
+        style = Stroke(width = 1.0f.dp.toPx()),
+        topLeft = Offset(s * 0.05f, s * 0.04f),
+        size = Size(s * 0.90f, s * 0.90f)
+    )
+    // 高光外侧极淡光晕 (光散射)
+    drawArc(
+        color = Color.White.copy(alpha = highlightAlpha * 0.25f),
+        startAngle = 195f,
+        sweepAngle = 170f,
+        useCenter = false,
+        style = Stroke(width = 2.8f.dp.toPx()),
+        topLeft = Offset(s * 0.02f, s * 0.01f),
+        size = Size(s * 0.96f, s * 0.96f)
+    )
+
+    // ══ L6: 渐变描边 — rim light (上亮下暗, 模拟环境光从上方照射) ══
+    // 上半圈: 明亮描边
+    drawArc(
+        brush = Brush.linearGradient(
+            colors = listOf(
+                Color.White.copy(alpha = 0.55f - dragProgress * 0.25f),   // 顶部最亮
+                Color.White.copy(alpha = 0.30f - dragProgress * 0.10f),   // 两侧过渡
+            ),
+            start = Offset(cX, 0f),
+            end = Offset(cX, s)
+        ),
+        startAngle = 145f,
+        sweepAngle = 150f,      // 覆盖顶部到两侧
+        useCenter = false,
+        style = Stroke(width = 0.6f.dp.toPx()),
+        topLeft = Offset(s * 0.03f, s * 0.03f),
+        size = Size(s * 0.94f, s * 0.94f)
+    )
+    // 下半圈: 暗淡描边 (几乎融入背景)
+    drawArc(
+        color = Color.White.copy(alpha = 0.12f - dragProgress * 0.06f),
+        startAngle = 295f,
+        sweepAngle = 130f,
+        useCenter = false,
+        style = Stroke(width = 0.6f.dp.toPx()),
+        topLeft = Offset(s * 0.03f, s * 0.03f),
+        size = Size(s * 0.94f, s * 0.94f)
+    )
+
+    // ══ L7: 底部暗角弧 — 内凹加深 (配合 innerShadow 增强凹陷体积) ══
+    if (!isInteracting || dragProgress < 0.6f) {
+        val bottomShadowAlpha = 0.07f * (1f - dragProgress)
         drawArc(
-            color = Color.Black.copy(alpha = innerShadowAlpha),
-            startAngle = 120f,
-            sweepAngle = 120f,
+            color = Color.Black.copy(alpha = bottomShadowAlpha),
+            startAngle = 100f,
+            sweepAngle = 140f,     // 覆盖底部大弧
             useCenter = false,
-            style = Stroke(width = 2.2f.dp.toPx()),
-            topLeft = Offset(s * 0.06f, s * 0.06f),
-            size = Size(s * 0.88f, s * 0.88f)
+            style = Stroke(width = 3.0f.dp.toPx()),
+            topLeft = Offset(s * 0.04f, s * 0.04f),
+            size = Size(s * 0.92f, s * 0.92f)
+        )
+        // 更柔和的外层暗角
+        drawArc(
+            color = Color.Black.copy(alpha = bottomShadowAlpha * 0.4f),
+            startAngle = 90f,
+            sweepAngle = 160f,
+            useCenter = false,
+            style = Stroke(width = 5.0f.dp.toPx()),
+            topLeft = Offset(0f, 0f),
+            size = Size(s, s)
         )
     }
 }
