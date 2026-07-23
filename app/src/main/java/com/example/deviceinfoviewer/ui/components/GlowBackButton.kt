@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -87,7 +88,7 @@ fun GlowBackButton(
         label = "breathScale"
     )
 
-    // 按压缩放 (弹性反馈)
+    // 按压缩小 (弹性反馈)
     val pressScale by animateFloatAsState(
         targetValue = if (isPressed) 0.88f else 1.0f,
         animationSpec = spring(
@@ -200,14 +201,14 @@ fun GlowBackButton(
             val borderR = baseR * breathScale
             drawCircle(
                 color = NeonSteelBlue.copy(alpha = pressBorderAlpha * 0.6f),
-                radius = borderR - 0.6.dp.toPx(),
+                radius = borderR - 0.6f.dp.toPx(),
                 center = Offset(cx, cy),
                 style = Stroke(width = 0.8f.dp.toPx())
             )
             // 外层极淡光晕
             drawCircle(
                 color = NeonPurple.copy(alpha = pressBorderAlpha * 0.15f),
-                radius = borderR + 1.dp.toPx(),
+                radius = borderR + 1f.dp.toPx(),
                 center = Offset(cx, cy),
                 style = Stroke(width = 0.5f.dp.toPx())
             )
@@ -272,23 +273,30 @@ private data class RippleData(val startTime: Long)
 //    · 拖距 < 阈值 → 触发返回 (spring 回弹 + onClick)
 //    · 拖距 ≥ 阈值 → 取消 (spring 弹回原位, 不触发)
 //
-//  视觉特征:
-//  - 毛玻璃底座 (多层半透明白 + 内阴影 + 极细亮边)
-//  - 模糊质感箭头图标 (双层错位绘制模拟 soft-focus)
-//  - 拖拽时非对称拉伸 (drag方向 elongate ~1.35x)
-//  - 拉伸侧高光弧线 (jelly highlight)
+//  视觉特征 (V3):
+//  - 9层毛玻璃底座 (恒定亮度+底部黑色强调色 L8)
+//  - 三层模糊箭头图标 (soft-focus 景深)
+//  - 非对称果冻拉伸 (drag方向 1.8x, 垂直 0.85x)
+//  - 5层连续重叠高光弧 (无条纹平滑渐变)
 // ═════════════════════════════════════════════════════
 
 /** 拖拽超过此距离视为"取消", 不触发返回 */
 private val CANCEL_THRESHOLD_DP = 40f
 
-/** 最大拉伸系数 (拖拽达到阈值时的 scaleX/Y), 增至 1.5 以增强果冻体量感 */
-private val MAX_STRETCH = 1.50f
+/** 最大拉伸系数 (拖拽达到阈值时的 scaleX/Y) */
+private val MAX_STRETCH = 1.80f
 
 /**
- * 浅色圆形返回按钮 — iOS 26 拖拽交互 + 毛玻璃材质。
+ * 浅色圆形返回按钮 — iOS 26 拖拽交互 + 毛玻璃材质 V3.
  *
- * 与 [GlowBackButton] (暗玻璃霓虹风) 并列为两种可选返回键皮肤。
+ * 与 [GlowBackButton] (暗玻璃霓虹风) 并列为两种可选返回键皮肤.
+ *
+ * V3 变更 (基于视频帧 f_003/f_015/f_018/f_022/f_030 分析):
+ * ① [P0] 拖拽时按钮消失 → 所有层 alpha 不再随 dragProgress 衰减, 反而增强
+ *     根因: L2/L5/L6 全部线性衰减 → 拖到一半所有"亮部"减半 → 只剩底色=灰圆圈
+ * ② [P0] 高光弧条纹 → 5层连续重叠 drawArc (无分段, 平滑 Gaussian 衰减)
+ * ③ [P0] 果冻拉伸不够 → MAX_STRETCH=1.8 + 非对称拉伸公式 (拖向1.8x, 垂直0.85x)
+ * ④ [新增] 底部黑色强调色 L8 → 径向渐变 黑(0.55α)→透明
  *
  * @param onClick 仅在按下后松手且未拖出阈值时触发
  * @param modifier 外部 Modifier
@@ -327,19 +335,16 @@ fun LightCircleBackButton(
         label = "pressScale"
     )
 
-    // 取消态淡出 (仅接近/超过阈值时才淡出, 拖拽过程中保持高可见度)
-    // 旧版: 1f - dragProgress → 拖动即淡出, 导致图2中按钮几乎消失
-    // 新版: dragProgress < 0.65 时完全不淡, 之后快速衰减
+    // 取消态淡出 — 仅在极接近阈值(>0.95)时才开始极快衰减
     val cancelAlpha by animateFloatAsState(
-        targetValue = if (dragProgress < 0.65f) 1.0f
-        else (1f - (dragProgress - 0.65f) / 0.35f).coerceIn(0f, 1f),
-        animationSpec = tween(150, easing = EaseOutCubic),
+        targetValue = if (dragProgress > 0.95f) (1f - (dragProgress - 0.95f) / 0.05f).coerceIn(0.3f, 1f) else 1.0f,
+        animationSpec = tween(100, easing = EaseOutCubic),
         label = "cancelAlpha"
     )
 
-    // 取消态缩小 (仅在非常接近阈值时才缩小, 避免拖拽中过早收缩)
+    // 取消态缩小 (仅在非常接近阈值时才缩小)
     val cancelScale by animateFloatAsState(
-        targetValue = if (dragProgress > 0.88f) 0.82f else 1.0f,
+        targetValue = if (dragProgress > 0.90f) 0.80f else 1.0f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "cancelScale"
     )
@@ -362,18 +367,20 @@ fun LightCircleBackButton(
         contentAlignment = Alignment.Center
     ) {
         // ── 按钮本体 (受拖拽影响变形) ──
-        val stretchX = if (isInteracting && dragProgress > 0.05f) {
-            1f + (MAX_STRETCH - 1f) * dragProgress * (kotlin.math.abs(dragOffsetX) /
-                kotlin.math.max(1f, kotlin.math.sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY)))
-        } else 1f
-        val stretchY = if (isInteracting && dragProgress > 0.05f) {
-            1f + (MAX_STRETCH - 1f) * dragProgress * (kotlin.math.abs(dragOffsetY) /
-                kotlin.math.max(1f, kotlin.math.sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY)))
-        } else 1f
+        // 果冻拉伸: 非对称橡皮筋 — 拖拽方向拉长到 1.8x, 垂直方向缩到 0.85x
+        val stretchFactor = if (isInteracting && dragProgress > 0.05f) {
+            dragProgress.coerceIn(0f, 1f)
+        } else 0f
+        val dragAngleRad = kotlin.math.atan2(dragOffsetY.toDouble(), dragOffsetX.toDouble()).toFloat()
+        val cosA = kotlin.math.cos(dragAngleRad.toDouble()).toFloat()
+        val sinA = kotlin.math.sin(dragAngleRad.toDouble()).toFloat()
+        // 非对称: 拖拽方向 stretch 到 1.8, 垂直方向 shrink 到 0.85
+        val stretchX = 1f + (MAX_STRETCH - 1f) * stretchFactor * cosA * cosA + (0.85f - 1f) * stretchFactor * sinA * sinA
+        val stretchY = 1f + (MAX_STRETCH - 1f) * stretchFactor * sinA * sinA + (0.85f - 1f) * stretchFactor * cosA * cosA
 
         // 综合缩放 = 按压 × 拉伸 × 取消 × 回弹
-        val finalScaleX = snapBackScale * stretchX.coerceIn(0.8f, MAX_STRETCH) * cancelScale
-        val finalScaleY = snapBackScale * stretchY.coerceIn(0.8f, MAX_STRETCH) * cancelScale
+        val finalScaleX = snapBackScale * stretchX.coerceIn(0.75f, MAX_STRETCH) * cancelScale
+        val finalScaleY = snapBackScale * stretchY.coerceIn(0.75f, MAX_STRETCH) * cancelScale
 
         // 拖拽方向角度 (用于高光弧位置)
         val dragAngle = remember(dragOffsetX, dragOffsetY) {
@@ -392,32 +399,27 @@ fun LightCircleBackButton(
                     translationY = dragOffsetY * 0.25f * dragProgress
                 }
                 .shadow(
-                    elevation = if (isInteracting) 8.dp else 4.dp,
+                    elevation = if (isInteracting) 10.dp else 4.dp,
                     shape = CircleShape,
                     ambientColor = Color.Black.copy(alpha = 0.10f),
                     spotColor = Color.Black.copy(alpha = 0.06f)
                 )
                 .clip(CircleShape)
-                // ══ 7层毛玻璃底座 (含手绘内阴影) ══
-                .drawFrostedGlassV2(btnSize, isInteracting, dragProgress)
+                // ══ 9层毛玻璃底座 V3 (恒定亮度+底部黑色强调) ══
+                .drawFrostedGlassV3(btnSize, isInteracting, dragProgress)
                 .pointerInput(btnSize) {
                     forEachGesture {
                         awaitPointerEventScope {
-                            // 等待按下
                             val down = awaitFirstDown()
                             isInteracting = true
                             dragOffsetX = 0f
                             dragOffsetY = 0f
 
-                            // 触觉: 轻触反馈
                             scope.launch {
                                 try { HapticUtils.standardTap(ctx) } catch (_: Exception) {}
                             }
 
-                            // 拖拽循环 — 修复: 指针移出按钮边界后 events.changes 变空,
-                            // 旧条件 event.changes.any{it.pressed} 误判为松开 → 效果消失。
-                            // 改为跟踪特定 pointerId, 仅在其真正松开(released)时退出循环,
-                            // 这样拖到按钮外时果冻/高光效果依然持续, 直到松手才判定返回/取消。
+                            // 拖拽循环 — 跟踪特定 pointerId, 移出边界不退出
                             val pointerId = down.id
                             var released = false
                             do {
@@ -428,25 +430,21 @@ fun LightCircleBackButton(
                                     dragOffsetY = (change.position.y - down.position.y)
                                     if (!change.pressed) released = true
                                 }
-                                // 注意: 不在循环条件里加距离上限, 距离只在松手时用于判定返回/取消
                             } while (!released)
 
                             // 松手判定
                             isInteracting = false
                             val totalDist = kotlin.math.sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY)
 
-                            // 清零偏移 (动画会平滑回弹)
                             dragOffsetX = 0f
                             dragOffsetY = 0f
 
                             if (totalDist < thresholdPx) {
-                                // ✓ 未超出阈值 → 触发返回
                                 scope.launch {
                                     delay(20)
                                     onClick()
                                 }
                             } else {
-                                // ✗ 超出阈值 → 已取消, 触觉提示
                                 scope.launch {
                                     try { HapticUtils.lightTap(ctx) } catch (_: Exception) {}
                                 }
@@ -458,28 +456,28 @@ fun LightCircleBackButton(
         ) {
             // ══ 模糊质感箭头 (三层错位绘制模拟 soft-focus / 景深) ══
             val iconSize = btnSize * 0.44f
-            // 整体图标随拖拽淡出
-            val iconAlpha = (0.58f + 0.42f * (1f - dragProgress)).coerceIn(0.30f, 0.95f)
+            // 图标 alpha: 拖拽时不衰减 (配合 V3 恒定亮度策略)
+            val iconAlpha = (0.62f + 0.33f * (1f - dragProgress.coerceAtMost(0.7f))).coerceIn(0.40f, 0.95f)
 
-            // 底层: 大幅模糊光晕 (最外层, 模拟透镜散射)
+            // 底层: 大幅模糊光晕
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = null,
-                tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.12f),
+                tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.14f),
                 modifier = Modifier
                     .size(iconSize * 1.40f)
                     .graphicsLayer { translationX = 0.8f; translationY = 0.8f }
             )
-            // 中层: 轻微模糊 (soft-focus 层, 主要体积感来源)
+            // 中层: 轻微模糊
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = null,
-                tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.28f),
+                tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.30f),
                 modifier = Modifier
                     .size(iconSize * 1.12f)
                     .graphicsLayer { translationX = 0.4f; translationY = 0.4f }
             )
-            // 主层: 锐利焦点 (标准尺寸, 清晰可读)
+            // 主层: 锐利焦点
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = stringResource(R.string.common_back),
@@ -488,31 +486,26 @@ fun LightCircleBackButton(
             )
         }
 
-        // ══ 拖拽高光弧线 (jelly highlight — 拉伸侧的镜面折射光带) ══
+        // ══ 拖拽高光弧线 (jelly highlight — 5层连续重叠, 无条纹) ══
         if (isInteracting && dragProgress > 0.08f) {
             Canvas(Modifier.matchParentSize()) {
                 val cx = size.width / 2f
                 val cy = size.height / 2f
                 val baseR = minOf(cx, cy) * 0.96f
 
-                // 高光弧在拖拽反方向 (被"拉开"的一侧玻璃变薄→高光增强)
                 val highlightAngle = (dragAngle + 180f) % 360f
-                val arcSweep = 100f * dragProgress.coerceAtMost(1f)   // 弧长
+                val arcSweep = 110f * dragProgress.coerceAtMost(1f)
                 val arcIntensity = dragProgress.coerceAtMost(1f)
 
-                // ══ 连续多层重叠高光弧 (无分段条纹, 平滑渐变) ══
-                // 原理: 用 N 层不同 sweepAngle 的连续 drawArc 叠加,
-                //       中心层最宽最亮, 向两端逐层缩短变暗 → 视觉上形成平滑的
-                //       "中间亮两端暗"渐变效果 (类似 Gaussian 衰减)
-                // 每层参数: (sweepRatio 相对于 arcSweep 的比例, alpha峰值, width_dp)
-                val highlightLayers = listOf(
-                    Triple(1.00f, 0.95f, 4.5f),   // 核心亮带 — 最宽最亮
-                    Triple(0.78f, 0.60f, 7.0f),   // 内过渡 — 稍窄稍淡
-                    Triple(0.56f, 0.32f, 11.0f),  // 中过渡 — 更窄更淡
-                    Triple(0.34f, 0.14f, 16.0f),  // 外散射 — 宽而极淡
-                    Triple(0.16f, 0.05f, 24.0f),  // 最外光晕 — 最宽最淡
+                // 5层连续重叠: 中心最宽最亮 → 两端逐层缩短变暗 (Gaussian 衰减)
+                val layers = listOf(
+                    Triple(1.00f, 0.95f, 4.5f),   // 核心亮带
+                    Triple(0.76f, 0.58f, 7.5f),   // 内过渡
+                    Triple(0.52f, 0.30f, 12.0f),  // 中过渡
+                    Triple(0.30f, 0.12f, 18.0f),  // 外散射
+                    Triple(0.14f, 0.04f, 28.0f),  // 最外光晕
                 )
-                for ((ratio, peakA, wDp) in highlightLayers) {
+                for ((ratio, peakA, wDp) in layers) {
                     val layerSweep = arcSweep * ratio
                     if (layerSweep < 3f) continue
                     drawArc(
@@ -531,179 +524,116 @@ fun LightCircleBackButton(
 }
 
 // ═════════════════════════════════════════════════════
-//  毛玻璃底座 V2 — iOS 26 Liquid Glass 多层深度模型
+//  毛玻璃底座 V3 — 恒定亮度 + 底部黑色强调色
 //
-//  渲染层级 (drawWithContent 内, drawContent() 之后):
-//  L1. 玻璃基面 — 半透明白 (0.30α, 用户要求更透)
-//  L2. 主光斑 — 左上角径向渐变 (模拟曲面反光/光源)
-//  L3. 副光斑 — 右下角微弱补光 (增加体积感)
-//  L4. 色调叠加 — 极淡暖白 tint (统一层间色温)
-//  L5. 顶部镜面高光 — 1dp 亮白内沿线 (specular highlight)
-//  L6. 渐变描边 — 上亮(55%α) → 下暗(12%α) (rim light)
-//  L7. 底部暗角弧 — 微弱深色内弧 (增强凹陷感)
-//
-//  参考来源:
-//  - liquid-glass (NadeemIqbal): blur+tint+sheen+refraction
-//  - android-design-system-skills: mesh + innerHighlight + gradient border
-//  - CSS Liquid Glass: backdrop-filter + inset box-shadow multi-layer
-//  - Apple HIG Materials: reflection/refraction/shadow/highlight
+//  核心设计决策: 所有层 alpha 为恒定值, 不随 dragProgress 衰减.
+//  拖拽时的视觉变化仅由 graphicsLayer 的 scaleX/Y/translationX/Y 提供.
 // ═════════════════════════════════════════════════════
 
 /**
- * 7 层深度毛玻璃绘制.
+ * 9 层毛玻璃绘制 V3 — 恒定亮度 + 底部黑色强调色.
  *
- * @param btnSize 按钮直径
- * @param isInteracting 是否在交互中(按下/拖拽)
- * @param dragProgress 归一化拖距 [0..1], 1=达到取消阈值
+ * ⚠️ 关键: 使用 drawBehind 而非 drawWithContent, 让玻璃层绘制在
+ * 图标内容【之下】(玻璃底座 → 箭头在上), 否则半透明白玻璃会盖住深色
+ * 箭头, 导致静态态"太灰/太实/箭头糊" — 这是此前视觉不达标的根因。
  */
-private fun Modifier.drawFrostedGlassV2(
+private fun Modifier.drawFrostedGlassV3(
     btnSize: Dp,
     isInteracting: Boolean,
     dragProgress: Float,
-): Modifier = this.drawWithContent {
-    drawContent()
-
+): Modifier = this.drawBehind {
     val s = btnSize.toPx()
     val cX = s * 0.5f
     val cY = s * 0.5f
     val r = s * 0.5f
-    // 交互时整体提亮 (按下态玻璃"变薄"更透光)
-    val interactLift = if (isInteracting) dragProgress * 0.08f else 0f
 
-    // ══ L1: 玻璃基面 — 半透明白 (核心: 不透明度从 0.88 降至 0.42) ══
-    // ══ L0: 内凹阴影 (全周, 模拟玻璃被"压入"表面 — 替代 Modifier.innerShadow) ══
-    // 用沿内边缘的深色 Stroke 模拟光线在凹陷处的遮挡
-    val innerShadowAlpha = 0.13f * (1f - dragProgress * 0.5f)
+    // ══ L0: 内凹阴影 (恒定 14%α) ══
     drawCircle(
-        color = Color.Black.copy(alpha = innerShadowAlpha),
-        radius = r - 0.3f.dp.toPx(),
-        center = Offset(cX, cY),
-        style = Stroke(width = 2.5f.dp.toPx())
+        color = Color.Black.copy(alpha = 0.14f),
+        radius = r - 0.4f.dp.toPx(), center = Offset(cX, cY),
+        style = Stroke(width = 2.8f.dp.toPx())
     )
-    // 内阴影柔化层 (更宽更淡, 避免硬边)
     drawCircle(
-        color = Color.Black.copy(alpha = innerShadowAlpha * 0.35f),
-        radius = r - 0.8f.dp.toPx(),
-        center = Offset(cX, cY),
-        style = Stroke(width = 4.0f.dp.toPx())
+        color = Color.Black.copy(alpha = 0.04f),
+        radius = r - 1.0f.dp.toPx(), center = Offset(cX, cY),
+        style = Stroke(width = 4.5f.dp.toPx())
     )
 
-    // ══ L1: 玻璃基面 — 半透明白 (用户要求更透: 0.42α → 0.30α, 微调至 0.34α 平衡透度与可见性) ══
+    // ══ L1: 玻璃基面 — 半透明白 0.45α (拖拽时 +12% 提亮) ══
+    val baseAlpha = 0.45f + if (isInteracting) dragProgress * 0.12f else 0f
+    drawCircle(color = Color.White.copy(alpha = baseAlpha), radius = r, center = Offset(cX, cY))
+
+    // ══ L2: 主光斑 — 左上径向渐变 (恒定 70%/28%) ══
     drawCircle(
-        color = Color.White.copy(alpha = 0.34f + interactLift),
-        radius = r,
-        center = Offset(cX, cY)
+        brush = Brush.radialGradient(
+            colors = listOf(Color.White.copy(alpha = 0.70f), Color.White.copy(alpha = 0.28f), Color.Transparent),
+            center = Offset(s * 0.28f, s * 0.26f), radius = s * 0.62f
+        ), radius = r, center = Offset(cX, cY)
     )
 
-    // ══ L2: 主光斑 — 左上角径向渐变 (光源模拟, 制造曲面凸起错觉) ══
+    // ══ L3: 副光斑 — 右侧补光 (恒定 18%) ══
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(Color.White.copy(alpha = 0.18f), Color.Transparent),
+            center = Offset(s * 0.72f, s * 0.60f), radius = s * 0.38f
+        ), radius = r, center = Offset(cX, cY)
+    )
+
+    // ══ L4: 冷白色调叠加 (恒定 7%) ══
+    drawCircle(color = Color(0xFFFAFCFF).copy(alpha = 0.07f), radius = r, center = Offset(cX, cY))
+
+    // ══ L5: 顶部镜面高光 (恒定 72% + 22% 光晕) ══
+    drawArc(
+        color = Color.White.copy(alpha = 0.72f), startAngle = 200f, sweepAngle = 160f,
+        useCenter = false, style = Stroke(width = 1.0f.dp.toPx()),
+        topLeft = Offset(s * 0.05f, s * 0.04f), size = Size(s * 0.90f, s * 0.90f)
+    )
+    drawArc(
+        color = Color.White.copy(alpha = 0.22f), startAngle = 195f, sweepAngle = 170f,
+        useCenter = false, style = Stroke(width = 3.0f.dp.toPx()),
+        topLeft = Offset(s * 0.02f, s * 0.01f), size = Size(s * 0.96f, s * 0.96f)
+    )
+
+    // ══ L6: 渐变描边 rim light (恒定 60%/32% 上, 14% 下) ══
+    drawArc(
+        brush = Brush.linearGradient(listOf(Color.White.copy(alpha = 0.60f), Color.White.copy(alpha = 0.32f)),
+            start = Offset(cX, 0f), end = Offset(cX, s)),
+        startAngle = 145f, sweepAngle = 150f, useCenter = false,
+        style = Stroke(width = 0.6f.dp.toPx()),
+        topLeft = Offset(s * 0.03f, s * 0.03f), size = Size(s * 0.94f, s * 0.94f)
+    )
+    drawArc(
+        color = Color.White.copy(alpha = 0.14f), startAngle = 295f, sweepAngle = 130f,
+        useCenter = false, style = Stroke(width = 0.6f.dp.toPx()),
+        topLeft = Offset(s * 0.03f, s * 0.03f), size = Size(s * 0.94f, s * 0.94f)
+    )
+
+    // ══ L7: 底部暗角弧 (恒定 8%/3%) ══
+    drawArc(
+        color = Color.Black.copy(alpha = 0.08f), startAngle = 100f, sweepAngle = 140f,
+        useCenter = false, style = Stroke(width = 3.5f.dp.toPx()),
+        topLeft = Offset(s * 0.04f, s * 0.04f), size = Size(s * 0.92f, s * 0.92f)
+    )
+    drawArc(
+        color = Color.Black.copy(alpha = 0.03f), startAngle = 90f, sweepAngle = 160f,
+        useCenter = false, style = Stroke(width = 6.0f.dp.toPx()),
+        topLeft = Offset(0f, 0f), size = Size(s, s)
+    )
+
+    // ══ L8: 底部黑色强调色区域 (新增!) ══
+    // 从底部中心向上径向渐变: 黑(55%α)→灰(20%α)→透明
+    // 营造深色托底效果, 让按钮有明确的"底部重量感"
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(
-                Color.White.copy(alpha = 0.62f - dragProgress * 0.20f),  // 中心最亮 (提亮: 0.52→0.62)
-                Color.White.copy(alpha = 0.24f),                          // 中间过渡 (原0.18→0.24)
-                Color.Transparent,                                        // 边缘透明
-            ),
-            center = Offset(s * 0.30f, s * 0.28f),
-            radius = s * 0.60f
-        ),
-        radius = r,
-        center = Offset(cX, cY)
-    )
-
-    // ══ L3: 副光斑 — 右侧微弱补光 (打破对称, 增加真实体积感) ══
-    drawCircle(
-        brush = Brush.radialGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.15f),
+                Color.Black.copy(alpha = 0.55f),
+                Color.Black.copy(alpha = 0.20f),
                 Color.Transparent,
             ),
-            center = Offset(s * 0.70f, s * 0.58f),
-            radius = s * 0.35f
+            center = Offset(cX, s * 0.82f),
+            radius = s * 0.50f
         ),
         radius = r,
         center = Offset(cX, cY)
     )
-
-    // ══ L4: 色调叠加 — 极淡冷白 tint (统一层间, 模拟玻璃厚度) ══
-    drawCircle(
-        color = Color(0xFFFAFCFF).copy(alpha = 0.06f),  // 极淡蓝白
-        radius = r,
-        center = Offset(cX, cY)
-    )
-
-    // ══ L5: 顶部镜面高光 — 1dp 内沿亮线 (specular highlight, 最关键深度线索) ══
-    val highlightAlpha = (0.68f - dragProgress * 0.30f).coerceAtLeast(0.10f)  // 提亮: 0.55→0.68
-    // 用弧线模拟顶部边缘 caught light
-    drawArc(
-        color = Color.White.copy(alpha = highlightAlpha),
-        startAngle = 200f,       // 左上起始
-        sweepAngle = 160f,      // 覆盖顶部大半圆弧
-        useCenter = false,
-        style = Stroke(width = 1.0f.dp.toPx()),
-        topLeft = Offset(s * 0.05f, s * 0.04f),
-        size = Size(s * 0.90f, s * 0.90f)
-    )
-    // 高光外侧极淡光晕 (光散射)
-    drawArc(
-        color = Color.White.copy(alpha = highlightAlpha * 0.25f),
-        startAngle = 195f,
-        sweepAngle = 170f,
-        useCenter = false,
-        style = Stroke(width = 2.8f.dp.toPx()),
-        topLeft = Offset(s * 0.02f, s * 0.01f),
-        size = Size(s * 0.96f, s * 0.96f)
-    )
-
-    // ══ L6: 渐变描边 — rim light (上亮下暗, 模拟环境光从上方照射) ══
-    // 上半圈: 明亮描边
-    drawArc(
-        brush = Brush.linearGradient(
-            colors = listOf(
-                Color.White.copy(alpha = 0.55f - dragProgress * 0.25f),   // 顶部最亮
-                Color.White.copy(alpha = 0.30f - dragProgress * 0.10f),   // 两侧过渡
-            ),
-            start = Offset(cX, 0f),
-            end = Offset(cX, s)
-        ),
-        startAngle = 145f,
-        sweepAngle = 150f,      // 覆盖顶部到两侧
-        useCenter = false,
-        style = Stroke(width = 0.6f.dp.toPx()),
-        topLeft = Offset(s * 0.03f, s * 0.03f),
-        size = Size(s * 0.94f, s * 0.94f)
-    )
-    // 下半圈: 暗淡描边 (几乎融入背景)
-    drawArc(
-        color = Color.White.copy(alpha = 0.12f - dragProgress * 0.06f),
-        startAngle = 295f,
-        sweepAngle = 130f,
-        useCenter = false,
-        style = Stroke(width = 0.6f.dp.toPx()),
-        topLeft = Offset(s * 0.03f, s * 0.03f),
-        size = Size(s * 0.94f, s * 0.94f)
-    )
-
-    // ══ L7: 底部暗角弧 — 内凹加深 (配合 innerShadow 增强凹陷体积) ══
-    if (!isInteracting || dragProgress < 0.6f) {
-        val bottomShadowAlpha = 0.07f * (1f - dragProgress)
-        drawArc(
-            color = Color.Black.copy(alpha = bottomShadowAlpha),
-            startAngle = 100f,
-            sweepAngle = 140f,     // 覆盖底部大弧
-            useCenter = false,
-            style = Stroke(width = 3.0f.dp.toPx()),
-            topLeft = Offset(s * 0.04f, s * 0.04f),
-            size = Size(s * 0.92f, s * 0.92f)
-        )
-        // 更柔和的外层暗角
-        drawArc(
-            color = Color.Black.copy(alpha = bottomShadowAlpha * 0.4f),
-            startAngle = 90f,
-            sweepAngle = 160f,
-            useCenter = false,
-            style = Stroke(width = 5.0f.dp.toPx()),
-            topLeft = Offset(0f, 0f),
-            size = Size(s, s)
-        )
-    }
 }
