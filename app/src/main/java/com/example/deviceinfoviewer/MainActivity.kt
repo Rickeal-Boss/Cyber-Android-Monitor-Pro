@@ -47,6 +47,7 @@ import com.example.deviceinfoviewer.ui.AppViewModel
 import com.example.deviceinfoviewer.RefreshPolicy
 import com.example.deviceinfoviewer.ui.battery.BatteryScreen
 import com.example.deviceinfoviewer.ui.components.LightCircleBackButton
+import com.example.deviceinfoviewer.ui.components.GlassCircleButton
 import com.example.deviceinfoviewer.ui.components.NeonDivider
 import com.example.deviceinfoviewer.ui.components.NeonHeaderDecoration
 import com.example.deviceinfoviewer.ui.components.neonBorderGlow
@@ -478,11 +479,30 @@ private fun MainTabs(
         val onFloatClick = remember(ctx) { { HapticUtils.standardTap(ctx); onOpenFloat() } }
         val onSettingsClick = remember(ctx) { { HapticUtils.standardTap(ctx); onOpenSettings() } }
 
-        IconButton(onClick = onFloatClick, modifier = Modifier.size(36.dp)) {
-            Text("◫", fontSize = 14.sp, color = NeonPurple)
+        // ── 玻璃圆底操作按钮 (与 LightCircleBackButton V3 视觉一致) ──
+        GlassCircleButton(
+            onClick = onFloatClick,
+            btnSize = 36.dp,
+            contentDescription = stringResource(R.string.float_title)
+        ) {
+            Icon(
+                Icons.Filled.Window,
+                contentDescription = null,
+                tint = Color(0xFF1A1A2E).copy(alpha = 0.85f),
+                modifier = Modifier.size(17.dp)
+            )
         }
-        IconButton(onClick = onSettingsClick, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Filled.Settings, stringResource(R.string.common_settings), tint = NeonPurple, modifier = Modifier.size(18.dp))
+        GlassCircleButton(
+            onClick = onSettingsClick,
+            btnSize = 36.dp,
+            contentDescription = stringResource(R.string.common_settings)
+        ) {
+            Icon(
+                Icons.Filled.Settings,
+                contentDescription = null,
+                tint = Color(0xFF1A1A2E).copy(alpha = 0.85f),
+                modifier = Modifier.size(17.dp)
+            )
         }
         }
         } // end Box — 霓虹动效头部
