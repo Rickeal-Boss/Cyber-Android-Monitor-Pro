@@ -486,7 +486,9 @@ fun LightCircleBackButton(
             )
         }
 
-        // ══ 拖拽高光弧线 (jelly highlight — 5层连续重叠, 无条纹) ══
+        // ══ 拖拽高光弧线 V2 — 玻璃折射感 (细/冷色调/柔和边缘) ══
+        // 设计原则: 真玻璃高光特征 = 极细(1~3px) + 低α(0.05~0.40) + 冷色调偏移 + 边缘柔化
+        // 旧版错误: 5层纯白/峰值0.95α/最宽28dp → 像粗白漆条/塑料环
         if (isInteracting && dragProgress > 0.08f) {
             Canvas(Modifier.matchParentSize()) {
                 val cx = size.width / 2f
@@ -494,30 +496,45 @@ fun LightCircleBackButton(
                 val baseR = minOf(cx, cy) * 0.96f
 
                 val highlightAngle = (dragAngle + 180f) % 360f
-                val arcSweep = 110f * dragProgress.coerceAtMost(1f)
-                val arcIntensity = dragProgress.coerceAtMost(1f)
+                val arcSweep = 80f * dragProgress.coerceAtMost(1f)   // 收窄: 110°→80° 避免包圈
+                val intensity = dragProgress.coerceAtMost(1f)
 
-                // 5层连续重叠: 中心最宽最亮 → 两端逐层缩短变暗 (Gaussian 衰减)
-                val layers = listOf(
-                    Triple(1.00f, 0.95f, 4.5f),   // 核心亮带
-                    Triple(0.76f, 0.58f, 7.5f),   // 内过渡
-                    Triple(0.52f, 0.30f, 12.0f),  // 中过渡
-                    Triple(0.30f, 0.12f, 18.0f),  // 外散射
-                    Triple(0.14f, 0.04f, 28.0f),  // 最外光晕
+                // 玻璃冷色调 (微青白, 模拟光学折射色散)
+                val hlCore = Color(0xFFE8F4FC)  // 冷白 — 核心反光
+                val hlGlow = Color(0xFFD0EFFF)  // 微青 — 散射光晕
+
+                // ── Layer 1: 核心极细镜面线 (1.2dp, peak α=0.40) ──
+                drawArc(
+                    color = hlCore.copy(alpha = 0.40f * intensity),
+                    startAngle = highlightAngle - arcSweep / 2f,
+                    sweepAngle = arcSweep,
+                    useCenter = false,
+                    style = Stroke(width = 1.2f.dp.toPx()),
+                    topLeft = Offset(cx - baseR, cy - baseR),
+                    size = Size(baseR * 2f, baseR * 2f)
                 )
-                for ((ratio, peakA, wDp) in layers) {
-                    val layerSweep = arcSweep * ratio
-                    if (layerSweep < 3f) continue
-                    drawArc(
-                        color = Color.White.copy(alpha = peakA * arcIntensity),
-                        startAngle = highlightAngle - layerSweep / 2f,
-                        sweepAngle = layerSweep,
-                        useCenter = false,
-                        style = Stroke(width = wDp.dp.toPx()),
-                        topLeft = Offset(cx - baseR, cy - baseR),
-                        size = Size(baseR * 2f, baseR * 2f)
-                    )
-                }
+
+                // ── Layer 2: 柔和散射过渡 (3.0dp, α=0.14) ──
+                drawArc(
+                    color = hlGlow.copy(alpha = 0.14f * intensity),
+                    startAngle = highlightAngle - arcSweep / 2f - 5f,
+                    sweepAngle = arcSweep + 10f,
+                    useCenter = false,
+                    style = Stroke(width = 3.0f.dp.toPx()),
+                    topLeft = Offset(cx - baseR, cy - baseR),
+                    size = Size(baseR * 2f, baseR * 2f)
+                )
+
+                // ── Layer 3: 极外环境光晕 (7dp, α=0.04) ──
+                drawArc(
+                    color = Color.White.copy(alpha = 0.04f * intensity),
+                    startAngle = highlightAngle - arcSweep / 2f - 10f,
+                    sweepAngle = arcSweep + 20f,
+                    useCenter = false,
+                    style = Stroke(width = 7.0f.dp.toPx()),
+                    topLeft = Offset(cx - baseR, cy - baseR),
+                    size = Size(baseR * 2f, baseR * 2f)
+                )
             }
         }
     }
@@ -559,14 +576,15 @@ private fun Modifier.drawFrostedGlassV3(
         style = Stroke(width = 4.5f.dp.toPx())
     )
 
-    // ══ L1: 玻璃基面 — 半透明白 0.45α (拖拽时 +12% 提亮) ══
-    val baseAlpha = 0.45f + if (isInteracting) dragProgress * 0.12f else 0f
-    drawCircle(color = Color.White.copy(alpha = baseAlpha), radius = r, center = Offset(cX, cY))
+    // ══ L1: 玻璃基面 — 冷调半透明 0.34α (拖拽时 +10% 提亮) ══
+    // 降低透明度 + 加入冷色调 (F2F6FA), 去除纯白带来的"金属珍珠球"观感
+    val baseAlpha = 0.34f + if (isInteracting) dragProgress * 0.10f else 0f
+    drawCircle(color = Color(0xFFF2F6FA).copy(alpha = baseAlpha), radius = r, center = Offset(cX, cY))
 
-    // ══ L2: 主光斑 — 左上径向渐变 (恒定 70%/28%) ══
+    // ══ L2: 主光斑 — 左上径向渐变 (冷调, 52%/18%) ══
     drawCircle(
         brush = Brush.radialGradient(
-            colors = listOf(Color.White.copy(alpha = 0.70f), Color.White.copy(alpha = 0.28f), Color.Transparent),
+            colors = listOf(Color(0xFFEAF3FB).copy(alpha = 0.52f), Color(0xFFEAF3FB).copy(alpha = 0.18f), Color.Transparent),
             center = Offset(s * 0.28f, s * 0.26f), radius = s * 0.62f
         ), radius = r, center = Offset(cX, cY)
     )
@@ -582,15 +600,16 @@ private fun Modifier.drawFrostedGlassV3(
     // ══ L4: 冷白色调叠加 (恒定 7%) ══
     drawCircle(color = Color(0xFFFAFCFF).copy(alpha = 0.07f), radius = r, center = Offset(cX, cY))
 
-    // ══ L5: 顶部镜面高光 (恒定 72% + 22% 光晕) ══
+    // ══ L5: 顶部镜面高光 (冷调, 30% + 10% 光晕) ══
+    // 旧版纯白 72%/22% 过亮 → 按钮呈"金属珍珠球"观感; 改冷调 + 大幅降透明
     drawArc(
-        color = Color.White.copy(alpha = 0.72f), startAngle = 200f, sweepAngle = 160f,
-        useCenter = false, style = Stroke(width = 1.0f.dp.toPx()),
+        color = Color(0xFFE8F4FC).copy(alpha = 0.30f), startAngle = 200f, sweepAngle = 150f,
+        useCenter = false, style = Stroke(width = 0.8f.dp.toPx()),
         topLeft = Offset(s * 0.05f, s * 0.04f), size = Size(s * 0.90f, s * 0.90f)
     )
     drawArc(
-        color = Color.White.copy(alpha = 0.22f), startAngle = 195f, sweepAngle = 170f,
-        useCenter = false, style = Stroke(width = 3.0f.dp.toPx()),
+        color = Color(0xFFD0EFFF).copy(alpha = 0.10f), startAngle = 195f, sweepAngle = 165f,
+        useCenter = false, style = Stroke(width = 2.0f.dp.toPx()),
         topLeft = Offset(s * 0.02f, s * 0.01f), size = Size(s * 0.96f, s * 0.96f)
     )
 
