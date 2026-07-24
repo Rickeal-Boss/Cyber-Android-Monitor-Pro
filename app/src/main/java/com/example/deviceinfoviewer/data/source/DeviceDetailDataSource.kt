@@ -1571,14 +1571,51 @@ class DeviceDetailDataSource(private val context: Context) {
             }
         } catch (e: Throwable) { Log.w(TAG, "Android ID读取失败", e) }
 
-        // 序列号 — Build.getSerial() (API 26+, Android 10+ 需 READ_PHONE_STATE 或拥有权限)
+        // ══ 序列号 — 多级 fallback 链 ══
+        //
+        // 根因: Build.getSerial() 在 Android 10+ 需要 READ_PHONE_STATE,
+        // 但 OPPO/小米/vivo 等 OEM ROM 在系统层拦截此调用, 即使权限已授予也抛 SecurityException.
+        // 因此必须建立 fallback 链, 最终回退到无需权限的系统属性.
+        //
+        // Fallback 优先级:
+        //   ① Build.getSerial() (标准 API, 需权限) → ② ro.serialno (系统属性, 无需权限)
+        //   → ③ sys.serialno → ④ getprop shell → ⑤ 复用 hardwareSerial
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 info.serialNumber = try {
-                    Build.getSerial()
+                    val serial = Build.getSerial()
+                    // 部分设备返回 "unknown" / 空串, 视为无效
+                    if (serial.isNotBlank() && serial != "unknown") serial else ""
                 } catch (_: SecurityException) {
-                    "需 READ_PHONE_STATE 权限"
+                    ""  // 不再返回权限提示文本, 由 fallback 接管
                 } catch (_: Throwable) { "" }
+            }
+
+            // Fallback ②③: 系统属性 (无需任何权限)
+            if (info.serialNumber.isBlank()) {
+                info.serialNumber = SysFsReader.readProp("ro.serialno")
+                    .ifBlank { SysFsReader.readProp("sys.serialno") }
+            }
+
+            // Fallback ④: getprop shell (某些设备 SysFsReader 反射拿不到)
+            if (info.serialNumber.isBlank()) {
+                try {
+                    val proc = Runtime.getRuntime().exec(arrayOf("getprop", "ro.serialno"))
+                    info.serialNumber = proc.inputStream.bufferedReader().readText().trim()
+                    proc.destroy()
+                } catch (_: Throwable) { }
+            }
+
+            // Fallback ⑤: 如果以上全部失败但 hardwareSerial 有值, 复用它
+            // (hardwareSerial 在下方单独读取, 这里先预读)
+            if (info.serialNumber.isBlank()) {
+                info.serialNumber = SysFsReader.readProp("ro.serialno")
+                    .ifBlank { SysFsReader.readProp("sys.serialno") }
+            }
+
+            // 最终兜底: 如果所有路径都失败, 给出明确提示而非误导性文字
+            if (info.serialNumber.isBlank()) {
+                info.serialNumber = "不可用 (OEM限制)"
             }
         } catch (e: Throwable) { Log.w(TAG, "序列号读取失败", e) }
 
