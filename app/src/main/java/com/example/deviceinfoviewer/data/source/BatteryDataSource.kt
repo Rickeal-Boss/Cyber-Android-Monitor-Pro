@@ -660,89 +660,27 @@ class BatteryDataSource(private val context: Context) {
     }
 
     private fun getCurrentNowFull(): Pair<Long, String> {
-        // 所有已知 current_now 路径
-        val currentPaths = listOf(
-            "/sys/class/power_supply/battery/current_now" to "battery/current_now",
-            "/sys/class/power_supply/battery/battery_current" to "battery/battery_current",
-            "/sys/class/power_supply/battery/current_avg" to "battery/current_avg",
-            "/sys/class/power_supply/battery/Charger_Current" to "battery/Charger_Current",
-            // Source: CodeLinaro qpnp-vm-bms.c — 高通 BMS 标准 µA
-            "/sys/class/power_supply/bms/current_now" to "bms/current_now",
-            "/sys/class/power_supply/bms/current_avg" to "bms/current_avg",
-            "/sys/class/power_supply/battery/input_current_settled" to "battery/input_current",
-            "/sys/class/power_supply/battery/constant_charge_current" to "battery/constant_charge",
-            // Source: Xiaomi HyperOS 内核 — BMS 子目录 (标准 µA)
-            "/sys/class/power_supply/bms/battery_current" to "bms/battery_current",
-            "/sys/class/power_supply/bms/charge_current" to "bms/charge_current",
-            // Source: 华为/荣耀 内核 — 标准 µA
-            "/sys/class/power_supply/battery/charging_current" to "battery/charging_current",
-            // Source: 三星内核 — 标准 µA
-            "/sys/class/power_supply/battery/batt_current_now" to "battery/batt_current",
-            "/sys/class/power_supply/battery/batt_current_adc" to "battery/batt_current_adc",
-            // Source: MTK 内核 drivers/power/supply/ — 标准 µA
-            "/sys/devices/platform/mt-battery/current_now" to "mt-battery/current_now",
-            "/sys/devices/platform/battery_meter/current_now" to "battery_meter/current_now",
-            // Vivo/iQOO — µA (沿用标准 power_supply)
-            "/sys/class/power_supply/battery/vivo_current" to "vivo/current",
-            "/sys/class/power_supply/battery/real_charging_curr" to "vivo/real_charge",
-            // Xiaomi/HyperOS 扩展
-            "/sys/class/power_supply/bms/current_max" to "bms/current_max",
-            "/sys/devices/platform/soc/soc:qcom,bcl/current_now" to "qcom_bcl/current",
-            // ColorOS 13.1+ 专项 — 标准 power_supply class µA
-            "/sys/class/power_supply/bms/current_now" to "bms/current_now_fallback",
-            "/sys/class/power_supply/usb/current_max" to "usb/current_max",
-            "/sys/class/power_supply/usb/current_now" to "usb/current_now",
-            "/sys/class/power_supply/main/current_now" to "main/current_now",
-            // 反向充电 (OPPO 部分机型) — mA
-            "/sys/class/power_supply/battery/otg_current" to "battery/otg_current",
-        )
-
-        for ((path, desc) in currentPaths) {
-            try {
-                // 直接 sysfs + shell 兜底 (Android 16 SELinux)
-                var rawValue = SysFsReader.readLong(path)
-                if (rawValue <= 0) {
-                    val shellVal = readSysfsLongRobust(path)
-                    if (shellVal > 0) rawValue = shellVal
-                }
-                if (rawValue == -1L || rawValue == Long.MIN_VALUE) continue
-                if (rawValue == 0L) continue  // 值为0继续尝试下一个路径
-
-                // Convert raw sysfs value to µA via pure function
-                val adjustedValue = convertCurrentToMicroamps(rawValue, path)
-
-                // 最终 sanity check
-                val absAdjusted = kotlin.math.abs(adjustedValue)
-                if (absAdjusted in UA_SANITY_LOW..UA_SANITY_HIGH) {
-                    Log.d(TAG, "current_now from $desc: $adjustedValue µA (raw=$rawValue)")
-                    return Pair(adjustedValue, desc)
-                }
-                if (absAdjusted > UA_SANITY_HIGH) {
-                    Log.w(TAG, "current from $desc: $adjustedValue µA exceeds 20A sanity — skipping")
-                }
-            } catch (_: Throwable) { /* next */ }
-        }
-
-        // BatteryManager 直接调用 getIntProperty(2) — CURRENT_NOW (优先于反射)
+        // ① 全系统通用主路: 框架 API (1 次 binder, ms 级)
+        // ★ P0 根因修复: 原 getIntProperty(2) 不支持时返回 0, 与"有效0电流"无法区分,
+        //   导致穿透到 sysfs 风暴。改用 getLongProperty + Long.MIN_VALUE 哨兵区分
+        //   "不支持"与"有效0" (Volta / BatteryX 同款做法, AOSP 派生)。
         try {
             val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
             if (bm != null) {
-                val current = bm.getIntProperty(2) // BATTERY_PROPERTY_CURRENT_NOW = 2
-                // ★ P0 修复: 原 `if (current > 0)` 会丢弃放电(负值)电流，导致放电态读数为0。
-                //   按 AOSP 符号约定(正=充电/负=放电)接受非0值，与隐藏 API 分支(线743)对齐。
-                if (current != 0) {
-                    Log.d(TAG, "current_now from BatteryManager.getIntProperty(2): $current µA")
-                    return Pair(current.toLong(), "BatteryManager direct (prop 2)")
+                val cur = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) // µA 直出
+                if (cur != Long.MIN_VALUE) {
+                    Log.d(TAG, "current_now from BatteryManager.getLongProperty(CURRENT_NOW): $cur µA")
+                    return Pair(cur, "BatteryManager binder")
                 }
-                // 也尝试 CHARGE_COUNTER (1) 用于 delta 估算
-                val counter = bm.getIntProperty(1) // BATTERY_PROPERTY_CHARGE_COUNTER = 1
-                if (counter > 0) {
+                // 诊断: CHARGE_COUNTER (1) 非零仅记录, 不参与电流主值
+                val counter = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+                if (counter != Long.MIN_VALUE) {
                     Log.d(TAG, "charge_counter from BatteryManager: $counter")
                 }
             }
         } catch (_: Throwable) { /* fall through */ }
 
-        // BatteryManager 隐藏属性 CURRENT_NOW (反射) — 适用于 API 14-34
+        // ② BatteryManager 隐藏属性 CURRENT_NOW (反射) — 适用于部分 ROM / 老框架
         try {
             val current = SysFsReader.getBatteryIntProperty(appContext, "BATTERY_PROPERTY_CURRENT_NOW")
             if (current != -1 && current != 0) {
@@ -751,57 +689,127 @@ class BatteryDataSource(private val context: Context) {
             }
         } catch (_: Throwable) { /* fall through */ }
 
-        // === ColorOS 13.1 专属兜底: dumpsys battery 提取 (shell 上下文) ===
-        try {
-            val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "dumpsys battery"))
-            val reader = proc.inputStream.bufferedReader()
-            val output = reader.readText()
-            reader.close()
-            proc.waitForWithTimeout()
-
-            // 匹配 dumpsys 中的充电电流字段
-            val dumpsysCurrentPatterns = listOf(
-                Regex("""(?i)Max charging current[=:：]\s*(\d+)"""),
-                Regex("""(?i)Charging current[=:：]\s*(\d+)"""),
-                Regex("""(?i)Charge counter[=:：]\s*(\d+)"""),
-                // ColorOS/部分 ROM 在放电态暴露的实时电流字段
-                Regex("""(?i)Current Now[=:：]\s*(-?\d+)"""),
-                Regex("""(?i)current now[=:：]\s*(-?\d+)"""),
-                // 匹配 "Current:" 字段 (部分旧设备 dumpsys 格式)
-                Regex("""(?i)^\s*(?:current|I)\s*[=:：]\s*(-?\d+)"""),
+        // ③ 仅在"探测到 sysfs 可读"时走 sysfs 次级 (ColorOS 永久跳过, 无 cat 风暴)
+        if (SysFsCapabilityProbe.isReadable()) {
+            // 所有已知 current_now 路径
+            val currentPaths = listOf(
+                "/sys/class/power_supply/battery/current_now" to "battery/current_now",
+                "/sys/class/power_supply/battery/battery_current" to "battery/battery_current",
+                "/sys/class/power_supply/battery/current_avg" to "battery/current_avg",
+                "/sys/class/power_supply/battery/Charger_Current" to "battery/Charger_Current",
+                // Source: CodeLinaro qpnp-vm-bms.c — 高通 BMS 标准 µA
+                "/sys/class/power_supply/bms/current_now" to "bms/current_now",
+                "/sys/class/power_supply/bms/current_avg" to "bms/current_avg",
+                "/sys/class/power_supply/battery/input_current_settled" to "battery/input_current",
+                "/sys/class/power_supply/battery/constant_charge_current" to "battery/constant_charge",
+                // Source: Xiaomi HyperOS 内核 — BMS 子目录 (标准 µA)
+                "/sys/class/power_supply/bms/battery_current" to "bms/battery_current",
+                "/sys/class/power_supply/bms/charge_current" to "bms/charge_current",
+                // Source: 华为/荣耀 内核 — 标准 µA
+                "/sys/class/power_supply/battery/charging_current" to "battery/charging_current",
+                // Source: 三星内核 — 标准 µA
+                "/sys/class/power_supply/battery/batt_current_now" to "battery/batt_current",
+                "/sys/class/power_supply/battery/batt_current_adc" to "battery/batt_current_adc",
+                // Source: MTK 内核 drivers/power/supply/ — 标准 µA
+                "/sys/devices/platform/mt-battery/current_now" to "mt-battery/current_now",
+                "/sys/devices/platform/battery_meter/current_now" to "battery_meter/current_now",
+                // Vivo/iQOO — µA (沿用标准 power_supply)
+                "/sys/class/power_supply/battery/vivo_current" to "vivo/current",
+                "/sys/class/power_supply/battery/real_charging_curr" to "vivo/real_charge",
+                // Xiaomi/HyperOS 扩展
+                "/sys/class/power_supply/bms/current_max" to "bms/current_max",
+                "/sys/devices/platform/soc/soc:qcom,bcl/current_now" to "qcom_bcl/current",
+                // ColorOS 13.1+ 专项 — 标准 power_supply class µA
+                "/sys/class/power_supply/bms/current_now" to "bms/current_now_fallback",
+                "/sys/class/power_supply/usb/current_max" to "usb/current_max",
+                "/sys/class/power_supply/usb/current_now" to "usb/current_now",
+                "/sys/class/power_supply/main/current_now" to "main/current_now",
+                // 反向充电 (OPPO 部分机型) — mA
+                "/sys/class/power_supply/battery/otg_current" to "battery/otg_current",
             )
-            for (regex in dumpsysCurrentPatterns) {
-                val match = regex.find(output)
-                match?.let {
-                    val value = it.groupValues[1].toLongOrNull()
-                    if (value != null && value > 0) {
-                        Log.d(TAG, "current_now via dumpsys battery: $value µA")
-                        return Pair(value, "dumpsys battery")
+
+            for ((path, desc) in currentPaths) {
+                try {
+                    // 直接 sysfs + shell 兜底 (Android 16 SELinux)
+                    var rawValue = SysFsReader.readLong(path)
+                    if (rawValue <= 0) {
+                        val shellVal = readSysfsLongRobust(path)
+                        if (shellVal > 0) rawValue = shellVal
+                    }
+                    if (rawValue == -1L || rawValue == Long.MIN_VALUE) continue
+                    if (rawValue == 0L) continue  // 值为0继续尝试下一个路径
+
+                    // Convert raw sysfs value to µA via pure function
+                    val adjustedValue = convertCurrentToMicroamps(rawValue, path)
+
+                    // 最终 sanity check
+                    val absAdjusted = kotlin.math.abs(adjustedValue)
+                    if (absAdjusted in UA_SANITY_LOW..UA_SANITY_HIGH) {
+                        Log.d(TAG, "current_now from $desc: $adjustedValue µA (raw=$rawValue)")
+                        return Pair(adjustedValue, desc)
+                    }
+                    if (absAdjusted > UA_SANITY_HIGH) {
+                        Log.w(TAG, "current from $desc: $adjustedValue µA exceeds 20A sanity — skipping")
+                    }
+                } catch (_: Throwable) { /* next */ }
+            }
+        }
+
+        // ④ root 深读 (dumpsys battery / batterystats), 仅 RootGate.isRoot 启用
+        if (RootGate.isRoot()) {
+            // === ColorOS 13.1 专属兜底: dumpsys battery 提取 (shell 上下文) ===
+            try {
+                val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "dumpsys battery"))
+                val reader = proc.inputStream.bufferedReader()
+                val output = reader.readText()
+                reader.close()
+                proc.waitForWithTimeout()
+
+                // 匹配 dumpsys 中的充电电流字段
+                val dumpsysCurrentPatterns = listOf(
+                    Regex("""(?i)Max charging current[=:：]\s*(\d+)"""),
+                    Regex("""(?i)Charging current[=:：]\s*(\d+)"""),
+                    Regex("""(?i)Charge counter[=:：]\s*(\d+)"""),
+                    // ColorOS/部分 ROM 在放电态暴露的实时电流字段
+                    Regex("""(?i)Current Now[=:：]\s*(-?\d+)"""),
+                    Regex("""(?i)current now[=:：]\s*(-?\d+)"""),
+                    // 匹配 "Current:" 字段 (部分旧设备 dumpsys 格式)
+                    Regex("""(?i)^\s*(?:current|I)\s*[=:：]\s*(-?\d+)"""),
+                )
+                for (regex in dumpsysCurrentPatterns) {
+                    val match = regex.find(output)
+                    match?.let {
+                        val value = it.groupValues[1].toLongOrNull()
+                        if (value != null && value > 0) {
+                            Log.d(TAG, "current_now via dumpsys battery: $value µA")
+                            return Pair(value, "dumpsys battery")
+                        }
                     }
                 }
-            }
-        } catch (_: Throwable) { /* fall through */ }
+            } catch (_: Throwable) { /* fall through */ }
 
-        // === 最后兜底: dumpsys batterystats (旧设备兼容) ===
-        try {
-            val proc = Runtime.getRuntime().exec(
-                arrayOf("/system/bin/sh", "-c", "dumpsys batterystats 2>/dev/null")
-            )
-            val output = proc.inputStream.bufferedReader().readText()
-            proc.waitForWithTimeout()
+            // === 最后兜底: dumpsys batterystats (旧设备兼容) ===
+            try {
+                val proc = Runtime.getRuntime().exec(
+                    arrayOf("/system/bin/sh", "-c", "dumpsys batterystats 2>/dev/null")
+                )
+                val output = proc.inputStream.bufferedReader().readText()
+                proc.waitForWithTimeout()
 
-            // 从 batterystats 提取电流估计值
-            val currentMatch = Regex("""(?i)Estimated power use.*?=.*?(\d+)""").find(output)
-                ?: Regex("""(?i)Current:\s*(-?\d+)""").find(output)
-            currentMatch?.let {
-                val value = it.groupValues[1].toLongOrNull()
-                if (value != null && kotlin.math.abs(value) > 0) {
-                    Log.d(TAG, "current_now via batterystats: $value")
-                    return Pair(value, "dumpsys batterystats")
+                // 从 batterystats 提取电流估计值
+                val currentMatch = Regex("""(?i)Estimated power use.*?=.*?(\d+)""").find(output)
+                    ?: Regex("""(?i)Current:\s*(-?\d+)""").find(output)
+                currentMatch?.let {
+                    val value = it.groupValues[1].toLongOrNull()
+                    if (value != null && kotlin.math.abs(value) > 0) {
+                        Log.d(TAG, "current_now via batterystats: $value")
+                        return Pair(value, "dumpsys batterystats")
+                    }
                 }
-            }
-        } catch (_: Throwable) { /* fall through */ }
+            } catch (_: Throwable) { /* fall through */ }
+        }
 
+        // ⑤ 全部失败 → 0 + "无法获取" (caller 接 SoC-Δ 估计兜底, 见 getBatteryInfo)
         return Pair(0L, "无法获取")
     }
 
