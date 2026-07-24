@@ -654,5 +654,82 @@ private fun Modifier.drawFrostedGlassV3(
         ),
         radius = r,
         center = Offset(cX, cY)
+    }
+}
+
+// ═════════════════════════════════════════════════════
+//  通用玻璃圆底按钮 — Tab栏/工具栏用
+//
+//  复用 drawFrostedGlassV3 的 9 层毛玻璃底座,
+//  但无拖拽/果冻交互 — 纯点击 + 弹簧缩放反馈.
+//  与 LightCircleBackButton 视觉一致, 用于非返回键场景.
+// ═════════════════════════════════════════════════════
+
+/**
+ * 通用玻璃圆底按钮.
+ *
+ * 视觉特征 (与 LightCircleBackButton V3 一致):
+ * - 9 层毛玻璃底座 (drawFrostedGlassV3, 恒定亮度 + 底部黑色强调)
+ * - 冷调高光 (非金属感)
+ * - 点击弹簧缩放 0.88x + 触觉反馈
+ *
+ * @param content 按钮图标内容 (居中绘制在玻璃底座之上)
+ * @param onClick 点击回调
+ * @param modifier 外部 Modifier
+ * @param btnSize 按钮直径, 默认 36.dp (Tab 栏场景)
+ * @param contentDescription 无障碍描述
+ */
+@Composable
+fun GlassCircleButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    btnSize: Dp = 36.dp,
+    contentDescription: String? = null,
+    content: @Composable () -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
+
+    var isPressed by remember { mutableStateOf(false) }
+
+    val pressScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.88f else 1.0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "glassBtnPress"
     )
+
+    Box(
+        modifier = modifier
+            .size(btnSize)
+            .scale(pressScale)
+            .shadow(
+                elevation = 4.dp,
+                shape = CircleShape,
+                ambientColor = Color.Black.copy(alpha = 0.40f),
+                spotColor = Color.Black.copy(alpha = 0.25f)
+            )
+            .clip(CircleShape)
+            // ══ 9 层毛玻璃底座 (复用 V3, 静态态) ══
+            .drawFrostedGlassV3(btnSize, isInteracting = false, dragProgress = 0f)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        isPressed = true
+                        tryAwaitRelease()
+                        isPressed = false
+                        scope.launch {
+                            try { HapticUtils.standardTap(ctx) } catch (_: Exception) {}
+                            onClick()
+                        }
+                    }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        // 图标内容 (绘制在玻璃底座之上)
+        content()
+    }
 }
