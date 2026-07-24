@@ -715,17 +715,29 @@ fun GlassCircleButton(
             // ══ 9 层毛玻璃底座 (复用 V3, 静态态) ══
             .drawFrostedGlassV3(btnSize, isInteracting = false, dragProgress = 0f)
             .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
+                forEachGesture {
+                    awaitPointerEventScope {
+                        // 1) 按下: 仅记录起点 + 视觉反馈, 不触发任何逻辑
+                        val down = awaitFirstDown()
                         isPressed = true
-                        tryAwaitRelease()
+
+                        // 2) 跟踪指针直至松手: 拖动过程完全不响应 (即使移出按钮边界)
+                        val pointerId = down.id
+                        var released = false
+                        do {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == pointerId }
+                            if (change != null && !change.pressed) released = true
+                        } while (!released)
+
+                        // 3) 松开: 这是唯一触发 onClick 的时机
                         isPressed = false
                         scope.launch {
                             try { HapticUtils.standardTap(ctx) } catch (_: Exception) {}
                             onClick()
                         }
                     }
-                )
+                }
             },
         contentAlignment = Alignment.Center
     ) {
