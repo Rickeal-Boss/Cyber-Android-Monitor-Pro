@@ -655,7 +655,6 @@ private fun Modifier.drawFrostedGlassV3(
         radius = r,
         center = Offset(cX, cY)
     )
-    }
 }
 
 // ═════════════════════════════════════════════════════
