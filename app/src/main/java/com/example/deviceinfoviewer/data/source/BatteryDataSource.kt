@@ -755,8 +755,12 @@ class BatteryDataSource(private val context: Context) {
             }
         }
 
-        // ④ root 深读 (dumpsys battery / batterystats), 仅 RootGate.isRoot 启用
-        if (RootGate.isRoot()) {
+        // ④ dumpsys 兜底 (非 root 可用, 无需 RootGate)
+        //    说明: dumpsys battery / batterystats 普通三方 App 即可执行, 不需要 root;
+        //    仅当上方 binder/sysfs 均未命中(返回 MIN_VALUE/不可读)时才走到此处,
+        //    故仅对"binder 不支持"的设备产生 shell 开销。ColorOS 上 binder 通常返回
+        //    有效值, 此处几乎不触发。RootGate 仅保留给未来"真 root 私有节点"读取。
+        run {
             // === ColorOS 13.1 专属兜底: dumpsys battery 提取 (shell 上下文) ===
             try {
                 val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "dumpsys battery"))
@@ -1875,10 +1879,13 @@ class BatteryDataSource(private val context: Context) {
         val absRaw = kotlin.math.abs(rawValue)
 
         return when {
-            // 明确 BBK 路径 + 典型 mA 范围 → 直接视为 mA，转换
+            // 框架 API (binder / hidden API) 永为 µA, 不参与 BBK mA 假设
+            // (修复: 之前 BBK 厂商分支会把 binder 的 µA 误当 mA 直出, 放大 1000×)
+            sourcePath.contains("BatteryManager") -> (rawValue / 1000).toInt()
+            // 明确 BBK 路径 + 典型 mA 范围 → 直接视为 mA
             isBbKPath && absRaw in 100..20000 -> rawValue.toInt()
             // BBK 厂商 + 路径不详 + 小数值 → 按 µA 处理
-            isBbKVendor && absRaw < 20000 -> rawValue.toInt()
+            isBbKVendor && absRaw < 20000 -> (rawValue / 1000).toInt()
             // BBK 厂商 + 路径不详 + 大数值 → 按 µA 处理 (已是 µA)
             isBbKVendor && absRaw >= 20000 -> (rawValue / 1000).toInt()
             // 非 BBK + 小数值 → 按 µA 处理
