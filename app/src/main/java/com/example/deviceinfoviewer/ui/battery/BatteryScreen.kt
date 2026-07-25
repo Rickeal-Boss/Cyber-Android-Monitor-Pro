@@ -1,8 +1,8 @@
 package com.example.deviceinfoviewer.ui.battery
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,13 +10,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Slider
@@ -43,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.example.deviceinfoviewer.R
 import com.example.deviceinfoviewer.AppSettings
 import com.example.deviceinfoviewer.FormatUtils
+import com.example.deviceinfoviewer.HapticUtils
 import com.example.deviceinfoviewer.ui.components.charts.ChartUtils
 import com.example.deviceinfoviewer.data.model.HistoryDataPoint
 import com.example.deviceinfoviewer.ui.components.InfoCard
@@ -59,9 +63,12 @@ import com.example.deviceinfoviewer.ui.theme.SuccessNeon
 import com.example.deviceinfoviewer.ui.theme.TextPrimary
 import com.example.deviceinfoviewer.ui.theme.TextSecondary
 import org.koin.androidx.compose.koinViewModel
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 
 /**
  * 电池屏幕 — 增强版：展示循环次数、容量来源、充放电功率 + 实时图表
+ * 卡片支持与概览页一致的手动拖拽重排 (dashboardReorderEnabled 总开关控制)。
  */
 @Composable
 fun BatteryScreen(
@@ -72,7 +79,8 @@ fun BatteryScreen(
 
     // 双电芯手动开关 — 自动检测不可靠时的用户覆盖项
     val context = LocalContext.current
-    var dualCellEnabled by remember { mutableStateOf(AppSettings.getInstance(context).dualCellBattery) }
+    val appSettings = AppSettings.getInstance(context)
+    var dualCellEnabled by remember { mutableStateOf(appSettings.dualCellBattery) }
 
     val level = batteryInfo?.levelPercent?.takeIf { it >= 0 }
     val isCharging = batteryInfo?.isCharging ?: false
@@ -111,289 +119,414 @@ fun BatteryScreen(
     val wattageNow = batteryInfo?.wattageNow?.takeIf { !it.isNaN() && it > 0 }
     val currentNormalizedMa = batteryInfo?.currentNormalizedMa?.takeIf { it != 0 }
 
+    // 健康度 (SOH): charge_full 计算 + 标准 API 双源 — 上提到作用域顶部，供可见性判断与卡片渲染共用
+    val healthPercent = if (designCap != null && nowCap != null && designCap > 0) {
+        (nowCap * 100 / designCap).toInt()
+    } else apiSohPercent
+
     val battTempChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["battery_temp"], 60f) } }
     val battLevelChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["battery_level"], 100f) } }
     val battPowerChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["battery_power"], 30000f) } }
 
-    Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // === 状态概览 ===
-        val chargingStr = stringResource(R.string.battery_status_charging)
-        val pluggedNotChargingStr = stringResource(R.string.battery_status_not_charging)
-        val dischargingStr = stringResource(R.string.battery_status_discharging)
-        val statusText = buildString {
-            if (isPlugged && isCharging) append(chargingStr)
-            else if (isPlugged) append(pluggedNotChargingStr)
-            else append(dischargingStr)
-            if (level != null) append(" · ${level}%")
+    // ── 卡片排序 (可拖拽重排, 与概览页一致) ──
+    val reorderEnabled = appSettings.dashboardReorderEnabled
+    var cardOrder by remember { mutableStateOf(resolveBatteryCardOrder(appSettings.batteryCardOrder)) }
+
+    val onReorder: (List<String>) -> Unit = { newOrder ->
+        cardOrder = newOrder
+        appSettings.batteryCardOrder = newOrder.joinToString(",")
+    }
+
+    // 电流校准倍率 controlled state
+    var currentMultiplier by remember { mutableStateOf(appSettings.batteryCurrentMultiplier) }
+    val onMultiplierChange: (Double) -> Unit = { value ->
+        currentMultiplier = value
+        appSettings.batteryCurrentMultiplier = value
+    }
+    val onDualCellChange: (Boolean) -> Unit = { enabled ->
+        dualCellEnabled = enabled
+        appSettings.dualCellBattery = enabled
+        viewModel.refreshDualCell()
+    }
+
+    // 卡片可见性判定 (闭包读取最新数据快照；条件与下方 CardContent 的 if 守卫一一对应)
+    val isCardVisible: (String) -> Boolean = { id ->
+        when (id) {
+            "current_multiplier" -> true
+            "power_save" -> batteryInfo?.isPowerSaveMode == true
+            "soh" -> healthPercent != null
+            "design_capacity" -> designCap != null
+            "rated_capacity" -> nowCap != null
+            "cycle_count" -> true          // 无数据时也渲染 (not detected 占位)
+            "protocol" -> protocolDetected != null
+            "power_source" -> powerSourceLabel != null
+            "wattage" -> wattageNow != null
+            "internal_r" -> internalR != null
+            "level_chart" -> level != null
+            "power" -> power != null && power > 0
+            "current" -> current != null
+            "realtime_power" -> effVoltage != null && current != null
+            "voltage" -> voltage != null
+            "charge_counter" -> counter != null
+            "temperature" -> temp != null
+            "health_status" -> true
+            "dual_cell" -> true
+            else -> false
         }
-        val techText = FormatUtils.joinNonBlank("  |  ",
-            technology,
-            if (chargerFromPlugText.isNotEmpty() && isPlugged) chargerFromPlugText else null,
-            if (chargerType != null && chargerType != chargerFromPlug) chargerType else null
-        )
+    }
+    val getVisibleItems = { cardOrder.filter { isCardVisible(it) } }
 
-        InfoCard(
-            title = statusText,
-            subtitle = techText.ifEmpty { batteryInfo?.chargeStatus?.takeIf { it.isNotEmpty() } ?: "" },
-            icon = Icons.Filled.Favorite, iconTint = NeonPurple
-        )
+    // === 状态概览 (固定头部, 不参与重排) ===
+    val chargingStr = stringResource(R.string.battery_status_charging)
+    val pluggedNotChargingStr = stringResource(R.string.battery_status_not_charging)
+    val dischargingStr = stringResource(R.string.battery_status_discharging)
+    val statusText = buildString {
+        if (isPlugged && isCharging) append(chargingStr)
+        else if (isPlugged) append(pluggedNotChargingStr)
+        else append(dischargingStr)
+        if (level != null) append(" · ${level}%")
+    }
+    val techText = FormatUtils.joinNonBlank("  |  ",
+        technology,
+        if (chargerFromPlugText.isNotEmpty() && isPlugged) chargerFromPlugText else null,
+        if (chargerType != null && chargerType != chargerFromPlug) chargerType else null
+    )
 
-        // === 电池电流校准倍率 (PlusPlusBattery 思路: 用户校准则准) ===
-        // ColorOS 等 OEM ROM 的 oplus_chg / BATTERY_PROPERTY_CURRENT_NOW 读数常因单位或
-        // 增益偏差偏大/偏小，在此按真实值校正 (默认 1.0× 不修正；如偏大 2× 填 0.5×)。
-        // 范围由 AppSettings 钳制 [0.1, 10.0]，下次轮询即生效。
-        var currentMultiplier by remember { mutableStateOf(AppSettings.getInstance(context).batteryCurrentMultiplier) }
-        BatteryCurrentMultiplierCard(
-            multiplier = currentMultiplier,
-            onMultiplierChange = { value ->
-                currentMultiplier = value
-                AppSettings.getInstance(context).batteryCurrentMultiplier = value
-            },
-            title = stringResource(R.string.battery_current_multiplier_title),
-            subtitle = stringResource(R.string.battery_current_multiplier_subtitle),
-            resetLabel = stringResource(R.string.battery_current_multiplier_reset)
-        )
-
-        // === 系统省电模式 (PowerManager.isPowerSaveMode, API 21+) ===
-        // 省电模式开启时系统会自动降频/限制后台，对游戏和性能影响显著
-        if (batteryInfo?.isPowerSaveMode == true) {
-            MetricCard(
-                title = stringResource(R.string.battery_card_power_save_mode),
-                value = "\uD83D\uDD0B ON",  // 电池图标
-                valueColor = Color(0xFFFFA726),  // 橙色警示
-                subtitle = "System performance throttled — refresh rate auto-reduced"
-            ) { }
-        }
-
-        // === 电池健康度 (SOH: charge_full 计算 + 标准 API 双源) ===
-        val healthPercent = if (designCap != null && nowCap != null && designCap > 0) {
-            (nowCap * 100 / designCap).toInt()
-        } else apiSohPercent
-
-        if (healthPercent != null) {
-            val sohSource = if (designCap != null && nowCap != null && designCap > 0) stringResource(R.string.battery_soh_source_capacity_ratio) else stringResource(R.string.battery_soh_source_standard_api)
-            MetricCard(
-                title = stringResource(R.string.battery_health_title),
-                value = "$healthPercent%",
-                valueColor = when {
-                    healthPercent >= 90 -> NeonPurpleBright
-                    healthPercent >= 75 -> Color(0xFFFFA726)
-                    else -> Color(0xFFEF5350)
-                },
-                subtitle = "${nowCap ?: "?"} / ${designCap} mAh  ·  $sohSource"
-            ) { }
-        }
-
-        // === 电池容量详情 (设计容量 / 额定容量) ===
-        // 设计容量: charge_full_design (出厂标称)；额定容量: charge_full (当前满充)
-        if (designCap != null) {
-            MetricCard(
-                title = stringResource(R.string.battery_design_capacity_title),
-                value = "$designCap mAh",
-                valueColor = NeonPurpleBright,
-                subtitle = capSource ?: ""
-            ) { }
-        }
-
-        if (nowCap != null) {
-            MetricCard(
-                title = stringResource(R.string.battery_rated_capacity_title),
-                value = "$nowCap mAh",
-                valueColor = NeonPurpleBright,
-                subtitle = buildString {
-                    if (estLevel != null) append(stringResource(R.string.battery_capacity_estimate_format, estLevel))
-                    if (capSource != null) {
-                        if (estLevel != null) append("  ·  ")
-                        append(capSource)
+    // 按 ID 渲染对应卡片 (条件项外层 if 守卫与 isCardVisible 一一对应，保证智能转换 + 渲染安全)
+    @Composable
+    fun CardContent(id: String) {
+        when (id) {
+            "current_multiplier" -> BatteryCurrentMultiplierCard(
+                multiplier = currentMultiplier,
+                onMultiplierChange = onMultiplierChange,
+                title = stringResource(R.string.battery_current_multiplier_title),
+                subtitle = stringResource(R.string.battery_current_multiplier_subtitle),
+                resetLabel = stringResource(R.string.battery_current_multiplier_reset)
+            )
+            "power_save" -> {
+                if (batteryInfo?.isPowerSaveMode == true) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_card_power_save_mode),
+                        value = "\uD83D\uDD0B ON",  // 电池图标
+                        valueColor = Color(0xFFFFA726),  // 橙色警示
+                        subtitle = "System performance throttled — refresh rate auto-reduced"
+                    ) { }
+                }
+            }
+            "soh" -> {
+                if (healthPercent != null) {
+                    val sohSource = if (designCap != null && nowCap != null && designCap > 0) stringResource(R.string.battery_soh_source_capacity_ratio) else stringResource(R.string.battery_soh_source_standard_api)
+                    MetricCard(
+                        title = stringResource(R.string.battery_health_title),
+                        value = "$healthPercent%",
+                        valueColor = when {
+                            healthPercent >= 90 -> NeonPurpleBright
+                            healthPercent >= 75 -> Color(0xFFFFA726)
+                            else -> Color(0xFFEF5350)
+                        },
+                        subtitle = "${nowCap ?: "?"} / ${designCap} mAh  ·  $sohSource"
+                    ) { }
+                }
+            }
+            "design_capacity" -> {
+                if (designCap != null) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_design_capacity_title),
+                        value = "$designCap mAh",
+                        valueColor = NeonPurpleBright,
+                        subtitle = capSource ?: ""
+                    ) { }
+                }
+            }
+            "rated_capacity" -> {
+                if (nowCap != null) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_rated_capacity_title),
+                        value = "$nowCap mAh",
+                        valueColor = NeonPurpleBright,
+                        subtitle = buildString {
+                            if (estLevel != null) append(stringResource(R.string.battery_capacity_estimate_format, estLevel))
+                            if (capSource != null) {
+                                if (estLevel != null) append("  ·  ")
+                                append(capSource)
+                            }
+                        }
+                    ) { }
+                }
+            }
+            "cycle_count" -> {
+                if (cycleCount != null) {
+                    // 基于循环次数估算电池健康度（业界通用预估: 500次≈80%健康度）
+                    val estHealth = when {
+                        cycleCount == 0 -> 100
+                        cycleCount <= 200 -> (100 - cycleCount / 10).coerceIn(85, 100)
+                        cycleCount <= 500 -> (100 - cycleCount / 20).coerceIn(75, 90)
+                        cycleCount <= 1000 -> (80 - (cycleCount - 500) / 25).coerceAtLeast(60)
+                        else -> (60 - (cycleCount - 1000) / 50).coerceAtLeast(30)
+                    }
+                    MetricCard(
+                        title = stringResource(R.string.battery_cycle_count_title),
+                        value = stringResource(R.string.battery_cycle_value, cycleCount),
+                        valueColor = NeonPurpleBright,
+                        subtitle = buildString {
+                            append(stringResource(R.string.battery_estimated_health_format, estHealth))
+                            if (cycleSource != null) append("  |  $cycleSource")
+                        }
+                    ) { }
+                } else {
+                    // 循环次数不可用时给出提示
+                    MetricCard(
+                        title = stringResource(R.string.battery_cycle_count_title),
+                        value = stringResource(R.string.battery_cycle_not_detected),
+                        valueColor = Color(0xFFFFA726),
+                        subtitle = stringResource(R.string.battery_cycle_no_data)
+                    ) { }
+                }
+            }
+            "protocol" -> {
+                if (protocolDetected != null) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_charging_protocol_title),
+                        value = protocolDetected,
+                        valueColor = SuccessNeon
+                    ) { }
+                }
+            }
+            "power_source" -> {
+                if (powerSourceLabel != null) {
+                    val psText = when (powerSourceLabel) {
+                        "ps_ac" -> stringResource(R.string.ps_ac)
+                        "ps_usb" -> stringResource(R.string.ps_usb)
+                        "ps_wireless" -> stringResource(R.string.ps_wireless)
+                        "ps_external" -> stringResource(R.string.ps_external)
+                        "ps_battery" -> stringResource(R.string.ps_battery)
+                        else -> powerSourceLabel  // fallback: 原样显示
+                    }
+                    val psColor = when (powerSourceLabel) {
+                        "ps_ac", "charger_ac" -> SuccessNeon
+                        "ps_usb", "ps_wireless", "charger_usb", "charger_wireless" -> NeonPurpleBright
+                        else -> Color(0xFFFFA726)
+                    }
+                    MetricCard(
+                        title = stringResource(R.string.battery_card_power_source),
+                        value = psText,
+                        valueColor = psColor
+                    ) { }
+                }
+            }
+            "wattage" -> {
+                if (wattageNow != null) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_card_real_wattage),
+                        value = "%.2f W".format(wattageNow),
+                        valueColor = if (isCharging) SuccessNeon else NeonPurpleBright
+                    ) { }
+                }
+            }
+            "internal_r" -> {
+                if (internalR != null) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_internal_resistance_title),
+                        value = "%.0f mΩ".format(internalR),
+                        valueColor = NeonPurpleBright,
+                        subtitle = if (internalR < 100) stringResource(R.string.battery_resistance_excellent) else if (internalR < 200) stringResource(R.string.battery_resistance_good) else stringResource(R.string.battery_resistance_average)
+                    ) { }
+                }
+            }
+            "level_chart" -> {
+                if (level != null) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_level_title),
+                        value = "${level}%",
+                        valueColor = NeonPurpleBright
+                    ) {
+                        LineChart(data = battLevelChart, modifier = Modifier.fillMaxWidth())
                     }
                 }
-            ) { }
-        }
-
-        // === 电池循环次数 ===
-        if (cycleCount != null) {
-            // 基于循环次数估算电池健康度（业界通用预估: 500次≈80%健康度）
-            val estHealth = when {
-                cycleCount == 0 -> 100
-                cycleCount <= 200 -> (100 - cycleCount / 10).coerceIn(85, 100)
-                cycleCount <= 500 -> (100 - cycleCount / 20).coerceIn(75, 90)
-                cycleCount <= 1000 -> (80 - (cycleCount - 500) / 25).coerceAtLeast(60)
-                else -> (60 - (cycleCount - 1000) / 50).coerceAtLeast(30)
             }
-            val estHealthColor = when {
-                estHealth >= 85 -> NeonPurpleBright
-                estHealth >= 70 -> Color(0xFFFFA726)
-                else -> Color(0xFFEF5350)
-            }
-            MetricCard(
-                title = stringResource(R.string.battery_cycle_count_title),
-                value = stringResource(R.string.battery_cycle_value, cycleCount),
-                valueColor = NeonPurpleBright,
-                subtitle = buildString {
-                    append(stringResource(R.string.battery_estimated_health_format, estHealth))
-                    if (cycleSource != null) append("  |  $cycleSource")
+            "power" -> {
+                if (power != null && power > 0) {
+                    MetricCard(
+                        title = if (isCharging) stringResource(R.string.battery_charging_power_title) else stringResource(R.string.battery_discharge_power_title),
+                        value = "${(power / 1000f).let { "%.1f".format(it) }} W",
+                        valueColor = NeonPurpleBright
+                    ) {
+                        LineChart(data = battPowerChart, modifier = Modifier.fillMaxWidth())
+                    }
                 }
-            ) { }
-        } else {
-            // 循环次数不可用时给出提示
-            MetricCard(
-                title = stringResource(R.string.battery_cycle_count_title),
-                value = stringResource(R.string.battery_cycle_not_detected),
-                valueColor = Color(0xFFFFA726),
-                subtitle = stringResource(R.string.battery_cycle_no_data)
-            ) { }
-        }
-
-        // === 充电协议检测 (P1) ===
-        if (protocolDetected != null) {
-            MetricCard(
-                title = stringResource(R.string.battery_charging_protocol_title),
-                value = protocolDetected,
-                valueColor = SuccessNeon
-            ) { }
-        }
-
-        // === 电源来源标签 (2026-06-18) ===
-        // 数据层返回语义 key (ps_ac/ps_usb/ps_wireless/ps_external/ps_battery)，UI 层翻译
-        if (powerSourceLabel != null) {
-            val psText = when (powerSourceLabel) {
-                "ps_ac" -> stringResource(R.string.ps_ac)
-                "ps_usb" -> stringResource(R.string.ps_usb)
-                "ps_wireless" -> stringResource(R.string.ps_wireless)
-                "ps_external" -> stringResource(R.string.ps_external)
-                "ps_battery" -> stringResource(R.string.ps_battery)
-                else -> powerSourceLabel  // fallback: 原样显示
             }
-            val psColor = when (powerSourceLabel) {
-                "ps_ac", "charger_ac" -> SuccessNeon
-                "ps_usb", "ps_wireless", "charger_usb", "charger_wireless" -> NeonPurpleBright
-                else -> Color(0xFFFFA726)
+            "current" -> {
+                if (current != null) {
+                    val normalizedInfo = if (currentNormalizedMa != null && currentNormalizedMa != 0) {
+                        stringResource(R.string.battery_current_normalized_format, kotlin.math.abs(currentNormalizedMa))
+                    } else null
+                    MetricCard(
+                        title = if (isCharging) stringResource(R.string.battery_charging_current_title) else stringResource(R.string.battery_discharge_current_title),
+                        value = "${kotlin.math.abs(current / 1000)} mA",
+                        valueColor = NeonPurpleBright,
+                        subtitle = listOfNotNull(currentSource, normalizedInfo).joinToString("  ·  ")
+                    ) { }
+                }
             }
-            MetricCard(
-                title = stringResource(R.string.battery_card_power_source),
-                value = psText,
-                valueColor = psColor
-            ) { }
-        }
-
-        // === 预计算实时瓦特数 (2026-06-18) ===
-        if (wattageNow != null) {
-            MetricCard(
-                title = stringResource(R.string.battery_card_real_wattage),
-                value = "%.2f W".format(wattageNow),
-                valueColor = if (isCharging) SuccessNeon else NeonPurpleBright
-            ) { }
-        }
-
-        // === 电池内阻 (P2) ===
-        if (internalR != null) {
-            MetricCard(
-                title = stringResource(R.string.battery_internal_resistance_title),
-                value = "%.0f mΩ".format(internalR),
-                valueColor = NeonPurpleBright,
-                subtitle = if (internalR < 100) stringResource(R.string.battery_resistance_excellent) else if (internalR < 200) stringResource(R.string.battery_resistance_good) else stringResource(R.string.battery_resistance_average)
-            ) { }
-        }
-
-        // === 电量趋势图 ===
-        if (level != null) {
-            MetricCard(
-                title = stringResource(R.string.battery_level_title),
-                value = "${level}%",
-                valueColor = NeonPurpleBright
-            ) {
-                LineChart(data = battLevelChart, modifier = Modifier.fillMaxWidth())
+            "realtime_power" -> {
+                if (effVoltage != null && current != null) {
+                    val voltageV = effVoltage / 1000f
+                    val currentA = kotlin.math.abs(current) / 1_000_000f
+                    val realTimePowerW = voltageV * currentA
+                    MetricCard(
+                        title = stringResource(R.string.battery_realtime_power_title),
+                        value = "%.2f W".format(realTimePowerW),
+                        valueColor = if (isCharging) SuccessNeon else NeonPurpleBright,
+                        subtitle = "%.3fV × %.0fmA = %.0fmW".format(voltageV, currentA * 1000, realTimePowerW * 1000)
+                    ) { }
+                }
             }
-        }
-
-        // === 充放电功率 ===
-        if (power != null && power > 0) {
-            MetricCard(
-                title = if (isCharging) stringResource(R.string.battery_charging_power_title) else stringResource(R.string.battery_discharge_power_title),
-                value = "${(power / 1000f).let { "%.1f".format(it) }} W",
-                valueColor = NeonPurpleBright
-            ) {
-                LineChart(data = battPowerChart, modifier = Modifier.fillMaxWidth())
+            "voltage" -> {
+                if (voltage != null) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_voltage_title),
+                        value = "%.3f V".format(voltage / 1000f),
+                        valueColor = NeonPurpleBright
+                    ) { }
+                }
             }
-        }
-
-        // === 电流 ===
-        if (current != null) {
-            val normalizedInfo = if (currentNormalizedMa != null && currentNormalizedMa != 0) {
-                stringResource(R.string.battery_current_normalized_format, kotlin.math.abs(currentNormalizedMa))
-            } else null
-            MetricCard(
-                title = if (isCharging) stringResource(R.string.battery_charging_current_title) else stringResource(R.string.battery_discharge_current_title),
-                value = "${kotlin.math.abs(current / 1000)} mA",
-                valueColor = NeonPurpleBright,
-                subtitle = listOfNotNull(currentSource, normalizedInfo).joinToString("  ·  ")
-            ) { }
-        }
-
-        // === 实时功率 (V × I) ===
-        if (effVoltage != null && current != null) {
-            val voltageV = effVoltage / 1000f
-            val currentA = kotlin.math.abs(current) / 1_000_000f
-            val realTimePowerW = voltageV * currentA
-            MetricCard(
-                title = stringResource(R.string.battery_realtime_power_title),
-                value = "%.2f W".format(realTimePowerW),
-                valueColor = if (isCharging) SuccessNeon else NeonPurpleBright,
-                subtitle = "%.3fV × %.0fmA = %.0fmW".format(voltageV, currentA * 1000, realTimePowerW * 1000)
-            ) { }
-        }
-
-        // === 电压 ===
-        if (voltage != null) {
-            MetricCard(
-                title = stringResource(R.string.battery_voltage_title),
-                value = "%.3f V".format(voltage / 1000f),
+            "charge_counter" -> {
+                if (counter != null) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_charge_counter_title),
+                        value = "${counter / 1000} mAh",
+                        valueColor = NeonPurpleBright
+                    ) { }
+                }
+            }
+            "temperature" -> {
+                if (temp != null) {
+                    MetricCard(
+                        title = stringResource(R.string.battery_temperature_title),
+                        value = "${temp.toInt()}°C",
+                        valueColor = NeonPurpleBright
+                    ) {
+                        LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+            "health_status" -> MetricCard(
+                title = stringResource(R.string.battery_health_status_title),
+                value = health,
                 valueColor = NeonPurpleBright
             ) { }
+            "dual_cell" -> DualCellToggleCard(
+                checked = dualCellEnabled,
+                onCheckedChange = onDualCellChange,
+                title = stringResource(R.string.battery_dual_cell_title),
+                subtitle = stringResource(R.string.battery_dual_cell_subtitle)
+            )
+        }
+    }
+
+    val listState = rememberLazyListState()
+    val reorderState = rememberReorderableLazyListState(listState) { from, to ->
+        // onMove 读取最新可见快照 (闭包内 getVisibleItems() 始终反映当前可见序，避免捕获旧快照)
+        val visible = getVisibleItems()
+        val newVisible = visible.toMutableList()
+        newVisible.add(to.index, newVisible.removeAt(from.index))
+        // 合并回全量顺序：隐藏卡片保持原相对位置，仅可见卡片被重排
+        val visibleSet = visible.toSet()
+        val it = newVisible.iterator()
+        val newFull = cardOrder.map { id -> if (id in visibleSet) it.next() else id }
+        onReorder(newFull)
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // ── 状态概览 (固定头部, 不参与重排) ──
+        item(key = "battery_status_header") {
+            InfoCard(
+                title = statusText,
+                subtitle = techText.ifEmpty { batteryInfo?.chargeStatus?.takeIf { it.isNotEmpty() } ?: "" },
+                icon = Icons.Filled.Favorite, iconTint = NeonPurple
+            )
         }
 
-        // === 已充电量 ===
-        if (counter != null) {
-            MetricCard(
-                title = stringResource(R.string.battery_charge_counter_title),
-                value = "${counter / 1000} mAh",
-                valueColor = NeonPurpleBright
-            ) { }
-        }
-
-        // === 电池温度 ===
-        if (temp != null) {
-            MetricCard(
-                title = stringResource(R.string.battery_temperature_title),
-                value = "${temp.toInt()}°C",
-                valueColor = NeonPurpleBright
-            ) {
-                LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth())
+        // ── 可重排卡片区 ──
+        items(getVisibleItems(), key = { it }, contentType = { it }) { id ->
+            if (reorderEnabled) {
+                ReorderableItem(reorderState, key = id) {
+                    // 拖拽手柄 Modifier 必须在 ReorderableItem 作用域内计算
+                    val ctx = LocalContext.current
+                    val handleModifier = Modifier.draggableHandle(
+                        onDragStarted = { HapticUtils.dragStart(ctx) },
+                        onDragStopped = { HapticUtils.dragEnd(ctx) }
+                    )
+                    Box(Modifier.fillMaxWidth()) {
+                        CardContent(id)
+                        ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp), handleModifier)
+                    }
+                }
+            } else {
+                CardContent(id)
             }
         }
+    }
+}
 
-        // === 电池状态 ===
-        MetricCard(
-            title = stringResource(R.string.battery_health_status_title),
-            value = health,
-            valueColor = NeonPurpleBright
-        ) { }
-
-        // === 双电芯手动开关 (自动检测不可靠时的用户覆盖项) — 移至页尾 ===
-        DualCellToggleCard(
-            checked = dualCellEnabled,
-            onCheckedChange = { enabled ->
-                dualCellEnabled = enabled
-                AppSettings.getInstance(context).dualCellBattery = enabled
-                viewModel.refreshDualCell()
-            },
-            title = stringResource(R.string.battery_dual_cell_title),
-            subtitle = stringResource(R.string.battery_dual_cell_subtitle)
+/** 拖拽手柄（仅 enabled 时显示），绑定拾起/落下震动反馈。
+ *  handleModifier 由 ReorderableItem 作用域内计算的 draggableHandle 传入。 */
+@Composable
+private fun ReorderHandle(modifier: Modifier, handleModifier: Modifier) {
+    IconButton(
+        onClick = {},
+        modifier = modifier
+            .size(28.dp)
+            .then(handleModifier)
+    ) {
+        Icon(
+            Icons.Filled.DragHandle,
+            stringResource(R.string.dashboard_reorder_handle),
+            tint = TextSecondary.copy(alpha = 0.7f),
+            modifier = Modifier.size(18.dp)
         )
     }
+}
+
+/** 电池页卡片全量 ID 列表 (默认序 = 与原布局一致；状态概览为固定头部不参与)。 */
+private val BATTERY_CARD_IDS = listOf(
+    "current_multiplier",
+    "power_save",
+    "soh",
+    "design_capacity",
+    "rated_capacity",
+    "cycle_count",
+    "protocol",
+    "power_source",
+    "wattage",
+    "internal_r",
+    "level_chart",
+    "power",
+    "current",
+    "realtime_power",
+    "voltage",
+    "charge_counter",
+    "temperature",
+    "health_status",
+    "dual_cell"
+)
+
+/**
+ * 将持久化的逗号分隔顺序解析为有效卡片有序列表：
+ * - 保留已存顺序中的已知 ID
+ * - 追加存储中缺失的新 ID（版本增减卡片时不丢、不崩）
+ * - 剔除未知 ID
+ * - 存储为空/非法时回落默认序
+ */
+private fun resolveBatteryCardOrder(stored: String): List<String> {
+    val storedList = stored.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+    val kept = storedList.filter { it in BATTERY_CARD_IDS }
+    val missing = BATTERY_CARD_IDS.filter { it !in kept }
+    return if (kept.isEmpty()) BATTERY_CARD_IDS else kept + missing
 }
 
 /**
