@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Process
 import android.util.Log
 import com.example.deviceinfoviewer.data.repository.DeviceRepository
+import com.example.deviceinfoviewer.data.source.SysFsCapabilityProbe
 import com.example.deviceinfoviewer.di.appModule
 import com.example.deviceinfoviewer.service.FloatingWindowConfig
 import kotlinx.coroutines.CoroutineScope
@@ -51,6 +52,15 @@ class DeviceApplication : Application() {
         setupCrashHandler()
 
         super.onCreate()
+
+        // 电池 sysfs 探针 DataStore 后端注入 + 启动期异步预载 (P2原)
+        // attach 仅取引用(主线程安全); preload 在 IO 协程读盘, 不阻塞 onCreate
+        try {
+            SysFsCapabilityProbe.attach(this@DeviceApplication)
+            startupScope.launch { SysFsCapabilityProbe.preload() }
+        } catch (e: Throwable) {
+            Log.w(TAG, "SysFsCapabilityProbe attach/preload skipped", e)
+        }
 
         // == 启动诊断: 仅主线程 Log.i，文件写入异步化 ==
         val startTime = System.currentTimeMillis()
