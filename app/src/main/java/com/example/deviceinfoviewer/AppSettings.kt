@@ -91,9 +91,17 @@ class AppSettings private constructor(context: Context) {
         set(value) = prefs.edit { putString("quick_card_order", value) }
 
     // 概览页卡片拖拽重排总开关 (默认开启；关闭则回落静态网格，零代码回退)
+    // 电池页复用同一开关，保证「与概览页一致」的交互行为
     var dashboardReorderEnabled: Boolean
         get() = prefs.getBoolean("dashboard_reorder_enabled", true)
         set(value) = prefs.edit { putBoolean("dashboard_reorder_enabled", value) }
+
+    // ── 电池页卡片排序 (逗号分隔的卡片 ID) ──
+    // 卡片集见 BatteryScreen.BATTERY_CARD_IDS；状态概览卡为固定头部不参与重排。
+    // 空字符串 → resolveCardOrder 回落默认序 (与原布局一致)。
+    var batteryCardOrder: String
+        get() = prefs.getString("battery_card_order", "") ?: ""
+        set(value) = prefs.edit { putString("battery_card_order", value) }
 
     // ── 应用语言偏好（i18n）──
     // 值为 LocaleManager.LANG_SYSTEM（"system"）或 BCP 47 语言 code（如 "zh-CN"、"en"、"ja"）
