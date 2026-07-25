@@ -366,6 +366,13 @@ class BatteryDataSource(private val context: Context) {
         // === dumpsys battery 附加信息 (仅首次解析一次, 之后零开销复用; 不再每 10 tick 重复 shell 拖慢刷新) ===
         applyCachedDumpsysBattery(info)
 
+        // === 充电类型实时派生 (方案 A): 不再缓存 dumpsys chargerType, 避免插拔状态陈旧 ===
+        // 原 dumpsys chargerType = 插拔类型(AC/USB/Wireless/Dock) + 协议; 现拆分为两个已实时字段:
+        //   - 插拔类型由 chargerTypeFromPlugged(EXTRA_PLUGGED, 每 tick 实时) 经 UI 翻译展示
+        //   - 协议由 protocolDetected(每 tick 实时, 见上方 detectChargingProtocolVoltage) 派生
+        // 故此处 chargerType 直接取 protocolDetected: 有协议则作为后缀展示, 无协议则为空(插拔类型已由 UI 展示)
+        info.chargerType = info.protocolDetected
+
         // === capacity_now / charge_now 直接读取（剩余绝对容量） ===
         val capacityNowPaths = listOf(
             "/sys/class/power_supply/battery/capacity_now",
@@ -1564,13 +1571,13 @@ class BatteryDataSource(private val context: Context) {
 
     // ========== dumpsys battery (仅首次解析一次, 之后从缓存零开销复用) ==========
 
-    /** dumpsys battery 附加信息缓存载体 — 解析一次后跨 tick 复用, 避免每 tick 重复 shell */
+    /** dumpsys battery 静态附加信息缓存载体 — 解析一次后跨 tick 复用, 避免每 tick 重复 shell。
+     *  仅含慢变/静态字段; 动态字段 chargerType 改为实时派生(见 getBatteryInfo), 不进缓存 */
     private data class CachedDumpsysBattery(
         val maxChargingCurrentUA: Long = 0,
         val maxChargingVoltageUV: Long = 0,
         val chargeCounterUAh: Long = 0,
         val sohPercent: Float = Float.NaN,
-        val chargerType: String = "",
     )
 
     // dumpsys 解析在 IO 协程异步进行, 不阻塞刷新热路径 (更跟手/滚动更顺)
@@ -1599,7 +1606,7 @@ class BatteryDataSource(private val context: Context) {
         if (cached.maxChargingVoltageUV > 0) info.maxChargingVoltageUV = cached.maxChargingVoltageUV
         if (cached.chargeCounterUAh > 0 && info.chargeCounterUAh <= 0) info.chargeCounterUAh = cached.chargeCounterUAh
         if (!cached.sohPercent.isNaN()) info.sohPercent = cached.sohPercent
-        if (cached.chargerType.isNotEmpty()) info.chargerType = cached.chargerType
+        // 注意: chargerType 不在此处设置 —— 改为 getBatteryInfo 中实时派生, 避免缓存陈旧
     }
 
     /** 解析 dumpsys battery 附加信息 (仅首次调用, 之后走缓存) */
@@ -1608,7 +1615,6 @@ class BatteryDataSource(private val context: Context) {
         var maxChargingVoltageUV = 0L
         var chargeCounterUAh = 0L
         var sohPercent = Float.NaN
-        var chargerType = ""
         try {
             val dumpsysBattery = ShellCommandDataSource.getDumpsysBattery()
             if (dumpsysBattery.isEmpty()) return CachedDumpsysBattery()
@@ -1629,36 +1635,14 @@ class BatteryDataSource(private val context: Context) {
             if (asoc != null && sohPercent.isNaN()) {
                 asoc.toIntOrNull()?.let { if (it in 50..100) sohPercent = it.toFloat() }
             }
-            // 充电类型
-            val acOnline = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "AC powered")
-            val usbOnline = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "USB powered")
-            val wirelessOnline = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "Wireless powered")
-            val dockOnline = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "Dock powered")
-            val sb = StringBuilder()
-            if ("true".equals(acOnline, ignoreCase = true)) sb.append("AC")
-            if ("true".equals(usbOnline, ignoreCase = true)) {
-                if (sb.isNotEmpty()) sb.append(" + ")
-                sb.append("USB")
-            }
-            if ("true".equals(wirelessOnline, ignoreCase = true)) {
-                if (sb.isNotEmpty()) sb.append(" + ")
-                sb.append("charger_wireless")
-            }
-            if ("true".equals(dockOnline, ignoreCase = true)) {
-                if (sb.isNotEmpty()) sb.append(" + ")
-                sb.append("底座")
-            }
-            if (sb.isNotEmpty()) chargerType = sb.toString()
-            // 充电协议检测
-            val protocol = detectChargingProtocol()
-            if (protocol != null) chargerType = protocol
+            // 注: chargerType(插拔类型+协议) 不再从此处取, 改为 getBatteryInfo 实时派生,
+            //     避免一次性缓存导致的插拔状态陈旧
         } catch (_: Throwable) {}
         return CachedDumpsysBattery(
             maxChargingCurrentUA = maxChargingCurrentUA,
             maxChargingVoltageUV = maxChargingVoltageUV,
             chargeCounterUAh = chargeCounterUAh,
             sohPercent = sohPercent,
-            chargerType = chargerType,
         )
     }
 
