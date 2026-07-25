@@ -338,10 +338,13 @@ class FloatingWindowService : Service() {
 
         // ★ 仅使用 currentNowUA (微安→毫安) — 这是真正的电流值
         //   chargingPowerMw/dischargingPowerMw 是功率 (毫瓦)，不可显示为 mA!
+        //   充电/放电标签以 bat.isCharging 为准(由插拔状态+电流方向+电压融合, 比单纯电流符号可靠):
+        //   ColorOS 把放电电流钳制成正的 +1000µA, 若只按电流符号判定会把放电误标为"充电"。
+        //   故标签改由 isCharging 驱动、数值取绝对值; 与下方 battery_pow 的 powerUp/Down 箭头保持一致
         setText("battery_cur", when {
-            bat.currentNowUA > 0 -> "$chargingLabel ${bat.currentNowUA / 1000}mA"
-            bat.currentNowUA < 0 -> "$dischargingLabel ${-bat.currentNowUA / 1000}mA"
-            else -> "$currentLabel --mA"
+            bat.currentNowUA == 0L -> "$currentLabel --mA"
+            bat.isCharging -> "$chargingLabel ${Math.abs(bat.currentNowUA) / 1000}mA"
+            else -> "$dischargingLabel ${Math.abs(bat.currentNowUA) / 1000}mA"
         })
 
         val effV = bat.effectiveVoltage; val curUA = bat.currentNowUA
