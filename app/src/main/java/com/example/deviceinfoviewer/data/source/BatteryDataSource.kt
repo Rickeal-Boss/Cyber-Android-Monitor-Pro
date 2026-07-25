@@ -10,9 +10,13 @@ import android.util.Log
 import com.example.deviceinfoviewer.AppSettings
 import com.example.deviceinfoviewer.data.model.BatteryInfo
 import com.example.deviceinfoviewer.util.waitForWithTimeout
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 
 /**
  * 电池数据源 — 全网方案版 v2
@@ -127,7 +131,9 @@ internal object BatteryCurrentNormalizer {
 
 class BatteryDataSource(private val context: Context) {
 
-    private var dumpsysBatteryTickCounter = 0  // ★ dumpsys 节流计数器
+    // ★ dumpsys battery 附加信息缓存: 仅首次解析一次, 之后零开销复用 (不再每 10 tick 重复 shell)
+    @Volatile
+    private var cachedDumpsysBattery: CachedDumpsysBattery? = null
 
     // ★ SoC Δ 平均电流估计状态 (零权限兜底, 详见 estimateCurrentViaSocDelta)
     @Volatile
@@ -357,8 +363,8 @@ class BatteryDataSource(private val context: Context) {
             Log.d(TAG, "cycle_count=$cycleCount from $cycleSource")
         }
 
-        // === dumpsys battery 附加信息 (每 10 次 tick 约 20s 执行一次，省 shell 开销) ===
-        if (++dumpsysBatteryTickCounter % 10 == 0) readDumpsysBattery(info)
+        // === dumpsys battery 附加信息 (仅首次解析一次, 之后零开销复用; 不再每 10 tick 重复 shell 拖慢刷新) ===
+        applyCachedDumpsysBattery(info)
 
         // === capacity_now / charge_now 直接读取（剩余绝对容量） ===
         val capacityNowPaths = listOf(
@@ -1075,30 +1081,10 @@ class BatteryDataSource(private val context: Context) {
             } catch (_: Throwable) { /* IHealth HAL not available */ }
         }
 
-        // === Level 0.2: dmesg 内核环形缓冲区 — 很多 OEM BMS 驱动在启动时打印循环计数 ===
-        try {
-            val dmesgProc = Runtime.getRuntime().exec(arrayOf("dmesg"))
-            val dmesgOutput = dmesgProc.inputStream.bufferedReader().readText()
-            dmesgProc.waitForWithTimeout()
-            // 匹配电池循环相关日志: "bms: cycle=123", "charge_cycle: 456", "battery_cycle=789" 等
-            val dmesgPatterns = listOf(
-                Regex("""(?i)(?:bms|battery|fuel).*?(?:cycle|loop).*?[=: ](\d{1,4})"""),
-                Regex("""(?i)(?:cycle_count|charge_cycle|battery_cycle|batt_cycle)[=: ](\d{1,4})"""),
-                Regex("""(?i)soh.*?cycle.*?[=: ](\d{1,4})"""),
-                Regex("""(?i)fg_cycle[=: ](\d{1,4})"""),
-                Regex("""(?i)cc_cycle[=: ](\d{1,4})"""),
-            )
-            for (regex in dmesgPatterns) {
-                val match = regex.find(dmesgOutput)
-                match?.let {
-                    val cnt = it.groupValues[1].toIntOrNull()
-                    if (cnt != null && cnt > 0 && cnt < 10000) {
-                        Log.d(TAG, "cycle_count via dmesg: $cnt")
-                        return Pair(cnt, "dmesg kernel log")
-                    }
-                }
-            }
-        } catch (_: Throwable) { /* fall through */ }
+        // === Level 0.2: dmesg 内核环形缓冲区 (已移除) ===
+        // 三方 App 在 SELinux untrusted_app 域下执行 dmesg 被拦截(需 dmesg 组/root),
+        // 对"非 root 第三方工具"定位恒为死路径; 与其每次采集起一个必失败的进程,
+        // 不如直接删除。循环计数改由下方 Health HAL / sysfs / dumpsys 等可用路径获取。
 
         // === Level 0.3: /proc/ 下电池芯片驱动暴露的节点 (shell 方式读取) ===
         val procPaths = listOf(
@@ -1576,64 +1562,104 @@ class BatteryDataSource(private val context: Context) {
     /** 兼容旧 API */
     private fun getBatteryCycleCount(): Int = getBatteryCycleCountFull().first
 
-    // ========== dumpsys battery ==========
+    // ========== dumpsys battery (仅首次解析一次, 之后从缓存零开销复用) ==========
 
-    private fun readDumpsysBattery(info: BatteryInfo) {
+    /** dumpsys battery 附加信息缓存载体 — 解析一次后跨 tick 复用, 避免每 tick 重复 shell */
+    private data class CachedDumpsysBattery(
+        val maxChargingCurrentUA: Long = 0,
+        val maxChargingVoltageUV: Long = 0,
+        val chargeCounterUAh: Long = 0,
+        val sohPercent: Float = Float.NaN,
+        val chargerType: String = "",
+    )
+
+    // dumpsys 解析在 IO 协程异步进行, 不阻塞刷新热路径 (更跟手/滚动更顺)
+    private val dumpsysResolveScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile
+    private var dumpsysResolveStarted = false
+
+    /** 每 tick 应用缓存的 dumpsys 附加信息; 首次在 IO 线程异步解析, 不阻塞热路径 */
+    private fun applyCachedDumpsysBattery(info: BatteryInfo) {
+        val cached = cachedDumpsysBattery
+        if (cached != null) {
+            applyResolvedDumpsys(cached, info)
+            return
+        }
+        // 首次: 仅启动一次异步解析, 本 tick 不阻塞; 结果在下一 tick 复用
+        if (!dumpsysResolveStarted) {
+            dumpsysResolveStarted = true
+            dumpsysResolveScope.launch {
+                try { cachedDumpsysBattery = resolveDumpsysBattery() } catch (_: Throwable) {}
+            }
+        }
+    }
+
+    private fun applyResolvedDumpsys(cached: CachedDumpsysBattery, info: BatteryInfo) {
+        if (cached.maxChargingCurrentUA > 0) info.maxChargingCurrentUA = cached.maxChargingCurrentUA
+        if (cached.maxChargingVoltageUV > 0) info.maxChargingVoltageUV = cached.maxChargingVoltageUV
+        if (cached.chargeCounterUAh > 0 && info.chargeCounterUAh <= 0) info.chargeCounterUAh = cached.chargeCounterUAh
+        if (!cached.sohPercent.isNaN()) info.sohPercent = cached.sohPercent
+        if (cached.chargerType.isNotEmpty()) info.chargerType = cached.chargerType
+    }
+
+    /** 解析 dumpsys battery 附加信息 (仅首次调用, 之后走缓存) */
+    private fun resolveDumpsysBattery(): CachedDumpsysBattery {
+        var maxChargingCurrentUA = 0L
+        var maxChargingVoltageUV = 0L
+        var chargeCounterUAh = 0L
+        var sohPercent = Float.NaN
+        var chargerType = ""
         try {
             val dumpsysBattery = ShellCommandDataSource.getDumpsysBattery()
-            if (dumpsysBattery.isEmpty()) return
-
+            if (dumpsysBattery.isEmpty()) return CachedDumpsysBattery()
             // 最大充电电流
             val maxCurrent = ShellCommandDataSource.extractLong(dumpsysBattery, "Max charging current")
-            if (maxCurrent > 0) info.maxChargingCurrentUA = maxCurrent
-
+            if (maxCurrent > 0) maxChargingCurrentUA = maxCurrent
             // 最大充电电压
             val maxVoltage = ShellCommandDataSource.extractLong(dumpsysBattery, "Max charging voltage")
-            if (maxVoltage > 0) info.maxChargingVoltageUV = maxVoltage
-
+            if (maxVoltage > 0) maxChargingVoltageUV = maxVoltage
             // Charge counter (已充电量)
             val chargeCounter = ShellCommandDataSource.extractLong(dumpsysBattery, "Charge counter")
-            if (chargeCounter > 0 && info.chargeCounterUAh <= 0) {
-                info.chargeCounterUAh = chargeCounter
-            }
-
+            if (chargeCounter > 0) chargeCounterUAh = chargeCounter
             // ★ Android 15+ One UI 6.1.1+: BSOH (Battery State of Health)
             val bsoh = ShellCommandDataSource.extractInt(dumpsysBattery, "BSOH")
-            if (bsoh > 0) {
-                info.sohPercent = bsoh.toFloat()
-            }
-
+            if (bsoh > 0) sohPercent = bsoh.toFloat()
             // ★ mSavedBatteryAsoc (最大容量节约 % 估计)
             val asoc = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "mSavedBatteryAsoc")
-            if (asoc != null && info.sohPercent.isNaN()) {
-                asoc.toIntOrNull()?.let { if (it in 50..100) info.sohPercent = it.toFloat() }
+            if (asoc != null && sohPercent.isNaN()) {
+                asoc.toIntOrNull()?.let { if (it in 50..100) sohPercent = it.toFloat() }
             }
-
             // 充电类型
             val acOnline = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "AC powered")
             val usbOnline = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "USB powered")
             val wirelessOnline = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "Wireless powered")
             val dockOnline = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "Dock powered")
-            val chargerType = StringBuilder()
-            if ("true".equals(acOnline, ignoreCase = true)) chargerType.append("AC")
+            val sb = StringBuilder()
+            if ("true".equals(acOnline, ignoreCase = true)) sb.append("AC")
             if ("true".equals(usbOnline, ignoreCase = true)) {
-                if (chargerType.isNotEmpty()) chargerType.append(" + ")
-                chargerType.append("USB")
+                if (sb.isNotEmpty()) sb.append(" + ")
+                sb.append("USB")
             }
             if ("true".equals(wirelessOnline, ignoreCase = true)) {
-                if (chargerType.isNotEmpty()) chargerType.append(" + ")
-                chargerType.append("charger_wireless")
+                if (sb.isNotEmpty()) sb.append(" + ")
+                sb.append("charger_wireless")
             }
             if ("true".equals(dockOnline, ignoreCase = true)) {
-                if (chargerType.isNotEmpty()) chargerType.append(" + ")
-                chargerType.append("底座")
+                if (sb.isNotEmpty()) sb.append(" + ")
+                sb.append("底座")
             }
-            if (chargerType.isNotEmpty()) info.chargerType = chargerType.toString()
-
+            if (sb.isNotEmpty()) chargerType = sb.toString()
             // 充电协议检测
             val protocol = detectChargingProtocol()
-            if (protocol != null) info.chargerType = protocol
+            if (protocol != null) chargerType = protocol
         } catch (_: Throwable) {}
+        return CachedDumpsysBattery(
+            maxChargingCurrentUA = maxChargingCurrentUA,
+            maxChargingVoltageUV = maxChargingVoltageUV,
+            chargeCounterUAh = chargeCounterUAh,
+            sohPercent = sohPercent,
+            chargerType = chargerType,
+        )
     }
 
     // ========== 辅助方法 ==========
@@ -1712,16 +1738,12 @@ class BatteryDataSource(private val context: Context) {
      * 通过 Runtime.exec("cat", path) 以 shell 上下文读取。
      */
     private fun readSysfsLineShell(path: String): String? {
-        // 多策略 cat（应对 Android 16 / ColorOS16 SELinux 下不同 ROM 的 shell 上下文差异）
-        // 三方应用无 root 时 /sys 直接读被拒，shell 上下文可能拥有不同的（仍受限）权限，
-        // 这里最大化可达的 cat 入口以覆盖更多机型。
+        // 精简为 2 个高覆盖入口: 直接 cat (走 shell PATH, 通常 toybox 提供) + shell 兜底(屏蔽 stderr)。
+        // 原 6 变体在 Android 16 / ColorOS16 等 SELinux 下对三方 App 基本全部失败,
+        // 徒增进程 spawn 与 CPU, 精简后覆盖绝大多数机型且开销减半。
         val catCmds = listOf(
             arrayOf("cat", path),
-            arrayOf("/system/bin/cat", path),
-            arrayOf("/system/bin/toybox", "cat", path),
-            arrayOf("/sbin/cat", path),
             arrayOf("/system/bin/sh", "-c", "cat $path 2>/dev/null"),
-            arrayOf("/system/bin/sh", "-c", "toybox cat $path 2>/dev/null"),
         )
         for (cmd in catCmds) {
             try {
