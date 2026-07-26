@@ -277,12 +277,14 @@ class BatteryDataSource(private val context: Context) {
         info.currentNowSource = currentSource
 
         // === SoC Δ 平均电流估计 (零权限兜底) ===
-        // 当所有路径(sysfs/property/hidden API/dumpsys)均返回0时启用 —— 这正是 ColorOS
-        // 下"检测不到电流"的典型场景(SELinux 拦截 sysfs + property 恒为0)。
+        // 当电流读数为 0 时启用: 含 (a) 全路径失败 ("无法获取") 与 (b) binder 返回 0
+        // (ColorOS 的 BATTERY_PROPERTY_CURRENT_NOW 在 SELinux 拦截/sysfs 恒为 0 时返回 0,
+        //  其 source 为 "BatteryManager binder" 而非 "无法获取", 原门控写死 source 导致被旁路)。
         // 原理: AccuBattery 同款 —— 由公开的电量百分比(level)与容量(capacity)随时间变化率
         //   反推平均电流: ΔQ(mAh)=capacityMAh×Δlevel%/100 ; avg(mA)=ΔQ/Δt(h) ; ×1000→µA
-        if (currentUA == 0L && currentSource == "无法获取"
-            && info.levelPercent in 1..100 && info.effectiveChargeFullMAh > 0) {
+        // 注: hidden API / sysfs / dumpsys 等次级路径遇 0 均 continue/fall-through, 不会以
+        //   0 收口, 故抵达此处且 currentUA==0 的只有上述两种 source, 放宽门控安全。
+        if (shouldFallbackToSocDelta(currentUA, currentSource, info.levelPercent, info.effectiveChargeFullMAh)) {
             val socEstUA = estimateCurrentViaSocDelta(info.levelPercent, info.effectiveChargeFullMAh)
             if (socEstUA != null) {
                 currentUA = socEstUA
@@ -710,6 +712,32 @@ class BatteryDataSource(private val context: Context) {
                 // 非 BBK + 大数值 → 按 µA 处理 (标准)
                 else -> (rawValue / 1000).toInt()
             }
+        }
+
+        /**
+         * SoC-Δ 兜底触发判定 (可单测纯函数)。
+         *
+         * 当电流读数为 0 且电量百分比有效、容量已知时, 启用 SoC-Δ 平均电流估计。
+         * 覆盖两种 0 收口场景:
+         *   - source=="无法获取": 所有路径(sysfs/hidden API/dumpsys)均未命中
+         *   - source=="BatteryManager binder": ColorOS 的 BATTERY_PROPERTY_CURRENT_NOW 返回 0
+         *     (SELinux 拦截 sysfs 且 property 恒为 0), 原门控写死 "无法获取" 将其旁路
+         *
+         * 安全性: hidden API/sysfs/dumpsys 次级路径遇 0 均 continue/fall-through, 不会以 0 收口,
+         * 故抵达 getBatteryInfo 且 currentUA==0 的 source 仅上述两种, 放宽门控不会误触发。
+         *
+         * @return 是否应使用 SoC-Δ 兜底
+         */
+        internal fun shouldFallbackToSocDelta(
+            currentUA: Long,
+            currentSource: String,
+            levelPercent: Int,
+            effectiveChargeFullMAh: Long
+        ): Boolean {
+            return currentUA == 0L
+                && (currentSource == "无法获取" || currentSource == "BatteryManager binder")
+                && levelPercent in 1..100
+                && effectiveChargeFullMAh > 0
         }
     }
 
