@@ -3,7 +3,7 @@
 > **用途**：长期查阅的单一事实源（single source of truth），覆盖结构 / 架构 / 逻辑 / 偏好 / 风格 / 技术债。后续会话先读此档再动手，避免上下文片断。
 > **最后审查**：2026-07-19（全面代码审查，两位成员并行实地读码）
 > **同步（版本对齐）**：2026-07-20（§13 工具链升级已 CI 绿灯，详情见 §11 近期变更；§0/§4 版本速查已对齐）
-> **当前分支**：`Hy-agent` ｜ **包名**：`com.example.deviceinfoviewer`
+> **当前分支**：`Hy-agent` ｜ **包名**：`com.rb.cybermonitorpro`
 > **版本线**：DeviceInfoViewer → v2.0.202（MVVM+Koin 3.5.6, compileSdk 35, Compose+Material3）→ 进行中 v3 重构（**2026-07-20 升级 AGP9/Kotlin2.2.10/BOM2025.06.00/compileSdk36**）
 > ⚠️ 凡与记忆/旧文档冲突，**以本档 + 源码 `文件:行号` 为准**。本档已纠正若干过时假设（如 `values/colors.xml` 实际不存在）。
 
@@ -349,7 +349,7 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
    - ✅ **已修复（2026-07-21，`7a3ee40`，CI `29796355377` ✅）**：`BatteryDataSource` 电流单位判定逻辑（UnitHint 枚举 + CURRENT_PATH_REGISTRY + 阈值 + `convertCurrentToMicroamps`/`resolveUnitHint`）提取为独立 `internal object BatteryCurrentNormalizer`，companion 保留外观方法以维持 `BatteryDataSource.*` 既有调用与单测 API。容量/电压等其余 God-class 部分留待后续。
 13. CI 不跑测试（已修复）；ProGuard 整体 keep 致 App 零缩减（已修复）。
    - ✅ **CI 已修复（2026-07-21，`6f67e67`+`897964d`，CI `29795934663` ✅）**：`app/build.gradle` 补 `junit:junit:4.13.2` + companion 提 `internal` 使孤儿单测可编译；`.github/workflows/android-build.yml` 新增 `Run unit tests` 步骤（`testDebugUnitTest`）；修复 `sensor_range_*` 字符串多占位符 AAPT2 报错、电流判定子串遮蔽与空区间两处实现 bug（13 用例全部通过）。
-   - ✅ **ProGuard 已收紧（2026-07-21，CI 验证 ✅）**：`proguard-rules.pro` 移除整体 `-keep class com.example.deviceinfoviewer.** { *; }`（项目自身代码零缩减根因），改为精确 keep——`data.model.**`（Gson 序列化反射）+ 入口组件（Activity/Service/Receiver/Provider）+ 既有 Koin 规则。严格审查确认项目内反射仅作用于 framework 类（SystemProperties/BatteryManager/Sensor/GnssStatus 等运行时恒在），故无需整体 keep。⚠️ 需真机冒烟验证: 导出(JSON)/Koin 初始化/隐藏 API 反射采集。
+   - ✅ **ProGuard 已收紧（2026-07-21，CI 验证 ✅）**：`proguard-rules.pro` 移除整体 `-keep class com.rb.cybermonitorpro.** { *; }`（项目自身代码零缩减根因），改为精确 keep——`data.model.**`（Gson 序列化反射）+ 入口组件（Activity/Service/Receiver/Provider）+ 既有 Koin 规则。严格审查确认项目内反射仅作用于 framework 类（SystemProperties/BatteryManager/Sensor/GnssStatus 等运行时恒在），故无需整体 keep。⚠️ 需真机冒烟验证: 导出(JSON)/Koin 初始化/隐藏 API 反射采集。
 14. 双电芯 ×2 仅适配串联拓扑（依赖 P1#4 手动开关语义，自动检测已移出范围）。
 15. Magic number 散布（0.15 容差、50mA/10mA 阈值、20A 上限、1000 换算）。
    - 🔶 **基本已重构（拍板 2026-07-21）**：阈值类常量（`OPPO_UA_THRESHOLD`/`NON_OPPO_MA_THRESHOLD`/`UA_SANITY_*`/`CAP_MIN/MAX_MAH` 等）已由 `73435ed` 命名为常量；`/1000`/`*1000` 为合法 kHz↔MHz / µA↔mA 单位换算。残留 `CpuCache.kt:636` 的 `0.15f` 经核实为**核心按最高频率匹配最近芯片簇的 15% DVFS 容差**（注释明确："DVFS scaling 允许一定误差"），属语义化阈值非 bug，**保守保留，不改动**。
@@ -394,7 +394,7 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 - **P1#7 + P2#9 + P2#11 + P2#16（2026-07-21，CI `29793673693` ✅）**：新增 `OemPowerMode` 枚举取代数据源写死的中文显示串 `powerModeCurrent`/`hyperOsPerformanceGrade`，UI 经 `labelRes` 走 `stringResource`，OemScreen 等级配色改由枚举推导、移除硬编码中文比较串（P2#16）；`SysFsReader.readProp` 缓存 `SystemProperties.get` 方法引用（P2#9）；删除 `MainActivity` 中 `SystemMonitorAppMinimal`/`SystemMonitorAppNoFx` 调试残留（P2#11）。提交 `b62093e`。
 - **P2#13（CI 单元测接入，2026-07-21，CI `29795934663` ✅）**：`app/build.gradle` 补 `junit:junit:4.13.2`；`BatteryDataSource` companion 提 `internal` 使孤儿单测 `BatteryDataSourceCurrentUnitTest` 可编译；`.github/workflows/android-build.yml` 新增 `Run unit tests` 步骤（`testDebugUnitTest`）。修复两处曾阻断编译/运行的 bug：`sensor_range_format`/`sensor_range_label` 多占位符非定位格式（AAPT2 报错，改定位 `%1$.2f %2$s`）；电流判定 `CURRENT_PATH_REGISTRY` 子串遮蔽（通用键 `battery` 排在 `oplus_chg`/`vivo` 前误判 ASSUME_UA，专用键前置）与 `ASSUME_UA` 空区间 `100 until 50`（改 `absRaw < NON_OPPO_MA_THRESHOLD`）。13 用例全过。提交 `6f67e67`(资源) + `897964d`(电流逻辑)。
 - **P2#12（God-class 提取，2026-07-21，CI `29796355377` ✅）**：`BatteryDataSource` 电流单位判定逻辑（UnitHint 枚举 + CURRENT_PATH_REGISTRY + `OPPO_UA_THRESHOLD`/`NON_OPPO_MA_THRESHOLD` + `convertCurrentToMicroamps`/`resolveUnitHint`）提取为独立 `internal object BatteryCurrentNormalizer`；companion 保留外观方法委托，维持 `BatteryDataSource.*` 既有调用与单测 API 不变。提交 `7a3ee40`。
-- **ProGuard 收紧（2026-07-21，CI `29797948977` ✅）**：`proguard-rules.pro` 移除整体 `-keep class com.example.deviceinfoviewer.** { *; }`（项目代码零缩减根因），改精确 keep（`data.model.**` Gson + 入口组件 + Koin）。严格审查确认项目内反射仅作用于 framework 类，无需整体 keep。提交 `e9c1dde`。⚠️ 需真机冒烟: 导出/Koin/隐藏API反射。
+- **ProGuard 收紧（2026-07-21，CI `29797948977` ✅）**：`proguard-rules.pro` 移除整体 `-keep class com.rb.cybermonitorpro.** { *; }`（项目代码零缩减根因），改精确 keep（`data.model.**` Gson + 入口组件 + Koin）。严格审查确认项目内反射仅作用于 framework 类，无需整体 keep。提交 `e9c1dde`。⚠️ 需真机冒烟: 导出/Koin/隐藏API反射。
 - **P2#8 / P2#10 / P2#15 严格审查收口（2026-07-21）**：P2#8 查清双管道真相（LiveData=UI主用、SharedFlow=悬浮窗），消除误导性注释与 `@Deprecated`，完整 UI 迁移递延为受控严格审查步骤；P2#10 逐站审查 80 处空 catch 结论**全部合法应保留**（数据层 OEM fallback + UI/App best-effort），无逻辑吞异常；P2#15 核实 `CpuCache.kt:636` 的 `0.15f` 为 15% DVFS 语义容差，保守保留。
 - 概览页 2×2 指标卡 + 快速访问 均支持拖拽重排（reorderable 3.1.0 + AppSettings 持久化）；提交 `a5d797e`（CI `29672704776` ✅）。
 - 快速访问新增电池(4)/传感器(7) 按钮（`1f912fb`）。

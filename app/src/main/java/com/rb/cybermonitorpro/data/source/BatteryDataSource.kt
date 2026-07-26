@@ -1,0 +1,1918 @@
+package com.rb.cybermonitorpro.data.source
+
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
+import android.os.Build
+import android.util.Log
+import com.rb.cybermonitorpro.AppSettings
+import com.rb.cybermonitorpro.data.model.BatteryInfo
+import com.rb.cybermonitorpro.util.waitForWithTimeout
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
+
+/**
+ * 电池数据源 — 全网方案版 v2
+ *
+ * 主要增强（针对国产 OEM）：
+ * 1. 循环次数：50+ 路径/system property 多级 fallback
+ * 2. 容量：charge_full / charge_full_design 多路径 + BatteryManager 反射
+ * 3. 电流：current_now 15+ 路径 fallback
+ * 4. 放电功率：|电压 × 电流| 实时计算
+ * 5. 数据来源追踪：每个关键字段标注来源，方便调试
+ *
+ * 国产 ROM 适配覆盖：
+ * - 小米/HyperOS（含 BMS 路径 + thermal_message）
+ * - 华为/荣耀（含 healthd 路径）
+ * - OPPO/Realme/一加（含 oplus_chg 专属路径）
+ * - vivo/iQOO
+ * - 三星
+ * - 索尼
+ * - 联想/摩托罗拉
+ *
+ * 骁龙 Snapdragon 专项：
+ * - qpnp-vm-bms: /sys/class/power_supply/bms/ (Qualcomm PMIC BMS)
+ * - OPlus chg: /sys/class/oplus_chg/battery/ (OPPO/OnePlus/Realme 充电 IC)
+ */
+
+/**
+ * P2#12 — 电流单位归一化器（从 BatteryDataSource God-class 提取）
+ *
+ * 职责: 将各 OEM 内核 sysfs 上报的原始电流值(raw)按路径特征判定单位(mA / µA)，
+ * 统一归一化为 µA。所有"单位分类"逻辑与阈值集中于此，便于单测与维护。
+ *
+ * 注意:
+ * - [convertCurrentToMicroamps] / [resolveUnitHint] 在 companion 中保留外观方法，
+ *   以维持 `BatteryDataSource.convertCurrentToMicroamps(...)` 的既有调用与单测 API。
+ * - firstOrNull { pathHint.contains(key) } 按插入顺序取第一个匹配；通用键 "battery"
+ *   是 "oplus_chg/battery/..." 等路径的子串，必须排在专用键之后以避免【子串遮蔽】。
+ */
+internal object BatteryCurrentNormalizer {
+
+    // 单位提示: 各路径已知单位（避免启发式误判）
+    // ASSUME_UA: 标准 Linux power_supply 路径，直接 µA
+    // ASSUME_MA: OEM 驱动(mA 上报)
+    // AUTO: 未知路径，走阈值启发式
+    private enum class UnitHint { ASSUME_UA, ASSUME_MA, AUTO }
+
+    // 专用 / OEM / AUTO 键排在前，通用键(battery/bms...)排在后，避免子串遮蔽
+    private val CURRENT_PATH_REGISTRY: Map<String, UnitHint> = mapOf(
+        // === OPPO/OnePlus/Realme oplus_chg 驱动 — 始终 mA (优先于通用 battery 子串) ===
+        // Source: OPPO 内核源码 drivers/power/supply/oplus/oplus_chg.c
+        // XDA: https://forum.xda-developers.com/t/oplus-chg-current-sysfs-unit
+        "oplus_chg" to UnitHint.ASSUME_MA,
+        "oplus"     to UnitHint.ASSUME_MA,
+        "vooc"      to UnitHint.ASSUME_MA,
+        // === 其他 OEM 专属 — 使用启发式 AUTO (优先于通用 battery 子串) ===
+        "vivo"  to UnitHint.AUTO,
+        "batt_" to UnitHint.AUTO,
+        // === 标准 power_supply class — 始终 µA (通用键放最后，避免遮蔽上面的专用键) ===
+        // Source: AOSP kernel/Documentation/ABI/testing/sysfs-class-power-supply
+        "battery" to UnitHint.ASSUME_UA,
+        "bms"    to UnitHint.ASSUME_UA,
+        "main"   to UnitHint.ASSUME_UA,
+        "usb"    to UnitHint.ASSUME_UA,
+        // === 高通 BMS (qpnp-vm-bms) — 标准 µA ===
+        // Source: CodeLinaro kernel/msm power_supply qpnp-vm-bms.c
+        "qcom"      to UnitHint.ASSUME_UA,
+        "bcl"       to UnitHint.ASSUME_UA,
+        // === MTK — 标准 µA ===
+        // Source: MediaTek kernel drivers/power/supply/mtk_battery.c
+        "mt-battery"    to UnitHint.ASSUME_UA,
+        "battery_meter" to UnitHint.ASSUME_UA,
+    )
+
+    private const val OPPO_UA_THRESHOLD = 15_000L    // 15A 以上必为 µA
+    private const val NON_OPPO_MA_THRESHOLD = 50L    // 低于 50 可能是 mA
+
+    /** 将原始 sysfs 电流值按路径提示归一化为 µA (正=充电 / 负=放电) */
+    internal fun convertCurrentToMicroamps(rawValue: Long, pathHint: String): Long {
+        if (rawValue == 0L) return 0L
+
+        val unitHint = CURRENT_PATH_REGISTRY.entries.firstOrNull {
+            (key, _) -> pathHint.contains(key)
+        }?.value ?: UnitHint.AUTO
+
+        val absRaw = kotlin.math.abs(rawValue)
+        return when (unitHint) {
+            UnitHint.ASSUME_UA -> {
+                // 小值(<50)极可能是 mA 上报(如 30mA)，按 mA→µA 放大；否则视为标准 µA 直出
+                if (absRaw < NON_OPPO_MA_THRESHOLD) rawValue * 1000
+                else rawValue
+            }
+            UnitHint.ASSUME_MA -> {
+                if (absRaw > OPPO_UA_THRESHOLD) rawValue
+                else rawValue * 1000
+            }
+            UnitHint.AUTO -> {
+                when {
+                    absRaw > OPPO_UA_THRESHOLD -> rawValue
+                    absRaw < NON_OPPO_MA_THRESHOLD -> rawValue * 1000
+                    else -> rawValue
+                }
+            }
+        }
+    }
+
+    /** 路径 → 单位提示枚举名，暴露给单测验证路径匹配逻辑 */
+    internal fun resolveUnitHint(pathHint: String): String {
+        return CURRENT_PATH_REGISTRY.entries.firstOrNull {
+            (key, _) -> pathHint.contains(key)
+        }?.value?.name ?: UnitHint.AUTO.name
+    }
+}
+
+class BatteryDataSource(private val context: Context) {
+
+    // ★ dumpsys battery 附加信息缓存: 仅首次解析一次, 之后零开销复用 (不再每 10 tick 重复 shell)
+    @Volatile
+    private var cachedDumpsysBattery: CachedDumpsysBattery? = null
+
+    // ★ SoC Δ 平均电流估计状态 (零权限兜底, 详见 estimateCurrentViaSocDelta)
+    @Volatile
+    private var socDeltaPrevLevelPct: Int = -1
+    @Volatile
+    private var socDeltaPrevCapacityMAh: Long = -1L
+    @Volatile
+    private var socDeltaPrevTimeMs: Long = 0L
+
+    private val TAG = "BatteryDataSource"
+    private val appContext = context.applicationContext
+
+    // ★ 电池广播缓存 (fallback 机制)
+    //   getBatteryInfo() 优先拿 sticky intent 最新值 (50-80ms IPC/tick)。
+    //   广播监听器持续更新缓存作为 fallback。
+    @Volatile
+    private var cachedBatteryIntent: Intent? = null
+    private var batteryReceiverRegistered = false
+    private val batteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            cachedBatteryIntent = intent
+        }
+    }
+
+    /** 确保电池广播接收器已注册 (懒加载，首次调用时注册) */
+    private fun ensureBatteryReceiver() {
+        if (!batteryReceiverRegistered) {
+            try {
+                appContext.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+                batteryReceiverRegistered = true
+            } catch (_: Throwable) {}
+        }
+    }
+
+    fun getBatteryInfo(): BatteryInfo {
+        val info = BatteryInfo()
+        info.timestamp = System.currentTimeMillis()
+
+        // 双电芯开关
+        info.dualCell = AppSettings.getInstance(appContext).dualCellBattery
+
+        // ★ 每次 tick 拿最新 sticky intent，缓存仅作 fallback (零延迟，50-80ms IPC/tick)
+        ensureBatteryReceiver()
+        val batteryStatus = try {
+            val ifilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+            appContext.registerReceiver(null, ifilter)
+        } catch (_: Throwable) {
+            cachedBatteryIntent
+        } ?: cachedBatteryIntent ?: return info
+
+        // === 电量百分比 ===
+        val level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+        val scale = batteryStatus.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+        if (level >= 0 && scale > 0) {
+            info.levelPercent = (level * 100.0f / scale).toInt()
+        }
+
+        // === 温度 (decicelsius → celsius) ===
+        val tempRaw = batteryStatus.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
+        if (tempRaw > 0) {
+            info.temperatureCelsius = tempRaw / 10.0f
+        } else {
+            val sysTemp = SysFsReader.readFloat("/sys/class/power_supply/battery/temp")
+            if (!sysTemp.isNaN() && sysTemp > 0) {
+                info.temperatureCelsius = if (sysTemp > 100) sysTemp / 10.0f else sysTemp
+            }
+        }
+
+        // === 电压 (mV, 双电芯×2) ===
+        info.voltage = batteryStatus.getIntExtra(BatteryManager.EXTRA_VOLTAGE, -1)
+
+        // === 充电/放电判定 — 三级融合（解决国产 ROM 满电误判问题） ===
+        // 问题：ColorOS/HyperOS 电池满电后状态变为 DISCHARGING/NOT_CHARGING 而非 FULL
+        // 解决：EXTRA_PLUGGED（硬件真值）为第一优先级，电流符号次之，EXTRA_STATUS 最低
+        val plugged = batteryStatus.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+        val status = batteryStatus.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val isPlugged = plugged > 0
+        val statusIsCharging = status == BatteryManager.BATTERY_STATUS_CHARGING
+                || status == BatteryManager.BATTERY_STATUS_FULL
+
+        // 暂存电流值（稍后读取）
+        info.chargeStatus = chargeStatusToString(status)
+        // 临时赋值：以插电 + 状态做初步判断，后面用电流方向修正
+        info.isCharging = isPlugged && (statusIsCharging
+                || status == BatteryManager.BATTERY_STATUS_NOT_CHARGING
+                || status == BatteryManager.BATTERY_STATUS_DISCHARGING)
+        // 保存充电类型 (语义 key: charger_ac/charger_usb/charger_wireless/charger_unknown)
+        info.chargerTypeFromPlugged = when {
+            (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "charger_ac"
+            (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "charger_usb"
+            (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "charger_wireless"
+            else -> if (isPlugged) "charger_unknown" else ""
+        }
+        info.isPlugged = isPlugged
+
+        // === 健康状态 (双源: EXTRA_HEALTH + BATTERY_PROPERTY_STATE_OF_HEALTH) ===
+        val health = batteryStatus.getIntExtra(BatteryManager.EXTRA_HEALTH, -1)
+        info.health = healthToString(health)
+
+        // BATTERY_PROPERTY_STATE_OF_HEALTH (propId=10) — AOSP 标准属性
+        // 返回电池健康状态百分比 (0-100)，Android 14+ 系统支持
+        // 参考: frameworks/base/core/java/android/os/BatteryManager.java
+        try {
+            val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            if (bm != null) {
+                val sohPct = bm.getIntProperty(10)  // BATTERY_PROPERTY_STATE_OF_HEALTH = 10
+                if (sohPct in 1..100) {
+                    info.healthPercent = sohPct
+                    Log.d(TAG, "health_percent via STATE_OF_HEALTH (prop 10): $sohPct%")
+                }
+            }
+        } catch (_: Throwable) { /* property 10 not supported */ }
+
+        // === 电池技术 ===
+        info.technology = batteryStatus.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY) ?: ""
+
+        // === 容量（多路径） ===
+        readBatteryCapacity(info)
+
+        // === 通过容量预估电量百分比 (chargeCounterµAh ÷ chargeFullMAh) ===
+        //   公式: capacityEstimatedLevelPercent = (chargeCounterUAh/1000) / chargeFullMAh × 100
+        //   说明: chargeFullMAh 与 chargeCounterUAh 均为裸值，双电芯×2 对两者同步生效比率不变；
+        //        chargeCounter 为实时剩余电荷量，故此值为"按实测容量推算的当前电量"，
+        //        与系统 levelPercent 互为交叉校验。
+        if (info.chargeFullMAh > 0 && info.chargeCounterUAh > 0) {
+            val counterMAh = info.chargeCounterUAh / 1000.0
+            val pct = (counterMAh / info.chargeFullMAh * 100).toInt()
+            info.capacityEstimatedLevelPercent = pct.coerceIn(0, 100)
+        }
+
+        // === 电流（多路径，带符号 µA） ===
+        // ★ PlusPlusBattery 思路: 最终读数统一乘以用户校准倍率 (默认 1.0 = 不修正)，
+        //   解决 ColorOS 等 OEM ROM 的 oplus_chg / BATTERY_PROPERTY_CURRENT_NOW 因单位或
+        //   增益偏差导致的读数不准。倍率在此单一总入口施加，自然流向瓦特/内阻等派生指标。
+        val (rawCurrentUA, source0) = getCurrentNowFull()
+        val currentMultiplier = AppSettings.getInstance(appContext).batteryCurrentMultiplier
+        // currentUA / currentSource 作为单一真源: 下游瓦特/内阻/充放电判定与归一化统一引用
+        var currentUA = (rawCurrentUA * currentMultiplier).toLong()
+        var currentSource = source0
+        info.currentNowUA = currentUA
+        info.currentNowSource = currentSource
+
+        // === SoC Δ 平均电流估计 (零权限兜底) ===
+        // 当所有路径(sysfs/property/hidden API/dumpsys)均返回0时启用 —— 这正是 ColorOS
+        // 下"检测不到电流"的典型场景(SELinux 拦截 sysfs + property 恒为0)。
+        // 原理: AccuBattery 同款 —— 由公开的电量百分比(level)与容量(capacity)随时间变化率
+        //   反推平均电流: ΔQ(mAh)=capacityMAh×Δlevel%/100 ; avg(mA)=ΔQ/Δt(h) ; ×1000→µA
+        if (currentUA == 0L && currentSource == "无法获取"
+            && info.levelPercent in 1..100 && info.effectiveChargeFullMAh > 0) {
+            val socEstUA = estimateCurrentViaSocDelta(info.levelPercent, info.effectiveChargeFullMAh)
+            if (socEstUA != null) {
+                currentUA = socEstUA
+                currentSource = "SoC Δ估计"
+                info.currentNowUA = currentUA
+                info.currentNowSource = currentSource
+            }
+        }
+
+        // === BBK 电流归一化 (mA, 含方向) ===
+        info.currentNormalizedMa = normalizeBbKCurrent(currentUA, currentSource)
+
+        // === 电源来源标签 (EXTRA_PLUGGED 三级检测) ===
+        // 返回语义 key (ps_ac/ps_usb/ps_wireless/ps_external/ps_battery)，
+        // UI 层通过 stringResource() 翻译为用户可见文本。
+        info.powerSourceLabel = when {
+            (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "ps_ac"
+            (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "ps_usb"
+            (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "ps_wireless"
+            isPlugged -> "ps_external"
+            else -> "ps_battery"
+        }
+
+        // === 有效电压（双电芯×2）===
+        val effVoltage = info.effectiveVoltage
+
+        // === 预计算实时瓦特数 (V × I / 1,000,000,000) ===
+        // ★ 单位修复 (P0-4): effVoltage 单位 mV, currentUA 单位 µA
+        //   V × A = W → mV × µA = 10^-9 W, 所以除以 1_000_000_000 得到 W
+        //   原除数 1_000_000 得到的是 mW, 与 BatteryInfo.wattageNow 注释 "瓦特" 不符
+        //   FloatingWindowService 也使用 /1_000_000_000, 此处对齐
+        if (effVoltage > 0 && currentUA != 0L) {
+            info.wattageNow = effVoltage.toDouble() * kotlin.math.abs(currentUA).toDouble() / 1_000_000_000.0
+        }
+
+        // === 功率 = |电压(V) × 电流(A)| = |电压(mV) × 电流(µA)| / 1,000,000 = mW ===
+        // ★ 已插电时用 |电流| > 50mA 判定充电 (兼容 OEM 符号约定反转)，未插电时标准约定
+        if (effVoltage > 0 && currentUA != 0L) {
+            val powerMw = Math.abs(effVoltage.toDouble() * currentUA.toDouble()) / 1_000_000.0
+            if (info.isPlugged) {
+                val absCurrent = kotlin.math.abs(currentUA)
+                if (absCurrent > 50_000) {  // > 50mA 确定有充放电活动
+                    info.chargingPowerMw = powerMw.toLong()
+                    info.isCharging = true
+                }
+                // absCurrent 很小且已插电 → 可能满电待机/协议协商，保持 isCharging = isPlugged
+            } else {
+                // 未插电: 标准 AOSP 约定 (负=放电)
+                if (currentUA < 0) {
+                    info.dischargingPowerMw = powerMw.toLong()
+                }
+                info.isCharging = false
+            }
+        } else if (info.isPlugged && effVoltage > 0) {
+            // 已插电但 currentUA=0 (协议协商/满电待机) — 仍视为充电中，不降级
+            info.isCharging = true
+        } else if (!info.isPlugged) {
+            // 没插电 → 必定放电
+            info.isCharging = false
+        }
+
+        // === 内阻估算 = 电压(mV) / 电流(µA) × 1000 = mΩ ===
+        if (effVoltage > 0 && currentUA != 0L) {
+            val absCurrent = Math.abs(currentUA)
+            if (absCurrent > 10000) {  // 电流 > 10mA 才有意义
+                info.internalResistanceMOhm = (effVoltage.toFloat() / absCurrent.toFloat()) * 1000f
+            }
+        }
+
+        // === 充电协议电压特征匹配 ===
+        info.protocolDetected = detectChargingProtocolVoltage(info)
+
+        // === 循环次数（50+ 路径） ===
+        val (cycleCount, cycleSource) = getBatteryCycleCountFull()
+        info.cycleCount = cycleCount
+        info.cycleCountSource = cycleSource
+        if (cycleCount > 0) {
+            Log.d(TAG, "cycle_count=$cycleCount from $cycleSource")
+        }
+
+        // === dumpsys battery 附加信息 (仅首次解析一次, 之后零开销复用; 不再每 10 tick 重复 shell 拖慢刷新) ===
+        applyCachedDumpsysBattery(info)
+
+        // === 充电类型实时派生 (方案 A): 不再缓存 dumpsys chargerType, 避免插拔状态陈旧 ===
+        // 原 dumpsys chargerType = 插拔类型(AC/USB/Wireless/Dock) + 协议; 现拆分为两个已实时字段:
+        //   - 插拔类型由 chargerTypeFromPlugged(EXTRA_PLUGGED, 每 tick 实时) 经 UI 翻译展示
+        //   - 协议由 protocolDetected(每 tick 实时, 见上方 detectChargingProtocolVoltage) 派生
+        // 故此处 chargerType 直接取 protocolDetected: 有协议则作为后缀展示, 无协议则为空(插拔类型已由 UI 展示)
+        info.chargerType = info.protocolDetected
+
+        // === capacity_now / charge_now 直接读取（剩余绝对容量） ===
+        val capacityNowPaths = listOf(
+            "/sys/class/power_supply/battery/capacity_now",
+            "/sys/class/power_supply/bms/capacity_now",
+            "/sys/class/power_supply/battery/charge_now",
+            "/sys/class/power_supply/bms/charge_now",
+            "/sys/devices/platform/battery/capacity_now",
+            "/sys/devices/platform/battery_meter/capacity_now",
+            "/sys/class/oplus_chg/battery/capacity_now",
+            "/sys/kernel/oplus_chg/battery/capacity_now"
+        )
+        val readPaths = mutableSetOf<String>()  // ★ 去重: 防止 charge_now 段重复读取
+        for (path in capacityNowPaths) {
+            val raw = readSysfsLongRobust(path).takeIf { it > 0 }
+            if (raw != null) {
+                readPaths.add(path)
+                info.capacityRemainingUAh = if (raw > 1_000_000) raw else raw * 1000
+                break
+            }
+        }
+
+        // === charge_now (电荷量, 不同于 charge_counter) ===
+        for (path in listOf(
+            "/sys/class/power_supply/battery/charge_now",
+            "/sys/class/power_supply/bms/charge_now",
+            "/sys/devices/platform/battery/charge_now"
+        )) {
+            if (path in readPaths) continue  // ★ 已由 capacity_now 段读取，跳过
+            val raw = readSysfsLongRobust(path).takeIf { it > 0 }
+            if (raw != null && raw > 0) {
+                info.chargeNowUAh = if (raw > 1_000_000) raw else raw * 1000
+                break
+            }
+        }
+
+        // === capacity_max 锁容检测 (Xiaomi/HyperOS) ===
+        val capMaxPaths = listOf(
+            "/sys/class/power_supply/battery/capacity_max",
+            "/sys/class/power_supply/bms/capacity_max",
+            "/sys/devices/platform/battery/capacity_max",
+            "/sys/kernel/debug/battery/capacity_max"
+        )
+        for (path in capMaxPaths) {
+            val raw = readSysfsLine(path)?.toIntOrNull()
+            if (raw != null && raw > 0 && raw <= 100) {
+                info.capacityMaxPct = raw
+                info.isCapacityLocked = raw < 100
+                info.capacityLockLevel = raw
+                break
+            }
+        }
+
+        // === 读取 power_profile.xml 配置容量 (作为校准参考) ===
+        try {
+            val propManager = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            if (propManager != null) {
+                val powerProfileCap = SysFsReader.getBatteryLongProperty(appContext, "BATTERY_PROPERTY_CAPACITY")
+                if (powerProfileCap != null && powerProfileCap > 0) {
+                    info.powerProfileCapacityMAh = powerProfileCap / 1000
+                }
+            }
+        } catch (_: Throwable) {}
+
+        // === SoH (State of Health) 计算 ===
+        // charge_full / charge_full_design × 100%
+        if (info.chargeFullMAh > 0 && info.chargeFullDesignMAh > 0) {
+            val ratio = info.chargeFullMAh.toFloat() / info.chargeFullDesignMAh.toFloat()
+            info.sohPercent = (ratio * 100f).coerceIn(0f, 120f)
+            info.capacityFadePercent = (100f - info.sohPercent).coerceAtLeast(0f)
+        }
+
+        // === 开路电压 OCV 估算 (零电流时采样) ===
+        if (kotlin.math.abs(info.currentNowUA) < 5000 && info.voltage > 0) {
+            // 电流 < 5mA 时，电压近似等于开路电压
+            info.estimatedOcvMv = info.voltage
+        } else if (info.voltage > 0) {
+            // 有负载时，OCV ≈ V_now + I × R_internal
+            if (!info.internalResistanceMOhm.isNaN() && info.internalResistanceMOhm > 0) {
+                val irDrop = (kotlin.math.abs(info.currentNowUA).toFloat() * info.internalResistanceMOhm / 1_000_000f).toInt()
+                // ★ OCV = V_measured - sign(I) × I × R
+                //   充电: V_measured = OCV + I×R → OCV = V - I×R
+                //   放电: V_measured = OCV - I×R → OCV = V + I×R
+                info.estimatedOcvMv = if (info.isCharging) {
+                    info.voltage - irDrop  // ★ 修复: 充电时 OCV 应低于测量电压
+                } else {
+                    info.voltage + irDrop  // 放电时 OCV 应高于测量电压
+                }
+            }
+        }
+
+        // === 内阻估算增强: 基于 OCV 更精确 ===
+        if (info.estimatedOcvMv > 0 && info.voltage > 0 && kotlin.math.abs(info.currentNowUA) > 10000) {
+            val deltaVMv = kotlin.math.abs(info.estimatedOcvMv - info.voltage).toFloat()
+            val absCurrentA = kotlin.math.abs(info.currentNowUA) / 1_000_000f
+            if (absCurrentA > 0.01f) {
+                // R = (V_ocv - V_now) / I  (单位: mΩ)
+                val refinedResistance = (deltaVMv / absCurrentA).coerceIn(0f, 2000f)
+                if (!info.internalResistanceMOhm.isNaN() && info.internalResistanceMOhm > 0) {
+                    // 加权平均: 既有值(40%) + 新估算(60%)
+                    info.internalResistanceMOhm = info.internalResistanceMOhm * 0.4f + refinedResistance * 0.6f
+                } else {
+                    info.internalResistanceMOhm = refinedResistance
+                }
+            }
+        }
+
+        // === 剩余时间估算 ===
+        if (info.chargeCounterUAh > 0 && info.currentNowUA != 0L) {
+            val absCurrentUA = kotlin.math.abs(info.currentNowUA)
+            if (absCurrentUA > 10000) {  // 电流 > 10mA 才有意义
+                if (info.isCharging) {
+                    // 充电: (chargeFullMAh - chargeCounterUAh/1000) / currentA × 60
+                    if (info.chargeFullMAh > 0 && info.chargeCounterUAh > 0) {
+                        val remainingUAh = (info.chargeFullMAh * 1000 - info.chargeCounterUAh).coerceAtLeast(0)
+                        info.chargeRemainingTimeMin = (remainingUAh.toFloat() / absCurrentUA * 60).toInt()
+                    }
+                } else {
+                    // 放电: (levelPercent / 100 × chargeFullMAh) × 60 / currentA
+                    if (info.levelPercent > 0 && info.chargeFullMAh > 0) {
+                        val remainingUAh = (info.levelPercent / 100f * info.chargeFullMAh * 1000).toLong()
+                        info.dischargeRemainingTimeMin = (remainingUAh.toFloat() / absCurrentUA * 60).toInt()
+                    }
+                }
+            }
+        }
+
+        // === 系统省电模式 (PowerManager.isPowerSaveMode, API 21+) ===
+        try {
+            val pm = appContext.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            info.isPowerSaveMode = pm?.isPowerSaveMode ?: false
+        } catch (_: Throwable) {}
+
+        return info
+    }
+
+    // ========== 电池容量（全网方案） ==========
+
+    /**
+     * sysfs charge_full[|_design] 容量单位归一化 (µAh → mAh)。
+     *
+     * 规范: Linux power supply class 中 charge_full 为 **microampere-hours (µAh)**,
+     * 故标准做法 value/1000 → mAh。但部分 OEM 内核直接以 mAh (或库仑) 上报,
+     * 导致 /1000 后出现 1000× 偏差。这里按"典型手机电芯 1500–9000 mAh"做边界校验:
+     * - value/1000 落在合理区间 → 视为 µAh, 返回 value/1000
+     * - value 本身落在合理区间 → 视为 OEM 已用 mAh 上报, 直接返回 value
+     * - 均不在区间 → 不可信, 返回 -1 (交由后续路径兜底)
+     */
+    private fun normalizeChargeFullToMAh(value: Long): Long {
+        if (value <= 0) return -1L
+        val divided = value / 1000L
+        return when {
+            divided in CAP_MIN_MAH..CAP_MAX_MAH -> divided
+            value in CAP_MIN_MAH..CAP_MAX_MAH -> value
+            else -> -1L
+        }
+    }
+
+    private fun readBatteryCapacity(info: BatteryInfo) {
+        // 1. BatteryManager 官方属性
+        // ★ 修正: BATTERY_PROPERTY_CAPACITY 返回的是【剩余容量百分比(0-100)】, 不是 mAh!
+        //   原代码误赋给 info.capacityDesignMAh, 污染设计容量。此处仅作 levelPercent 交叉校验。
+        try {
+            val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            bm?.let {
+                val capPct = it.getLongProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                if (capPct != Long.MIN_VALUE && capPct in 1..100) {
+                    if (info.levelPercent <= 0) info.levelPercent = capPct.toInt()
+                }
+            }
+        } catch (_: Throwable) {}
+
+        // 2. BatteryManager 隐藏属性 — CHARGE_COUNTER
+        try {
+            val chargeCounter = SysFsReader.getBatteryLongProperty(appContext, "BATTERY_PROPERTY_CHARGE_COUNTER")
+            if (chargeCounter != Long.MIN_VALUE && chargeCounter > 0) {
+                info.chargeCounterUAh = chargeCounter
+            }
+        } catch (_: Throwable) {}
+
+        // 3. sysfs charge_full（多路径，含 OPPO oplus_chg）
+        val chargeFullPaths = listOf(
+            // 标准 Android
+            "/sys/class/power_supply/battery/charge_full",
+            "/sys/class/power_supply/battery/charge_full_design",
+            // 高通 BMS (qpnp-vm-bms)
+            "/sys/class/power_supply/bms/charge_full",
+            "/sys/class/power_supply/bms/charge_full_design",
+            // OPPO/OnePlus/Realme (oplus_chg)
+            "/sys/class/oplus_chg/battery/battery_fcc",           // Full Charge Capacity
+            "/sys/class/oplus_chg/battery/battery_rm",            // Remaining capacity (实时)
+            "/sys/class/oplus_chg/battery/charge_full",
+            "/sys/class/oplus_chg/battery/charge_full_design",
+            // P2: OPPO 内核级容量路径
+            "/sys/kernel/oplus_chg/battery/battery_fcc",
+            "/sys/kernel/oplus_chg/battery/charge_full",
+            "/sys/kernel/oplus_chg/battery/charge_full_design",
+            "/sys/kernel/oplus_chg/battery/battery_rm",
+            "/sys/devices/platform/soc/oplus_chg/battery/battery_fcc",
+            "/sys/devices/platform/soc/oplus_chg/battery/charge_full_design",
+            // MTK
+            "/sys/devices/platform/battery/charge_full",
+            "/sys/devices/platform/mt-battery/charge_full",
+            "/sys/devices/platform/battery_meter/charge_full",
+        )
+        for (path in chargeFullPaths) {
+            val value = readSysfsLongRobust(path)
+            if (value > 0) {
+                // ★ 单位归一化: 经 normalizeChargeFullToMAh 处理 OEM 单位差异, 不可信值返回 -1 跳过
+                val mah = normalizeChargeFullToMAh(value)
+                if (mah > 0) {
+                    if (path.contains("design")) {
+                        info.chargeFullDesignMAh = mah
+                        if (info.chargeFullSource.isEmpty()) info.chargeFullSource = path
+                    } else {
+                        info.chargeFullMAh = mah
+                        if (info.chargeFullSource.isEmpty()) info.chargeFullSource = path
+                    }
+                }
+            }
+        }
+
+        // 4. 如果 sysfs charge_full 不可用，用 Charge Counter 容量估算兜底
+        //    公式: 满充容量 ≈ chargeCounter / (levelPercent / 100)
+        if (info.chargeFullMAh <= 0 && info.chargeCounterUAh > 0 && info.levelPercent in 1..100) {
+            val estimatedFullUAh = (info.chargeCounterUAh.toDouble() / (info.levelPercent / 100.0)).toLong()
+            if (estimatedFullUAh > 0) {
+                info.chargeFullMAh = (estimatedFullUAh / 1000)
+                info.chargeFullSource = "Charge Counter估算"
+                Log.d(TAG, "chargeFull via Charge Counter estimation: ${info.chargeFullMAh} mAh (counter=${info.chargeCounterUAh} µAh, level=${info.levelPercent}%)")
+            }
+        }
+
+        // 5. 如果 BatteryManager 没有容量，用 charge_full_design
+        if (info.capacityDesignMAh <= 0 && info.chargeFullDesignMAh > 0) {
+            info.capacityDesignMAh = info.chargeFullDesignMAh
+        }
+        if (info.capacityDesignMAh <= 0) {
+            // 备用: power_profile.xml (Android 10+)
+            try {
+                val resId = appContext.resources.getIdentifier("config_bluetoothPowerDrainCalculationPower", "integer", "android")
+                // 这不是直接容量，但如果没有charge_full_design可用，尝试从dumpsys batteryproperties获取
+                val propOutput = ShellCommandDataSource.getDumpsysBatteryProperties()
+                // 格式: "Capacity: 5000000" 或 "design capacity: 5000"
+                val capRegex = Regex("""(?i)(?:design\s*)?(?:capacity|battery\s*capacity)[=: ]+(\d+)""")
+                val match = capRegex.find(propOutput)
+                match?.let {
+                    val raw = it.groupValues[1].toLongOrNull()
+                    if (raw != null && raw > 0) {
+                        info.capacityDesignMAh = if (raw > 100_000) raw / 1000 else raw
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+        if (info.capacityNowMAh <= 0 && info.chargeFullMAh > 0) {
+            info.capacityNowMAh = info.chargeFullMAh
+        }
+        // 补充: 设计容量仍不可用时，从 SoC 典型值推断
+        if (info.capacityDesignMAh <= 0) {
+            try {
+                val socModel = SysFsReader.readProp("ro.board.platform")
+                val designEstimate = when {
+                    socModel.contains("sm8750") || socModel.contains("sm8650") -> 5400L // 旗舰机
+                    socModel.contains("sm8550") || socModel.contains("sm8475") -> 5000L
+                    socModel.contains("mt689") || socModel.contains("mt698") -> 5000L // 天玑
+                    socModel.contains("sm") -> 5000L  // 骁龙默认
+                    else -> -1L
+                }
+                if (designEstimate > 0) {
+                    info.capacityDesignMAh = designEstimate
+                    info.chargeFullSource = "SoC 典型值推断"
+                }
+            } catch (_: Throwable) {}
+        }
+    }
+
+    // ========== 电流（全网方案） ==========
+
+    /**
+     * @return Pair<电流µA (正=充电/负=放电), 来源描述>
+     */
+    internal companion object {
+        // 典型手机电芯容量合理区间 (mAh)
+        private const val CAP_MIN_MAH = 1500L
+        private const val CAP_MAX_MAH = 9000L
+
+        // 电流最终 sanity 边界 (µA)，用于读取后的合理性校验
+        private const val UA_SANITY_LOW  = 100L          // 低于此值可能是噪声
+        private const val UA_SANITY_HIGH = 20_000_000L   // 20A = 手机物理上限
+
+        // === P2#12: 电流单位分类逻辑已提取至 BatteryCurrentNormalizer ===
+        // 以下为外观方法，维持 `BatteryDataSource.convertCurrentToMicroamps` 既有
+        // 调用与单测 API（实现委托给 BatteryCurrentNormalizer）
+        internal fun convertCurrentToMicroamps(rawValue: Long, pathHint: String): Long =
+            BatteryCurrentNormalizer.convertCurrentToMicroamps(rawValue, pathHint)
+
+        internal fun resolveUnitHint(pathHint: String): String =
+            BatteryCurrentNormalizer.resolveUnitHint(pathHint)
+    }
+
+    private fun getCurrentNowFull(): Pair<Long, String> {
+        // ① 全系统通用主路: 框架 API (1 次 binder, ms 级)
+        // ★ P0 根因修复: 原 getIntProperty(2) 不支持时返回 0, 与"有效0电流"无法区分,
+        //   导致穿透到 sysfs 风暴。改用 getLongProperty + Long.MIN_VALUE 哨兵区分
+        //   "不支持"与"有效0" (Volta / BatteryX 同款做法, AOSP 派生)。
+        try {
+            val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            if (bm != null) {
+                val cur = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) // µA 直出
+                if (cur != Long.MIN_VALUE) {
+                    Log.d(TAG, "current_now from BatteryManager.getLongProperty(CURRENT_NOW): $cur µA")
+                    return Pair(cur, "BatteryManager binder")
+                }
+                // 诊断: CHARGE_COUNTER (1) 非零仅记录, 不参与电流主值
+                val counter = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
+                if (counter != Long.MIN_VALUE) {
+                    Log.d(TAG, "charge_counter from BatteryManager: $counter")
+                }
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
+        // ② BatteryManager 隐藏属性 CURRENT_NOW (反射) — 适用于部分 ROM / 老框架
+        try {
+            val current = SysFsReader.getBatteryIntProperty(appContext, "BATTERY_PROPERTY_CURRENT_NOW")
+            if (current != -1 && current != 0) {
+                Log.d(TAG, "current_now from BatteryManager hidden API: $current µA")
+                return Pair(current.toLong(), "BatteryManager hidden API")
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
+        // ③ 仅在"探测到 sysfs 可读"时走 sysfs 次级 (ColorOS 永久跳过, 无 cat 风暴)
+        if (SysFsCapabilityProbe.isReadable()) {
+            // 所有已知 current_now 路径
+            val currentPaths = listOf(
+                "/sys/class/power_supply/battery/current_now" to "battery/current_now",
+                "/sys/class/power_supply/battery/battery_current" to "battery/battery_current",
+                "/sys/class/power_supply/battery/current_avg" to "battery/current_avg",
+                "/sys/class/power_supply/battery/Charger_Current" to "battery/Charger_Current",
+                // Source: CodeLinaro qpnp-vm-bms.c — 高通 BMS 标准 µA
+                "/sys/class/power_supply/bms/current_now" to "bms/current_now",
+                "/sys/class/power_supply/bms/current_avg" to "bms/current_avg",
+                "/sys/class/power_supply/battery/input_current_settled" to "battery/input_current",
+                "/sys/class/power_supply/battery/constant_charge_current" to "battery/constant_charge",
+                // Source: Xiaomi HyperOS 内核 — BMS 子目录 (标准 µA)
+                "/sys/class/power_supply/bms/battery_current" to "bms/battery_current",
+                "/sys/class/power_supply/bms/charge_current" to "bms/charge_current",
+                // Source: 华为/荣耀 内核 — 标准 µA
+                "/sys/class/power_supply/battery/charging_current" to "battery/charging_current",
+                // Source: 三星内核 — 标准 µA
+                "/sys/class/power_supply/battery/batt_current_now" to "battery/batt_current",
+                "/sys/class/power_supply/battery/batt_current_adc" to "battery/batt_current_adc",
+                // Source: MTK 内核 drivers/power/supply/ — 标准 µA
+                "/sys/devices/platform/mt-battery/current_now" to "mt-battery/current_now",
+                "/sys/devices/platform/battery_meter/current_now" to "battery_meter/current_now",
+                // Vivo/iQOO — µA (沿用标准 power_supply)
+                "/sys/class/power_supply/battery/vivo_current" to "vivo/current",
+                "/sys/class/power_supply/battery/real_charging_curr" to "vivo/real_charge",
+                // Xiaomi/HyperOS 扩展
+                "/sys/class/power_supply/bms/current_max" to "bms/current_max",
+                "/sys/devices/platform/soc/soc:qcom,bcl/current_now" to "qcom_bcl/current",
+                // ColorOS 13.1+ 专项 — 标准 power_supply class µA
+                "/sys/class/power_supply/bms/current_now" to "bms/current_now_fallback",
+                "/sys/class/power_supply/usb/current_max" to "usb/current_max",
+                "/sys/class/power_supply/usb/current_now" to "usb/current_now",
+                "/sys/class/power_supply/main/current_now" to "main/current_now",
+                // 反向充电 (OPPO 部分机型) — mA
+                "/sys/class/power_supply/battery/otg_current" to "battery/otg_current",
+            )
+
+            for ((path, desc) in currentPaths) {
+                try {
+                    // 直接 sysfs + shell 兜底 (Android 16 SELinux)
+                    var rawValue = SysFsReader.readLong(path)
+                    if (rawValue <= 0) {
+                        val shellVal = readSysfsLongRobust(path)
+                        if (shellVal > 0) rawValue = shellVal
+                    }
+                    if (rawValue == -1L || rawValue == Long.MIN_VALUE) continue
+                    if (rawValue == 0L) continue  // 值为0继续尝试下一个路径
+
+                    // Convert raw sysfs value to µA via pure function
+                    val adjustedValue = convertCurrentToMicroamps(rawValue, path)
+
+                    // 最终 sanity check
+                    val absAdjusted = kotlin.math.abs(adjustedValue)
+                    if (absAdjusted in UA_SANITY_LOW..UA_SANITY_HIGH) {
+                        Log.d(TAG, "current_now from $desc: $adjustedValue µA (raw=$rawValue)")
+                        return Pair(adjustedValue, desc)
+                    }
+                    if (absAdjusted > UA_SANITY_HIGH) {
+                        Log.w(TAG, "current from $desc: $adjustedValue µA exceeds 20A sanity — skipping")
+                    }
+                } catch (_: Throwable) { /* next */ }
+            }
+        }
+
+        // ④ dumpsys 兜底 (非 root 可用, 无需 RootGate)
+        //    说明: dumpsys battery / batterystats 普通三方 App 即可执行, 不需要 root;
+        //    仅当上方 binder/sysfs 均未命中(返回 MIN_VALUE/不可读)时才走到此处,
+        //    故仅对"binder 不支持"的设备产生 shell 开销。ColorOS 上 binder 通常返回
+        //    有效值, 此处几乎不触发。RootGate 仅保留给未来"真 root 私有节点"读取。
+        run {
+            // === ColorOS 13.1 专属兜底: dumpsys battery 提取 (shell 上下文) ===
+            try {
+                val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "dumpsys battery"))
+                val reader = proc.inputStream.bufferedReader()
+                val output = reader.readText()
+                reader.close()
+                proc.waitForWithTimeout()
+
+                // 匹配 dumpsys 中的充电电流字段
+                val dumpsysCurrentPatterns = listOf(
+                    Regex("""(?i)Max charging current[=:：]\s*(\d+)"""),
+                    Regex("""(?i)Charging current[=:：]\s*(\d+)"""),
+                    Regex("""(?i)Charge counter[=:：]\s*(\d+)"""),
+                    // ColorOS/部分 ROM 在放电态暴露的实时电流字段
+                    Regex("""(?i)Current Now[=:：]\s*(-?\d+)"""),
+                    Regex("""(?i)current now[=:：]\s*(-?\d+)"""),
+                    // 匹配 "Current:" 字段 (部分旧设备 dumpsys 格式)
+                    Regex("""(?i)^\s*(?:current|I)\s*[=:：]\s*(-?\d+)"""),
+                )
+                for (regex in dumpsysCurrentPatterns) {
+                    val match = regex.find(output)
+                    match?.let {
+                        val value = it.groupValues[1].toLongOrNull()
+                        if (value != null && value > 0) {
+                            Log.d(TAG, "current_now via dumpsys battery: $value µA")
+                            return Pair(value, "dumpsys battery")
+                        }
+                    }
+                }
+            } catch (_: Throwable) { /* fall through */ }
+
+            // === 最后兜底: dumpsys batterystats (旧设备兼容) ===
+            try {
+                val proc = Runtime.getRuntime().exec(
+                    arrayOf("/system/bin/sh", "-c", "dumpsys batterystats 2>/dev/null")
+                )
+                val output = proc.inputStream.bufferedReader().readText()
+                proc.waitForWithTimeout()
+
+                // 从 batterystats 提取电流估计值
+                val currentMatch = Regex("""(?i)Estimated power use.*?=.*?(\d+)""").find(output)
+                    ?: Regex("""(?i)Current:\s*(-?\d+)""").find(output)
+                currentMatch?.let {
+                    val value = it.groupValues[1].toLongOrNull()
+                    if (value != null && kotlin.math.abs(value) > 0) {
+                        Log.d(TAG, "current_now via batterystats: $value")
+                        return Pair(value, "dumpsys batterystats")
+                    }
+                }
+            } catch (_: Throwable) { /* fall through */ }
+        }
+
+        // ⑤ 全部失败 → 0 + "无法获取" (caller 接 SoC-Δ 估计兜底, 见 getBatteryInfo)
+        return Pair(0L, "无法获取")
+    }
+
+    /**
+     * SoC Δ 平均电流估计 (零权限兜底, AccuBattery 同款思路)。
+     *
+     * 借用 Android 默认公开的电量百分比(level)与容量(capacity)，由二者随时间的差分反推
+     * 平均电流。当 ColorOS 的 sysfs 被 SELinux 拦截、且 BATTERY_PROPERTY_CURRENT_NOW 恒为 0
+     * (即 getCurrentNowFull 返回 "无法获取") 时，此路仍能给出可用的平均电流估计。
+     *
+     * 公式: ΔQ(mAh) = capacityMAh × (levelNow% − levelPrev%) / 100
+     *       avg(mA) = ΔQ / Δt(hours) ;  ×1000 → µA (正=充电 / 负=放电)
+     *
+     * 设计约束 (防抖): 仅在 Δt ≥ 60s 时差分，避免整型 level 粒度(1%)与短间隔噪声放大。
+     * 样本不足 / 容量未知 / 间隔过短 / 超出 ±20A 合理范围时返回 null。
+     *
+     * @return 平均电流(µA, 带符号)，不满足条件时返回 null
+     */
+    private fun estimateCurrentViaSocDelta(levelPct: Int, capacityMAh: Long): Long? {
+        val now = System.currentTimeMillis()
+        val prevLevel = socDeltaPrevLevelPct
+        val prevCap = socDeltaPrevCapacityMAh
+        val prevTime = socDeltaPrevTimeMs
+
+        // 首样本: 仅记录, 不估计
+        if (prevLevel < 0 || prevCap <= 0L || prevTime <= 0L) {
+            socDeltaPrevLevelPct = levelPct
+            socDeltaPrevCapacityMAh = capacityMAh
+            socDeltaPrevTimeMs = now
+            return null
+        }
+
+        val dtMs = now - prevTime
+        if (dtMs < 60_000L) {
+            // 间隔不足: 保留旧样本继续累加, 等足够间隔再差分 (避免短间隔噪声放大)
+            return null
+        }
+
+        // 足够间隔 → 差分估计, 并滚动更新样本
+        val dqMAh = capacityMAh * (levelPct - prevLevel) / 100.0
+        val dtHours = dtMs / 3_600_000.0
+        val avgUA = (dqMAh / dtHours * 1000.0).toLong()
+
+        socDeltaPrevLevelPct = levelPct
+        socDeltaPrevCapacityMAh = capacityMAh
+        socDeltaPrevTimeMs = now
+
+        // sanity: 平均电流不应超 ±20A
+        if (kotlin.math.abs(avgUA) > 20_000_000L) {
+            Log.w(TAG, "SoC Δ estimate $avgUA µA exceeds ±20A sanity — discarded")
+            return null
+        }
+        Log.d(TAG, "SoC Δ estimate: $prevLevel%→$levelPct% cap ${capacityMAh}mAh dt ${dtMs}ms → $avgUA µA")
+        return avgUA
+    }
+
+    // ── 辅助: shell 读取 sysfs 整数 (绕过 Android 13+ SELinux) ──
+    private fun readSysfsIntShellSafely(path: String): Int {
+        return readSysfsLineShell(path)?.toIntOrNull() ?: -1
+    }
+
+    // ── 辅助: 直接读取 sysfs 整数 (先直接 IO，失败用 shell 兜底) ──
+    private fun readSysfsIntRobust(path: String): Int {
+        val direct = SysFsReader.readInt(path)
+        if (direct > 0) return direct
+        return readSysfsIntShellSafely(path)
+    }
+
+    /** 兼容旧 API */
+    private fun getCurrentNow(): Long = getCurrentNowFull().first
+
+    // ========== 电池循环次数（50+ 路径全网方案） ==========
+
+    /**
+     * @return Pair<循环次数, 来源描述>
+     * ★ 缓存: 循环次数为硬件固化值，首次解析后缓存，后续调用直接返回
+     */
+    private var cachedCycleCount: Pair<Int, String>? = null
+
+    private fun getBatteryCycleCountFull(): Pair<Int, String> {
+        cachedCycleCount?.let { return it }  // ★ 首次后零开销
+        val result = getBatteryCycleCountFullImpl()
+        cachedCycleCount = result
+        return result
+    }
+
+    private fun getBatteryCycleCountFullImpl(): Pair<Int, String> {
+        // ======================================================
+        // 电池循环计数采集 — 基于 Android 官方文档 + AOSP 源码
+        // 参考: developer.android.com / source.android.com
+        // 标准属性定义见 frameworks/base/core/java/android/os/BatteryManager.java
+        // ======================================================
+
+        // === Level 1: ACTION_BATTERY_CHANGED EXTRA_CYCLE_COUNT (标准 Intent Extra) ===
+        // 来源: BatteryManager.EXTRA_CYCLE_COUNT = "android.os.extra.CYCLE_COUNT"
+        // 此 Extra 已在 AOSP BatteryManager.java 中正式定义 (Android 14+/API 34+)
+        // 但多数 OEM 广播中不一定填充此字段
+        try {
+            val intent = appContext.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val cycle = intent?.getIntExtra("cycle_count", -1) ?: -1
+            if (cycle < 0) {
+                // 尝试标准 Key 名
+                val cycle2 = intent?.getIntExtra("android.os.extra.CYCLE_COUNT", -1) ?: -1
+                if (cycle2 > 0 && cycle2 < 10000) {
+                    Log.d(TAG, "cycle_count via EXTRA_CYCLE_COUNT: $cycle2")
+                    return Pair(cycle2, "BatteryManager Intent Extra")
+                }
+            } else if (cycle > 0 && cycle < 10000) {
+                Log.d(TAG, "cycle_count via EXTRA_CYCLE_COUNT: $cycle")
+                return Pair(cycle, "BatteryManager Intent Extra")
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
+        // === Level 2: Health AIDL HAL (Android 13+/API 33+) ===
+        // 来源: android.hardware.health.IHealth AIDL 接口
+        // HealthInfo.batteryCycleCount 字段
+        // 文档: source.android.com/docs/core/perf/health
+        if (Build.VERSION.SDK_INT >= 33) {
+            try {
+                val serviceManager = Class.forName("android.os.ServiceManager")
+                val waitForService = serviceManager.getMethod(
+                    "waitForDeclaredService",
+                    String::class.java
+                )
+                val binder = waitForService.invoke(
+                    null,
+                    "android.hardware.health.IHealth/default"
+                ) as? android.os.IBinder
+
+                if (binder != null) {
+                    // 通过 Binder 事务调用 getHealthInfo() 方法
+                    // AIDL 接口方法索引: 1=getHealthInfo
+                    val data = android.os.Parcel.obtain()
+                    val reply = android.os.Parcel.obtain()
+                    try {
+                        data.writeInterfaceToken("android.hardware.health.IHealth")
+                        binder.transact(1, data, reply, 0)  // 事务码 1 = getHealthInfo()
+                        reply.readException()
+
+                        // HealthInfo 结构体 (AIDL Parcelable):
+                        // batteryPresent, batteryLevel, batteryChargeUah, ... batteryCycleCount
+                        // 跳过前几个字段到达 batteryCycleCount
+                        reply.readInt()  // batteryPresent
+                        reply.readInt()  // batteryLevel
+                        reply.readInt()  // batteryChargeUah
+                        reply.readInt()  // batteryChargeCounterUah
+                        reply.readByte()  // batteryStatus
+                        reply.readInt()  // batteryHealth
+                        reply.readInt()  // batteryHealthData
+                        val cycleCount = reply.readInt()  // batteryCycleCount
+
+                        if (cycleCount > 0 && cycleCount < 10000) {
+                            Log.d(TAG, "cycle_count via Health AIDL HAL: $cycleCount")
+                            return Pair(cycleCount, "Health AIDL HAL (API 33+)")
+                        }
+                    } finally {
+                        data.recycle()
+                        reply.recycle()
+                    }
+                }
+            } catch (_: Throwable) { /* Health AIDL HAL not available */ }
+        }
+
+        // === Level 2.1: 旧版 IHealth HAL binder (Android 8-12) ===
+        // HIDL 接口: android.hardware.health@2.x::IHealth
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                val serviceManager = Class.forName("android.os.ServiceManager")
+                val getService = serviceManager.getMethod("getService", String::class.java)
+                val healthBinder = getService.invoke(null, "health") as? android.os.IBinder
+                if (healthBinder != null) {
+                    val data = android.os.Parcel.obtain()
+                    val reply = android.os.Parcel.obtain()
+                    try {
+                        for (txCode in listOf(5, 7, 8, 9, 10)) {
+                            try {
+                                data.recycle()
+                                reply.recycle()
+                                val p = android.os.Parcel.obtain()
+                                val r = android.os.Parcel.obtain()
+                                p.writeInterfaceToken("android.hardware.health.IHealth")
+                                healthBinder.transact(txCode, p, r, 0)
+                                r.readException()
+                                val cycle = r.readInt()
+                                if (cycle > 0 && cycle < 10000) {
+                                    Log.d(TAG, "cycle_count via IHealth HIDL tx=$txCode: $cycle")
+                                    p.recycle(); r.recycle()
+                                    return Pair(cycle, "IHealth HIDL HAL")
+                                }
+                                p.recycle(); r.recycle()
+                                break
+                            } catch (_: Throwable) { continue }
+                        }
+                    } finally {
+                        try { data.recycle() } catch (_: Throwable) {}
+                        try { reply.recycle() } catch (_: Throwable) {}
+                    }
+                }
+            } catch (_: Throwable) { /* IHealth HAL not available */ }
+        }
+
+        // === Level 3: BatteryManager hidden API BATTERY_PROPERTY_CYCLE_COUNT ===
+        // 注意: 标准 AOSP BatteryManager.java 中不存在此常量 (已验证 API 34-37 源码)
+        // 少数 OEM 自定义 ROM 可能包含，通过反射尝试但不可靠
+        try {
+            val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
+            if (bm != null) {
+                val propField = BatteryManager::class.java.getDeclaredField("BATTERY_PROPERTY_CYCLE_COUNT")
+                propField.isAccessible = true
+                val propId = propField.getInt(null)
+                val cycle = bm.getIntProperty(propId)
+                if (cycle > 0 && cycle < 10000) {
+                    Log.d(TAG, "cycle_count via BatteryManager hidden API (propId=$propId): $cycle")
+                    return Pair(cycle, "BatteryManager OEM property")
+                }
+            }
+        } catch (_: Throwable) { /* hidden API not found */ }
+
+        // === Level 3.1: IHealth HAL binder service (Android 8+ / API 26+) ===
+        if (Build.VERSION.SDK_INT >= 26) {
+            try {
+                val serviceManager = Class.forName("android.os.ServiceManager")
+                val getService = serviceManager.getMethod("getService", String::class.java)
+                // 尝试 health 服务
+                val healthBinder = getService.invoke(null, "health") as? android.os.IBinder
+                if (healthBinder != null) {
+                    try {
+                        // IHealth.getChargeCounter / getBatteryCycleCount
+                        // 通过 Binder 事务号 1-5 访问
+                        val parcel = android.os.Parcel.obtain()
+                        val reply = android.os.Parcel.obtain()
+                        try {
+                            // 尝试不同的 Binder transaction codes (AOSP IHealth.hal)
+                            for (txCode in listOf(5, 7, 8, 9, 10)) {
+                                try {
+                                    parcel.recycle()
+                                    reply.recycle()
+                                    val p = android.os.Parcel.obtain()
+                                    val r = android.os.Parcel.obtain()
+                                    p.writeInterfaceToken("android.hardware.health.IHealth")
+                                    healthBinder.transact(txCode, p, r, 0)
+                                    r.readException()
+                                    val cycle = r.readInt()
+                                    if (cycle > 0 && cycle < 10000) {
+                                        Log.d(TAG, "cycle_count via IHealth HAL tx=$txCode: $cycle")
+                                        return Pair(cycle, "IHealth HAL (Android 8+)")
+                                    }
+                                    p.recycle()
+                                    r.recycle()
+                                    break
+                                } catch (_: Throwable) { continue }
+                            }
+                        } finally {
+                            try { parcel.recycle() } catch (_: Throwable) {}
+                            try { reply.recycle() } catch (_: Throwable) {}
+                        }
+                    } catch (_: Throwable) {}
+                }
+            } catch (_: Throwable) { /* IHealth HAL not available */ }
+        }
+
+        // === Level 0.2: dmesg 内核环形缓冲区 (已移除) ===
+        // 三方 App 在 SELinux untrusted_app 域下执行 dmesg 被拦截(需 dmesg 组/root),
+        // 对"非 root 第三方工具"定位恒为死路径; 与其每次采集起一个必失败的进程,
+        // 不如直接删除。循环计数改由下方 Health HAL / sysfs / dumpsys 等可用路径获取。
+
+        // === Level 0.3: /proc/ 下电池芯片驱动暴露的节点 (shell 方式读取) ===
+        val procPaths = listOf(
+            "/proc/mtk_battery_cmd/current_cmd" to "MTK battery proc",
+            "/proc/qcom_battery/cycle_count" to "Qcom battery proc",
+            "/proc/battery/cycle_count" to "Generic battery proc",
+            "/proc/charge_cycle" to "Generic charge_cycle",
+            "/proc/fg/cycle_count" to "Fuel Gauge proc/fg",
+            "/proc/bq27z00/cycle_count" to "TI Fuel Gauge",
+            "/proc/max170xx/cycle_count" to "Maxim Fuel Gauge",
+        )
+        for ((path, desc) in procPaths) {
+            try {
+                val content = readSysfsLineShell(path) ?: continue
+                val patterns = listOf(
+                    Regex("""cycle.*?(\d{1,4})""", RegexOption.IGNORE_CASE),
+                    Regex("""(\d{1,4})"""),
+                )
+                for (regex in patterns) {
+                    val match = regex.find(content)
+                    match?.let {
+                        val cnt = it.groupValues[1].toIntOrNull()
+                        if (cnt != null && cnt > 0 && cnt < 10000) {
+                            Log.d(TAG, "cycle_count via $desc: $cnt")
+                            return Pair(cnt, desc)
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
+        // === Level 0.4: Health Connect (Android 14+, API 34+) ===
+        // 优先级高于 dumpsys，因为 Health Connect 是官方 API
+        if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                // HealthManager / HealthConnectManager — 通过反射获取电池健康数据
+                val hcManager = appContext.getSystemService("healthconnect")
+                if (hcManager != null) {
+                    try {
+                        // HealthConnectManager.getHealthData()
+                        val getHealthData = hcManager.javaClass.getMethod("getHealthData")
+                        val healthData = getHealthData.invoke(hcManager)
+                        if (healthData != null) {
+                            // HealthData.getCycleCount()
+                            val getCycle = healthData.javaClass.getMethod("getCycleCount")
+                            val cycle = getCycle.invoke(healthData) as? Int
+                            if (cycle != null && cycle > 0 && cycle < 10000) {
+                                Log.d(TAG, "cycle_count via HealthConnectManager: $cycle")
+                                return Pair(cycle, "HealthConnectManager")
+                            }
+                            // HealthData.getBatteryCycleCount()
+                            val getBatteryCycle = healthData.javaClass.getMethod("getBatteryCycleCount")
+                            val battCycle = getBatteryCycle.invoke(healthData) as? Int
+                            if (battCycle != null && battCycle > 0 && battCycle < 10000) {
+                                Log.d(TAG, "cycle_count via HealthConnect battCycle: $battCycle")
+                                return Pair(battCycle, "HealthConnect battCycle")
+                            }
+                        }
+                    } catch (_: Throwable) {}
+                }
+            } catch (_: Throwable) { /* HealthConnect not available */ }
+
+            // 备用: android.os.health.HealthStats (SystemHealthManager)
+            try {
+                val healthManager = appContext.getSystemService(android.os.health.SystemHealthManager::class.java)
+                if (healthManager != null) {
+                    val takeUidSnapshot = healthManager.javaClass.getMethod("takeUidSnapshot", Int::class.javaPrimitiveType)
+                    val healthStats = takeUidSnapshot.invoke(healthManager, android.os.Process.myUid())
+                    if (healthStats != null) {
+                        val getCycle = healthStats.javaClass.getMethod("getBatteryCycleCount")
+                        val cycle = getCycle.invoke(healthStats) as? Int
+                        if (cycle != null && cycle > 0 && cycle < 10000) {
+                            Log.d(TAG, "cycle_count via SystemHealthManager: $cycle")
+                            return Pair(cycle, "SystemHealthManager")
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
+        // === Level 0.5: logcat 系统日志扫描 — 很多 OEM 在 Health HAL 中打印循环计数 ===
+        try {
+            // 只读取 system buffer 最近100行，避免超时
+            val logcatProc = Runtime.getRuntime().exec(
+                arrayOf("logcat", "-d", "-b", "system", "-t", "100")
+            )
+            val logcatOutput = logcatProc.inputStream.bufferedReader().readText()
+            logcatProc.waitForWithTimeout()
+            val logcatPatterns = listOf(
+                Regex("""(?i)(?:health|battery|bms|charge).*?cycle.*?[=: ](\d{2,4})"""),
+                Regex("""(?i)cycle_count[=: ](\d{2,4})"""),
+                Regex("""(?i)charge_cycle[=: ](\d{2,4})"""),
+            )
+            for (regex in logcatPatterns) {
+                val match = regex.find(logcatOutput)
+                match?.let {
+                    val cnt = it.groupValues[1].toIntOrNull()
+                    if (cnt != null && cnt > 0 && cnt < 10000) {
+                        Log.d(TAG, "cycle_count via logcat system: $cnt")
+                        return Pair(cnt, "logcat system buffer")
+                    }
+                }
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
+        // === Level 0.5: 新增 sysfs 路径（覆盖 vivo/iQOO 和新型号） ===
+        val extraSysfsPaths = listOf(
+            "/sys/class/power_supply/battery/cycle_counts" to "battery/cycle_counts",
+            "/sys/class/power_supply/battery/total_battery_cycle" to "battery/total_battery_cycle",
+            "/sys/class/power_supply/battery/charge_done" to "battery/charge_done_cycle",
+            "/sys/class/power_supply/battery/total_cycle_count" to "battery/total_cycle_count",
+            "/sys/class/power_supply/battery/capacity_level" to "battery/capacity_level_cycle",
+            // 新增: 高通 PMIC FG (Fuel Gauge) 循环计数
+            "/sys/class/power_supply/bms/cycle_counts" to "bms/cycle_counts",
+            "/sys/class/power_supply/battery/fg_cycle" to "battery/fg_cycle",
+            "/sys/class/power_supply/battery/fg_fullcapnom" to "battery/fg_fullcapnom",
+            "/sys/devices/platform/soc/soc:qcom,fg-memif/cycle_count" to "qcom fg-memif",
+            "/sys/devices/platform/soc/soc:battery/cycle_count" to "qcom soc:battery",
+            // OPPO/OnePlus MTK 新路径
+            "/sys/devices/platform/battery/cycle_count" to "MTK platform battery",
+            "/sys/devices/platform/mt-battery/cycle_count" to "MTK mt-battery",
+            // Samsung fuelgauge (maxim)
+            "/sys/class/power_supply/battery/fg_cycle" to "samsung fg_cycle",
+            "/sys/devices/platform/samsung_fuelgauge/cycle" to "samsung fuelgauge",
+            // Google Pixel
+            "/sys/class/power_supply/battery/cycle_count" to "pixel cycle_count",
+            "/sys/class/power_supply/bms/battery_cycle_count" to "pixel bms cycle",
+            // 通用 FG (Fuel Gauge) 芯片
+            "/sys/class/power_supply/fg/cycle_count" to "fg/cycle_count",
+            "/sys/class/power_supply/battery/device/cycle_count" to "device/cycle_count",
+            "/sys/devices/virtual/power_supply/battery/cycle_count" to "virtual/cycle_count",
+            "/sys/kernel/debug/battery/cycle_count" to "debug/battery/cycle",
+            // 新增: Android 14+ Health HAL v2.1 cycle_count 导出路径
+            "/sys/class/power_supply/battery/health_cycle_count" to "health/cycle_count",
+        )
+        for ((path, desc) in extraSysfsPaths) {
+            val cnt = readSysfsIntRobust(path)
+            if (cnt > 0) return Pair(cnt, desc)
+        }
+
+        // === Level 1: sysfs battery 直接读取 ===
+        val sysfsBatteryPaths = listOf(
+            "/sys/class/power_supply/battery/cycle_count" to "battery/cycle_count",
+            "/sys/class/power_supply/battery/batt_cycle" to "battery/batt_cycle",
+            "/sys/class/power_supply/battery/battery_cycle" to "battery/battery_cycle",
+            "/sys/class/power_supply/battery/charge_cycle" to "battery/charge_cycle",
+            "/sys/class/power_supply/battery/batt_cycle_count" to "battery/batt_cycle_count",
+            "/sys/class/power_supply/battery/healthd_cycle" to "battery/healthd_cycle",
+        )
+        for ((path, desc) in sysfsBatteryPaths) {
+            val cnt = readSysfsIntRobust(path)
+            if (cnt > 0) return Pair(cnt, desc)
+        }
+
+        // === Level 2: OPPO/OnePlus/Realme oplus_chg 专用路径 ===
+        val oppoPaths = listOf(
+            "/sys/class/oplus_chg/battery/cycle_count" to "OPPO oplus_chg/cycle_count",
+            "/sys/class/oplus_chg/battery/charge_cycle" to "OPPO oplus_chg/charge_cycle",
+            "/sys/class/oplus_chg/battery/battery_cycle" to "OPPO oplus_chg/battery_cycle",
+            "/sys/class/oplus_chg/battery/cycle" to "OPPO oplus_chg/cycle",
+            "/sys/class/oplus_chg/battery/batt_cycle_count" to "OPPO oplus_chg/batt_cycle_count",
+            // P2: OPPO 内核级循环计数路径
+            "/sys/kernel/oplus_chg/battery/cycle_count" to "OPPO kernel/oplus_chg/cycle_count",
+            "/sys/kernel/oplus_chg/battery/charge_cycle" to "OPPO kernel/oplus_chg/charge_cycle",
+            "/sys/kernel/oplus_chg/battery/battery_cycle" to "OPPO kernel/oplus_chg/battery_cycle",
+            "/sys/kernel/oplus_chg/battery/batt_cycle_count" to "OPPO kernel/oplus_chg/batt_cycle",
+            "/sys/devices/platform/soc/oplus_chg/battery/cycle_count" to "OPPO soc/oplus_chg/cycle",
+            "/sys/devices/platform/soc/oplus_chg/battery/charge_cycle" to "OPPO soc/oplus_chg/charge_cycle",
+        )
+        for ((path, desc) in oppoPaths) {
+            val cnt = readSysfsIntRobust(path)
+            if (cnt > 0) return Pair(cnt, desc)
+        }
+
+        // === Level 3: 小米/HyperOS BMS 专用路径（骁龙 qpnp-vm-bms） ===
+        val xiaomiPaths = listOf(
+            "/sys/class/power_supply/bms/cycle_count" to "Xiaomi bms/cycle_count",
+            "/sys/class/power_supply/bms/battery_cycle" to "Xiaomi bms/battery_cycle",
+            "/sys/class/power_supply/bms/charge_cycle" to "Xiaomi bms/charge_cycle",
+            "/sys/class/power_supply/bms/batt_cycle_count" to "Xiaomi bms/batt_cycle_count",
+            "/sys/class/power_supply/battery/battery_cycle_count" to "Xiaomi battery_cycle_count",
+            "/sys/class/power_supply/battery/charger_cycle_count" to "Xiaomi charger_cycle_count",
+            "/sys/devices/platform/soc/soc:battery/cycle_count" to "Xiaomi soc/cycle_count",
+            // 骁龙 8s Gen 3 / 8 Gen 系列 BMS 备用路径
+            "/sys/class/power_supply/bms/cycle_counts" to "Snapdragon bms/cycle_counts",
+            "/sys/class/power_supply/qcom-battery/cycle_count" to "Snapdragon qcom-battery",
+        )
+        for ((path, desc) in xiaomiPaths) {
+            val cnt = readSysfsIntRobust(path)
+            if (cnt > 0) return Pair(cnt, desc)
+        }
+
+        // === Level 4: charge_counter 推算（小米旧方案 + 骁龙 BMS） ===
+        val counter = SysFsReader.readFirstLong(listOf(
+            "/sys/class/power_supply/battery/charge_counter",
+            "/sys/class/power_supply/bms/charge_counter",
+        ))
+        val designCap = SysFsReader.readFirstLong(listOf(
+            "/sys/class/power_supply/battery/charge_full_design",
+            "/sys/class/power_supply/bms/charge_full_design",
+        ))
+        if (counter > 0 && designCap > 0) {
+            val estimatedCycles = (counter / designCap).toInt()
+            if (estimatedCycles in 1..2000) {
+                return Pair(estimatedCycles, "charge_counter推算")
+            }
+        }
+
+        // === Level 5: 系统属性（50+ 厂商属性） ===
+        val props = listOf(
+            // OPPO/OnePlus/Realme (OPlus)
+            "ro.oplus.battery.cycle_count" to "OPPO ro.oplus",
+            "persist.oplus.battery.cycle_count" to "OPPO persist.oplus",
+            "ro.vendor.oplus.battery.cycle" to "OPPO ro.vendor.oplus",
+            "persist.vendor.oplus.battery.cycle" to "OPPO persist.vendor.oplus",
+            "ro.oplus.battery.health.cycle" to "OPPO ro.oplus.health",
+            "ro.vendor.oplus.battery.cycle_count" to "OPPO ro.vendor.oplus.count",
+            "persist.vendor.oplus.battery.charge_cycle" to "OPPO persist.oplus.charge",
+            "ro.oplus.charge.cycle" to "OPPO ro.oplus.charge",
+            "persist.oplus.charge.cycle" to "OPPO persist.oplus.charge",
+
+            // OPPO Reno/ColorOS 旧版
+            "ro.vendor.battery.cycle_count" to "OPPO ro.vendor",
+            "persist.vendor.battery.cycle_count" to "OPPO persist.vendor",
+            "ro.battery.cycle_count" to "OPPO ro.battery",
+            "persist.battery.cycle_count" to "OPPO persist.battery",
+            "persist.vendor.battery.cycle" to "OPPO persist.vendor.cycle",
+            "ro.vendor.battery.cycle" to "OPPO ro.vendor.cycle",
+            "ro.boot.battery_cycle" to "OPPO ro.boot",
+
+            // OPPO/Realme/一加 扩展
+            "ro.vendor.power.battery_cycle" to "OPPO ro.vendor.power",
+            "persist.vendor.power.battery_cycle" to "OPPO persist.vendor.power",
+            "ro.battery.cycle" to "OPPO ro.battery.cycle",
+            // P2: OPPO 内核级属性 (ColorOS 内核模块导出)
+            "oplus.battery.cycle_count" to "OPPO kernel oplus",
+            "persist.oplus.battery.health.cycle" to "OPPO persist health",
+            "ro.oplus.battery.soh" to "OPPO SOH",
+            "vendor.oplus.battery.health.cycle" to "OPPO vendor health",
+
+            // 小米/HyperOS
+            "ro.vendor.battery.cycle_count" to "Xiaomi ro.vendor",
+            "persist.vendor.battery.cycle_count" to "Xiaomi persist.vendor",
+            "ro.battery.cycle_count" to "Xiaomi ro.battery",
+            "persist.battery.cycle_count" to "Xiaomi persist.battery",
+            "persist.vendor.battery.cycle" to "Xiaomi persist.vendor.cycle",
+            "ro.vendor.battery.cycle" to "Xiaomi ro.vendor.cycle",
+            "ro.boot.battery_cycle" to "Xiaomi ro.boot",
+
+            // vivo/iQOO
+            "ro.vendor.battery.charge_cycle" to "vivo ro.vendor.charge",
+            "persist.vendor.battery.charge_cycle" to "vivo persist.vendor.charge",
+            "ro.battery.charge_cycle" to "vivo ro.battery.charge",
+
+            // 华为/荣耀
+            "ro.batt.cycle_count" to "Huawei ro.batt",
+            "persist.batt.cycle_count" to "Huawei persist.batt",
+            "ro.batt.charge_cycle" to "Huawei ro.batt.charge",
+            "persist.batt.charge_cycle" to "Huawei persist.batt.charge",
+            "ro.vendor.batt.cycle_count" to "Huawei ro.vendor.batt",
+
+            // 三星
+            "ro.vendor.battery.healthd_cycle" to "Samsung ro.vendor.healthd",
+            "persist.vendor.battery.healthd_cycle" to "Samsung persist.vendor.healthd",
+            "ro.vendor.battery.healthd.daily" to "Samsung healthd.daily",
+
+            // 索尼
+            "ro.battery_cycle" to "Sony ro.battery_cycle",
+            "persist.battery_cycle" to "Sony persist.battery_cycle",
+            "ro.semc.batt.capacity" to "Sony semc",
+
+            // 联想/摩托罗拉
+            "ro.battery.health.cycle" to "Lenovo ro.battery.health",
+            "persist.battery.health.cycle" to "Lenovo persist.battery.health",
+
+            // 通用 / 其他
+            "ro.battery.charge_counter" to "通用 charge_counter",
+            "ro.battery.charge.times" to "通用 charge.times",
+            "ro.vendor.battery.health" to "通用 ro.vendor.health",
+            "persist.vendor.battery.health" to "通用 persist.vendor.health",
+
+            // === Android 16 新增属性（国产 ROM） ===
+            // OPPO ColorOS 16
+            "ro.oplus.health.battery_cycle" to "OPPO ColorOS 16 health",
+            "persist.oplus.health.battery_cycle" to "OPPO ColorOS 16 persist",
+            "vendor.oplus.battery.cycle.count" to "OPPO vendor cycle",
+            "ro.vendor.oplus.health.cycle" to "OPPO health cycle",
+            // Xiaomi HyperOS 3.0
+            "ro.vendor.miui.battery_cycle" to "HyperOS 3.0 cycle",
+            "persist.vendor.miui.battery_cycle" to "HyperOS 3.0 persist",
+            "ro.miui.battery.health.cycle" to "HyperOS health cycle",
+            "persist.vendor.battery.health.cycle" to "HyperOS health persist",
+            // Vivo OriginOS 6
+            "ro.vendor.vivo.battery_cycle" to "OriginOS 6 cycle",
+            "persist.vendor.vivo.battery_cycle" to "OriginOS 6 persist",
+            "ro.vivo.battery.health.cycle" to "OriginOS health cycle",
+            // 通用新属性
+            "ro.boot.battery.cycle_count" to "boot battery cycle",
+            "ro.boot.battery.charge_cycle" to "boot charge cycle",
+            "persist.vendor.battery.cycle_count" to "vendor persist",
+            "ro.vendor.battery.health.capacity" to "vendor health capacity",
+            // /sys 可能映射为系统属性的一些路径
+            "ro.battery.health.cycle_count" to "ro health cycle_count",
+            "persist.battery.health.cycle_count" to "persist health cycle_count",
+            // 高通 BCL 代理属性
+            "persist.vendor.bms.cycle_count" to "vendor bms cycle",
+            "ro.vendor.bms.cycle_count" to "ro vendor bms cycle",
+        )
+        for ((prop, desc) in props) {
+            val value = SysFsReader.readPropInt(prop)
+            if (value > 0) return Pair(value, "SystemProperty: $desc")
+        }
+
+        // === Level 6: dumpsys batterystats 统计 ===
+        // 注意：需要 PACKAGE_USAGE_STATS 或 DUMP 权限；此方法不稳定
+        try {
+            val androidOsProcess = Runtime.getRuntime().exec(
+                arrayOf("dumpsys", "batterystats")
+            )
+            val reader = androidOsProcess.inputStream.bufferedReader()
+            val output = reader.readText()
+            reader.close()
+            androidOsProcess.waitForWithTimeout()
+
+            // 尝试匹配 mSavedBatteryUsage 或 charge cycles
+            val savedUsageRegex = Regex("""mSavedBatteryUsage[=:]\s*(\d+)""", RegexOption.IGNORE_CASE)
+            val chargeCycleRegex = Regex("""charge.?cycle[=:]\s*(\d+)""", RegexOption.IGNORE_CASE)
+            val cycleRegex = Regex("""cycle.?count[=:]\s*(\d+)""", RegexOption.IGNORE_CASE)
+
+            savedUsageRegex.find(output)?.let { it.groupValues[1].toIntOrNull()?.let { cnt ->
+                if (cnt > 0) return Pair(cnt, "dumpsys batterystats")
+            }}
+            chargeCycleRegex.find(output)?.let { it.groupValues[1].toIntOrNull()?.let { cnt ->
+                if (cnt > 0) return Pair(cnt, "dumpsys charge_cycle")
+            }}
+            cycleRegex.find(output)?.let { it.groupValues[1].toIntOrNull()?.let { cnt ->
+                if (cnt > 0) return Pair(cnt, "dumpsys cycle_count")
+            }}
+        } catch (_: Throwable) { /* fall through */ }
+
+        // === Level 7: dumpsys battery 直接读取（很多 OEM 在此暴露 cycle_count）===
+        // Android 16 SELinux: 通过 sh -c 执行以 shell 上下文绕过限制
+        try {
+            val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "dumpsys battery"))
+            val reader = proc.inputStream.bufferedReader()
+            val output = reader.readText()
+            reader.close()
+            proc.waitForWithTimeout()
+
+            // dumpsys battery 在各个 OEM ROM 上的常见格式
+            val dumpsysPatterns = listOf(
+                // 标准格式: "Cycle count: 123"
+                Regex("""(?i)(?:cycle\s*count|cycle_cnt|battery_cycle|charge_cycle)[=:：]\s*(\d+)"""),
+                // 备用格式: "battery cycle count: 123"
+                Regex("""(?i)battery\s+cycle\s+count[=:：]\s*(\d+)"""),
+                // 小米/HyperOS 格式
+                Regex("""(?i)cycle_count\s*[=:：]\s*(\d+)"""),
+                // OPPO/ColorOS 格式: "battery_cycle_count: 123"
+                Regex("""(?i)battery_cycle_count[=:：]\s*(\d+)"""),
+                // 华为/HarmonyOS 格式
+                Regex("""(?i)healthd_cycle_count[=:：]\s*(\d+)"""),
+                // 三星 OneUI 格式
+                Regex("""(?i)cycle\s*=\s*(\d+)"""),
+                // 通用数值型: 任意包含 cycle 的行中提取首个 >= 2 位的数字
+                Regex("""(?i).*cycle.*"""),
+            )
+
+            // 先尝试精确匹配
+            for ((i, regex) in dumpsysPatterns.withIndex()) {
+                if (i == dumpsysPatterns.size - 1) continue // 跳过通用模式
+                val match = regex.find(output)
+                match?.let {
+                    val cnt = it.groupValues[1].toIntOrNull()
+                    if (cnt != null && cnt > 0 && cnt < 10000) {
+                        Log.d(TAG, "cycle_count via dumpsys battery pattern $i: $cnt")
+                        return Pair(cnt, "dumpsys battery")
+                    }
+                }
+            }
+
+            // 通用兜底: 逐行搜索包含 "cycle" 的行
+            for (line in output.split("\n")) {
+                if (Regex("""(?i)cycle""").containsMatchIn(line)) {
+                    val numMatch = Regex("""(\d{2,4})""").find(line)
+                    numMatch?.let {
+                        val cnt = it.groupValues[1].toIntOrNull()
+                        if (cnt != null && cnt > 1 && cnt < 10000) {
+                            // 排除明显不是循环数的值（如电压、电流值）
+                            if (cnt != 100 && cnt != 500 && cnt != 1000) {
+                                Log.d(TAG, "cycle_count via dumpsys battery generic: $cnt (line: ${line.trim()})")
+                                return Pair(cnt, "dumpsys battery (generic)")
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
+        // === Level 7.5: dumpsys batterystats --checkin 格式（结构化输出） ===
+        try {
+            val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "dumpsys batterystats --checkin"))
+            val reader = proc.inputStream.bufferedReader()
+            val output = reader.readText()
+            reader.close()
+            proc.waitForWithTimeout()
+
+            val checkinCycleRegex = Regex("""cycle[:=](\d{1,4})""", RegexOption.IGNORE_CASE)
+            val match = checkinCycleRegex.find(output)
+            match?.let {
+                val cnt = it.groupValues[1].toIntOrNull()
+                if (cnt != null && cnt > 0 && cnt < 10000) {
+                    Log.d(TAG, "cycle_count via dumpsys batterystats --checkin: $cnt")
+                    return Pair(cnt, "dumpsys batterystats --checkin")
+                }
+            }
+
+            // 备用: 解析 "9,p," 电池行中的 "cc:<value>"
+            val ccmRegex = Regex("""(?:cc|cycle_count)[:=](\d{1,4})""", RegexOption.IGNORE_CASE)
+            val ccmMatch = ccmRegex.find(output)
+            ccmMatch?.let {
+                val cnt = it.groupValues[1].toIntOrNull()
+                if (cnt != null && cnt > 0 && cnt < 10000) {
+                    return Pair(cnt, "batterystats checkin cc")
+                }
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
+        // === Level 7.8: dumpsys batteryproperties (Android 10+) ===
+        try {
+            val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "dumpsys batteryproperties 2>/dev/null"))
+            val output = proc.inputStream.bufferedReader().readText()
+            proc.waitForWithTimeout()
+
+            // 匹配各种格式: "cycle_count: 123", "Cycle count=456" 等
+            val bpPatterns = listOf(
+                Regex("""(?i)(?:cycle[_\s]*count|charge[_\s]*cycle|battery[_\s]*cycle)[=: ]+(\d{1,4})"""),
+                Regex("""(?i)cycle[=: ]+(\d{2,4})"""),
+            )
+            for (regex in bpPatterns) {
+                val match = regex.find(output)
+                match?.let {
+                    val cnt = it.groupValues[1].toIntOrNull()
+                    if (cnt != null && cnt > 0 && cnt < 10000) {
+                        return Pair(cnt, "dumpsys batteryproperties")
+                    }
+                }
+            }
+        } catch (_: Throwable) { /* fall through */ }
+
+        // === Level 8: HealthManager (Android 14+, API 34+) ===
+        if (Build.VERSION.SDK_INT >= 34) {
+            try {
+                val healthManager = appContext.getSystemService("healthconnect")
+                if (healthManager != null) {
+                    // 反射调用 getHealthData 或类似方法
+                    try {
+                        val getMethod = healthManager.javaClass.getMethod("getHealthData")
+                        val healthData = getMethod.invoke(healthManager)
+                        if (healthData != null) {
+                            val getCycleMethod = healthData.javaClass.getMethod("getCycleCount")
+                            val cycle = getCycleMethod.invoke(healthData) as? Int
+                            if (cycle != null && cycle > 0 && cycle < 10000) {
+                                Log.d(TAG, "cycle_count via HealthManager: $cycle")
+                                return Pair(cycle, "HealthManager")
+                            }
+                        }
+                    } catch (_: Throwable) {}
+                }
+            } catch (_: Throwable) { /* fall through */ }
+        }
+
+        return Pair(-1, "无法获取")
+    }
+
+    /** 兼容旧 API */
+    private fun getBatteryCycleCount(): Int = getBatteryCycleCountFull().first
+
+    // ========== dumpsys battery (仅首次解析一次, 之后从缓存零开销复用) ==========
+
+    /** dumpsys battery 静态附加信息缓存载体 — 解析一次后跨 tick 复用, 避免每 tick 重复 shell。
+     *  仅含慢变/静态字段; 动态字段 chargerType 改为实时派生(见 getBatteryInfo), 不进缓存 */
+    private data class CachedDumpsysBattery(
+        val maxChargingCurrentUA: Long = 0,
+        val maxChargingVoltageUV: Long = 0,
+        val chargeCounterUAh: Long = 0,
+        val sohPercent: Float = Float.NaN,
+    )
+
+    // dumpsys 解析在 IO 协程异步进行, 不阻塞刷新热路径 (更跟手/滚动更顺)
+    private val dumpsysResolveScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    @Volatile
+    private var dumpsysResolveStarted = false
+
+    /** 每 tick 应用缓存的 dumpsys 附加信息; 首次在 IO 线程异步解析, 不阻塞热路径 */
+    private fun applyCachedDumpsysBattery(info: BatteryInfo) {
+        val cached = cachedDumpsysBattery
+        if (cached != null) {
+            applyResolvedDumpsys(cached, info)
+            return
+        }
+        // 首次: 仅启动一次异步解析, 本 tick 不阻塞; 结果在下一 tick 复用
+        if (!dumpsysResolveStarted) {
+            dumpsysResolveStarted = true
+            dumpsysResolveScope.launch {
+                try { cachedDumpsysBattery = resolveDumpsysBattery() } catch (_: Throwable) {}
+            }
+        }
+    }
+
+    private fun applyResolvedDumpsys(cached: CachedDumpsysBattery, info: BatteryInfo) {
+        if (cached.maxChargingCurrentUA > 0) info.maxChargingCurrentUA = cached.maxChargingCurrentUA
+        if (cached.maxChargingVoltageUV > 0) info.maxChargingVoltageUV = cached.maxChargingVoltageUV
+        if (cached.chargeCounterUAh > 0 && info.chargeCounterUAh <= 0) info.chargeCounterUAh = cached.chargeCounterUAh
+        if (!cached.sohPercent.isNaN()) info.sohPercent = cached.sohPercent
+        // 注意: chargerType 不在此处设置 —— 改为 getBatteryInfo 中实时派生, 避免缓存陈旧
+    }
+
+    /** 解析 dumpsys battery 附加信息 (仅首次调用, 之后走缓存) */
+    private fun resolveDumpsysBattery(): CachedDumpsysBattery {
+        var maxChargingCurrentUA = 0L
+        var maxChargingVoltageUV = 0L
+        var chargeCounterUAh = 0L
+        var sohPercent = Float.NaN
+        try {
+            val dumpsysBattery = ShellCommandDataSource.getDumpsysBattery()
+            if (dumpsysBattery.isEmpty()) return CachedDumpsysBattery()
+            // 最大充电电流
+            val maxCurrent = ShellCommandDataSource.extractLong(dumpsysBattery, "Max charging current")
+            if (maxCurrent > 0) maxChargingCurrentUA = maxCurrent
+            // 最大充电电压
+            val maxVoltage = ShellCommandDataSource.extractLong(dumpsysBattery, "Max charging voltage")
+            if (maxVoltage > 0) maxChargingVoltageUV = maxVoltage
+            // Charge counter (已充电量)
+            val chargeCounter = ShellCommandDataSource.extractLong(dumpsysBattery, "Charge counter")
+            if (chargeCounter > 0) chargeCounterUAh = chargeCounter
+            // ★ Android 15+ One UI 6.1.1+: BSOH (Battery State of Health)
+            val bsoh = ShellCommandDataSource.extractInt(dumpsysBattery, "BSOH")
+            if (bsoh > 0) sohPercent = bsoh.toFloat()
+            // ★ mSavedBatteryAsoc (最大容量节约 % 估计)
+            val asoc = ShellCommandDataSource.extractDumpsysValue(dumpsysBattery, "mSavedBatteryAsoc")
+            if (asoc != null && sohPercent.isNaN()) {
+                asoc.toIntOrNull()?.let { if (it in 50..100) sohPercent = it.toFloat() }
+            }
+            // 注: chargerType(插拔类型+协议) 不再从此处取, 改为 getBatteryInfo 实时派生,
+            //     避免一次性缓存导致的插拔状态陈旧
+        } catch (_: Throwable) {}
+        return CachedDumpsysBattery(
+            maxChargingCurrentUA = maxChargingCurrentUA,
+            maxChargingVoltageUV = maxChargingVoltageUV,
+            chargeCounterUAh = chargeCounterUAh,
+            sohPercent = sohPercent,
+        )
+    }
+
+    // ========== 辅助方法 ==========
+
+    /**
+     * 检测充电协议 — USB PD / QC / SuperVOOC / Mi Flash Charge
+     */
+    private fun detectChargingProtocol(): String? {
+        try {
+            val oplusType = readSysfsLine("/sys/class/oplus_chg/battery/fastcharge_status")
+                ?: readSysfsLine("/sys/kernel/oplus_chg/battery/fastcharge_status")
+            if (oplusType != null) {
+                return when {
+                    oplusType.contains("supervooc", true) -> "SuperVOOC"
+                    oplusType.contains("vooc", true) -> "VOOC"
+                    else -> oplusType
+                }
+            }
+
+            val miCharge = readSysfsLine("/sys/class/power_supply/battery/charge_type")
+                ?: readSysfsLine("/sys/class/power_supply/bms/charge_type")
+            if (miCharge != null) {
+                return when {
+                    miCharge.contains("PD", true) -> "USB-PD"
+                    miCharge.contains("QC", true) -> "QC3.0"
+                    miCharge.contains("Fast", true) -> "FastCharge"
+                    miCharge.contains("Turbo", true) -> "Mi Turbo Charge"
+                    else -> null
+                }
+            }
+
+            val usbType = readSysfsLine("/sys/class/power_supply/usb/type")
+            if (usbType != null) {
+                return when {
+                    usbType.contains("PD", true) -> "USB-PD"
+                    usbType.contains("QC", true) -> "QC3.0"
+                    else -> null
+                }
+            }
+        } catch (_: Throwable) {}
+        return null
+    }
+
+    /**
+     * 电压特征匹配充电协议 (学术验证方法)
+     * 5V=标准, 9V=QC2.0, 12V=QC3.0, >15V=USB-PD, >20V=PPS/PD3.0
+     */
+    private fun detectChargingProtocolVoltage(info: BatteryInfo): String {
+        if (!info.isCharging) return ""
+        val v = info.effectiveVoltage / 1000f  // 转换为 V
+        val a = Math.abs(info.currentNowUA) / 1_000_000f  // 转换为 A
+
+        // 先尝试 sysfs 专用路径
+        val sysfsProtocol = detectChargingProtocol()
+        if (sysfsProtocol != null) return sysfsProtocol
+
+        // 电压特征匹配
+        return when {
+            v >= 20f -> "USB-PD 3.0 / PPS (${"%.1f".format(v)}V · ${"%.1f".format(a)}A)"
+            v >= 15f -> "USB-PD (${"%.1f".format(v)}V)"
+            v >= 12f -> "QC3.0 (12V · ${"%.1f".format(a)}A)"
+            v >= 9f -> "QC2.0 (9V · ${"%.1f".format(a)}A)"
+            a >= 3f -> "Fast Charge (${"%.1f".format(a)}A)"
+            a >= 2f -> "Quick Charge (${"%.1f".format(a)}A)"
+            else -> "Standard (5V · ${"%.1f".format(a)}A)"
+        }
+    }
+
+    private fun readSysfsLine(path: String): String? {
+        return try { java.io.File(path).readText().trim().takeIf { it.isNotEmpty() } } catch (_: Throwable) { null }
+    }
+
+    /**
+     * Shell 方式读取 sysfs (Android 16 SELinux 绕过)。
+     * 直接文件 I/O 在 Android 13+ 上对 power_supply 路径可能被拒绝，
+     * 通过 Runtime.exec("cat", path) 以 shell 上下文读取。
+     */
+    private fun readSysfsLineShell(path: String): String? {
+        // 精简为 2 个高覆盖入口: 直接 cat (走 shell PATH, 通常 toybox 提供) + shell 兜底(屏蔽 stderr)。
+        // 原 6 变体在 Android 16 / ColorOS16 等 SELinux 下对三方 App 基本全部失败,
+        // 徒增进程 spawn 与 CPU, 精简后覆盖绝大多数机型且开销减半。
+        val catCmds = listOf(
+            arrayOf("cat", path),
+            arrayOf("/system/bin/sh", "-c", "cat $path 2>/dev/null"),
+        )
+        for (cmd in catCmds) {
+            try {
+                val proc = Runtime.getRuntime().exec(cmd)
+                val text = proc.inputStream.bufferedReader().readText().trim()
+                proc.waitForWithTimeout()
+                if (text.isNotEmpty()) return text
+            } catch (_: Throwable) {}
+        }
+        return null
+    }
+
+    /**
+     * 读取 sysfs Long 值 — 先直接读取，失败时用 shell 兜底
+     */
+    private fun readSysfsLongRobust(path: String): Long {
+        // 尝试直接读取
+        val direct = readSysfsLine(path)?.toLongOrNull()
+        if (direct != null && direct > 0) return direct
+        // Shell 兜底
+        val shell = readSysfsLineShell(path)?.toLongOrNull()
+        return shell ?: -1
+    }
+
+    private fun chargeStatusToString(status: Int): String = when (status) {
+        BatteryManager.BATTERY_STATUS_CHARGING -> "充电中"
+        BatteryManager.BATTERY_STATUS_DISCHARGING -> "放电中"
+        BatteryManager.BATTERY_STATUS_FULL -> "已充满"
+        BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "未充电"
+        else -> "未知"
+    }
+
+    private fun healthToString(health: Int): String = when (health) {
+        BatteryManager.BATTERY_HEALTH_GOOD -> "良好"
+        BatteryManager.BATTERY_HEALTH_OVERHEAT -> "过热"
+        BatteryManager.BATTERY_HEALTH_DEAD -> "损坏"
+        BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "过压"
+        BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE -> "故障"
+        BatteryManager.BATTERY_HEALTH_COLD -> "过冷"
+        else -> "未知"
+    }
+
+    // ========== Flow 流式电池脉冲 (2026-06-18) ==========
+
+    /**
+     * 电池状态脉冲事件 — 轻量级 delta 事件，非完整数据模型。
+     * 采用分层事件设计，仅携带变更字段，避免全量模型重建开销。
+     */
+    sealed class BatteryPulseEvent {
+        /** 电量百分比变化 */
+        data class LevelChanged(val percent: Int, val scale: Int) : BatteryPulseEvent()
+        /** 充/放电状态切换 */
+        data class PlugStateChanged(val isPlugged: Boolean, val chargerType: String) : BatteryPulseEvent()
+        /** 温度变化 (单位: ℃) */
+        data class TemperatureChanged(val celsius: Float) : BatteryPulseEvent()
+        /** 电流读数更新 (单位: µA, 带符号方向) */
+        data class CurrentUpdated(val microAmps: Long, val source: String) : BatteryPulseEvent()
+        /** 电压读数更新 (单位: mV) */
+        data class VoltageUpdated(val millivolts: Int) : BatteryPulseEvent()
+        /** 电池健康状态变化 */
+        data class HealthChanged(val health: String) : BatteryPulseEvent()
+    }
+
+    /**
+     * 启动电池事件流 — 基于 BroadcastReceiver 的 callbackFlow。
+     * 设计决策：
+     *   - 返回 Flow<BatteryPulseEvent> 分层事件，仅推送 delta 变更
+     *   - Compose 重组粒度更细，避免全量 BatteryInfo 重建触发整页重组
+     *   - 基于 Android 标准 BatteryManager 广播机制，无第三方依赖
+     */
+    fun monitorBatteryPulses(): Flow<BatteryPulseEvent> = callbackFlow {
+        var lastLevel = -1
+        var lastPlugged = -1
+        var lastTemp = -1f
+        var lastHealth = ""
+
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                // 电量脉冲
+                val rawLevel = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
+                val rawScale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, -1)
+                if (rawLevel >= 0 && rawScale > 0) {
+                    val pct = (rawLevel * 100 / rawScale)
+                    if (pct != lastLevel) {
+                        lastLevel = pct
+                        trySend(BatteryPulseEvent.LevelChanged(pct, rawScale))
+                    }
+                }
+
+                // 插拔状态脉冲
+                val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1)
+                if (plugged != lastPlugged) {
+                    lastPlugged = plugged
+                    val chargerLabel = when {
+                        (plugged and BatteryManager.BATTERY_PLUGGED_AC) != 0 -> "charger_ac"
+                        (plugged and BatteryManager.BATTERY_PLUGGED_USB) != 0 -> "charger_usb"
+                        (plugged and BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0 -> "charger_wireless"
+                        plugged > 0 -> "charger_unknown"
+                        else -> ""
+                    }
+                    trySend(BatteryPulseEvent.PlugStateChanged(plugged > 0, chargerLabel))
+                }
+
+                // 温度脉冲
+                val tempRaw = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, -1)
+                if (tempRaw > 0) {
+                    val celsius = tempRaw / 10f
+                    if (kotlin.math.abs(celsius - lastTemp) > 0.5f) {
+                        lastTemp = celsius
+                        trySend(BatteryPulseEvent.TemperatureChanged(celsius))
+                    }
+                }
+
+                // 健康状态脉冲
+                val health = intent.getIntExtra(BatteryManager.EXTRA_HEALTH, -1)
+                val healthStr = healthToString(health)
+                if (healthStr != lastHealth) {
+                    lastHealth = healthStr
+                    trySend(BatteryPulseEvent.HealthChanged(healthStr))
+                }
+            }
+        }
+
+        // 注册 sticky + 实时双通道
+        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val sticky = appContext.registerReceiver(receiver, filter)
+        if (sticky != null) {
+            receiver.onReceive(appContext, sticky)
+        }
+        awaitClose { appContext.unregisterReceiver(receiver) }
+    }
+
+    // ========== BBK 电流归一化 (2026-06-18) ==========
+
+    /**
+     * BBK 设备电流归一化 — 结合厂商特征 + 路径启发式。
+     *
+     * 设计依据：
+     *   - 部分 OEM (OPPO/OnePlus/realme) 的 current_now sysfs 直接返回 mA 而非标准 µA
+     *   - 本方案采用三重判定：(1) 厂商检测 (2) 路径前缀匹配 (3) 数值量级推断
+     *   - 提供 estimateBbKCurrent() 快速路径用于已知 BBK 设备
+     */
+    private fun normalizeBbKCurrent(rawValue: Long, sourcePath: String): Int {
+        if (rawValue == 0L || rawValue == Long.MIN_VALUE) return 0
+
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val isBbKVendor = manufacturer.contains("oneplus")
+                || manufacturer.contains("oppo")
+                || manufacturer.contains("realme")
+
+        val isBbKPath = sourcePath.contains("oplus")
+                || sourcePath.contains("vooc")
+                || sourcePath.contains("bms")
+
+        val absRaw = kotlin.math.abs(rawValue)
+
+        return when {
+            // 框架 API (binder / hidden API) 永为 µA, 不参与 BBK mA 假设
+            // (修复: 之前 BBK 厂商分支会把 binder 的 µA 误当 mA 直出, 放大 1000×)
+            sourcePath.contains("BatteryManager") -> (rawValue / 1000).toInt()
+            // 明确 BBK 路径 + 典型 mA 范围 → 直接视为 mA
+            isBbKPath && absRaw in 100..20000 -> rawValue.toInt()
+            // BBK 厂商 + 路径不详 + 小数值 → 按 µA 处理
+            isBbKVendor && absRaw < 20000 -> (rawValue / 1000).toInt()
+            // BBK 厂商 + 路径不详 + 大数值 → 按 µA 处理 (已是 µA)
+            isBbKVendor && absRaw >= 20000 -> (rawValue / 1000).toInt()
+            // 非 BBK + 小数值 → 按 µA 处理
+            absRaw < 100 -> (rawValue * 1000).toInt()
+            // 非 BBK + 大数值 → 按 µA 处理 (标准)
+            else -> (rawValue / 1000).toInt()
+        }
+    }
+
+    /** 为 BBK 机型快速归一化 (仅依赖 raw value，不查路径) */
+    fun estimateBbKCurrent(rawMicroAmps: Long): Int {
+        val absRaw = kotlin.math.abs(rawMicroAmps)
+        if (absRaw == 0L) return 0
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val isBbK = manufacturer.contains("oneplus")
+                || manufacturer.contains("oppo")
+                || manufacturer.contains("realme")
+        return if (isBbK && absRaw < 20000) {
+            rawMicroAmps.toInt()  // BBK 小值 = 已是 mA
+        } else {
+            (rawMicroAmps / 1000).toInt()  // 标准 µA → mA
+        }
+    }
+}

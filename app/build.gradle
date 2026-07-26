@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace 'com.example.deviceinfoviewer'
+    namespace 'com.rb.cybermonitorpro'
     compileSdk 36   // AGP9 上限 36.1；BOM 2025.06.00 + 内置 Kotlin 2.2.10 要求 compileSdk ≥ 36；targetSdk 同步 36（Android 16，满足 2026-08-31 Play 目标 API 截止）
     def ksBase64  = System.getenv("KEYSTORE_BASE64")
     def ksPassword = System.getenv("KEYSTORE_PASSWORD")
@@ -33,7 +33,7 @@ android {
     }
 
 defaultConfig {
-    applicationId "com.example.deviceinfoviewer"
+    applicationId "com.rb.cybermonitorpro"
     minSdk 21
     targetSdk 36   // Android 16 (API 36)；2026-08-31 Play 目标 API 截止。健康权限: 本应用未声明/使用 BODY_SENSORS 或 android.permission.health.*，无需迁移。
     versionCode 404

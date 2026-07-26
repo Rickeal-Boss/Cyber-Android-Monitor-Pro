@@ -2,7 +2,7 @@
 
 ## 概述
 
-全面参考 DevCheck Pro 设计风格，对 `com.example.deviceinfoviewer` (System Monitor) Android 应用进行了全面的 UI 改造。核心变化：从单一绿色 Material 主题 → DevCheck Pro 风格深色主题，每个功能模块使用独立分类配色。
+全面参考 DevCheck Pro 设计风格，对 `com.rb.cybermonitorpro` (System Monitor) Android 应用进行了全面的 UI 改造。核心变化：从单一绿色 Material 主题 → DevCheck Pro 风格深色主题，每个功能模块使用独立分类配色。
 
 ## 设计变更清单
 

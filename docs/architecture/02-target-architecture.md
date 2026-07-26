@@ -73,7 +73,7 @@
 ## 3. C4 Level 3 — 组件图（包结构）
 
 ```
-com.example.deviceinfoviewer/
+com.rb.cybermonitorpro/
 │
 ├── DeviceApplication.kt          # Application + Koin 初始化
 ├── MainActivity.kt               # 单 Activity
