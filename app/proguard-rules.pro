@@ -49,12 +49,12 @@
 # 真正需 keep 的运行时目标只有两类:
 # 1) Gson 序列化模型 — ExportHelper 对 CpuInfo/GpuInfo/BatteryInfo/MemoryInfo/
 #    StorageInfo/SystemInfo 等做 toJson，运行时反射字段，须保留类与成员
--keep class com.example.deviceinfoviewer.data.model.** { *; }
+-keep class com.rb.cybermonitorpro.data.model.** { *; }
 # 2) 入口组件 — R8 读 manifest 已自动保留，显式声明以防边界情况
--keep class com.example.deviceinfoviewer.**.*Activity { *; }
--keep class com.example.deviceinfoviewer.**.*Service { *; }
--keep class com.example.deviceinfoviewer.**.*Receiver { *; }
--keep class com.example.deviceinfoviewer.**.*Provider { *; }
+-keep class com.rb.cybermonitorpro.**.*Activity { *; }
+-keep class com.rb.cybermonitorpro.**.*Service { *; }
+-keep class com.rb.cybermonitorpro.**.*Receiver { *; }
+-keep class com.rb.cybermonitorpro.**.*Provider { *; }
 # 其余项目代码 (UI/DataSource/Repository/ViewModel) 交由 R8 正常缩减。
 # ⚠️ 构建后须真机冒烟验证: 导出(JSON)/Koin 初始化/隐藏 API 反射采集。
 

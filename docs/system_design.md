@@ -1045,7 +1045,7 @@ maven { url 'https://jitpack.io' }  // for MPAndroidChart
 
 ```
 ## 命名规范
-- 包名：com.example.deviceinfoviewer（项目前期）；发布时改为正式包名
+- 包名：com.rb.cybermonitorpro（项目前期）；发布时改为正式包名
 - 类名：PascalCase（CpuDataSource, DashboardViewModel）
 - 方法名：camelCase（getCpuInfo, startMonitoring）
 - 常量：UPPER_SNAKE_CASE（DEFAULT_INTERVAL_MS = 2000）
