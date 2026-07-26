@@ -163,4 +163,48 @@ class BatteryDataSourceCurrentUnitTest {
         val result = BatteryDataSource.normalizeBinderCurrent(5000L, "BatteryManager binder", true)
         assertEquals("BBK 5000mA-scale → 5000 mA", 5000, result)
     }
+
+    // ========================
+    // Fix1 回归防护: shouldFallbackToSocDelta (SoC-Δ 门控放宽)
+    // 原门控写死 source=="无法获取", 导致 ColorOS binder 返回 0 时被旁路
+    // ========================
+
+    @Test
+    fun `全路径失败 无法获取 应触发SoCΔ`() {
+        // 原行为: source=="无法获取" + 0 电流 → 触发
+        val result = BatteryDataSource.shouldFallbackToSocDelta(0L, "无法获取", 50, 5000)
+        assertTrue("source=无法获取 should trigger SoC-Δ", result)
+    }
+
+    @Test
+    fun `ColorOS binder返回0 应触发SoCΔ_Fix1`() {
+        // Fix1: source=="BatteryManager binder" + 0 电流 (ColorOS property 恒为0) → 触发
+        val result = BatteryDataSource.shouldFallbackToSocDelta(0L, "BatteryManager binder", 50, 5000)
+        assertTrue("ColorOS binder-0 should trigger SoC-Δ", result)
+    }
+
+    @Test
+    fun `未知source的0 不应触发_防御性`() {
+        // 防御: 其他 source 的 0 不触发 (理论上不会以 0 收口, 但保持严格)
+        val result = BatteryDataSource.shouldFallbackToSocDelta(0L, "sysfs/battery/current_now", 50, 5000)
+        assertFalse("unknown source 0 should NOT trigger", result)
+    }
+
+    @Test
+    fun `非零电流 不应触发`() {
+        val result = BatteryDataSource.shouldFallbackToSocDelta(1500_000L, "BatteryManager binder", 50, 5000)
+        assertFalse("non-zero current should NOT trigger", result)
+    }
+
+    @Test
+    fun `电量无效 不应触发`() {
+        val result = BatteryDataSource.shouldFallbackToSocDelta(0L, "无法获取", 0, 5000)
+        assertFalse("levelPercent=0 invalid → NOT trigger", result)
+    }
+
+    @Test
+    fun `容量未知 不应触发`() {
+        val result = BatteryDataSource.shouldFallbackToSocDelta(0L, "BatteryManager binder", 50, 0)
+        assertFalse("capacity unknown → NOT trigger", result)
+    }
 }
