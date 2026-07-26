@@ -670,6 +670,41 @@ class BatteryDataSource(private val context: Context) {
 
         internal fun resolveUnitHint(pathHint: String): String =
             BatteryCurrentNormalizer.resolveUnitHint(pathHint)
+
+        /**
+         * Binder 电流单位解析 (原因A修复)。
+         *
+         * AOSP 约定: `getLongProperty(CURRENT_NOW)` 返回 µA，`getIntProperty(CURRENT_NOW)` 返回 mA。
+         * 但 ColorOS 等 OEM 的 `getLongProperty` 实际返回 mA 量级(与 `getIntProperty` 同量级)，
+         * 若盲目按 µA 处理并在下游 ÷1000，电流会偏小 1000×。
+         *
+         * 交叉验证: 比较 long 与 int 的量级。
+         *   - long==MIN_VALUE → 不支持，退回 int(mA)×1000 兜底
+         *   - ratio<50 (同量级) → long 实为 mA → ×1000 归一为 µA
+         *   - ratio≈1000 (相差 1000×) → long 为合法 µA → 直出
+         *
+         * 阈值说明: 两种解释的量级差恰为 1000×(µA vs mA)，ratio 只会落在 ~1 或 ~1000 两档，
+         * 取 50 作为分界有充足裕度，避免任一 API 取整误差导致的误判。
+         *
+         * @return 归一化后的电流(µA, 带符号)
+         */
+        internal fun resolveBinderCurrentMicroamps(longUa: Long, intMa: Int): Long {
+            if (longUa == Long.MIN_VALUE) {
+                return if (intMa == 0) 0L else intMa.toLong() * 1000L
+            }
+            val ratio = if (intMa != 0) {
+                kotlin.math.abs(longUa.toDouble() / intMa.toDouble())
+            } else {
+                Double.MAX_VALUE // 无法交叉验证，默认按标准 µA 处理
+            }
+            return if (ratio < 50.0) {
+                // long 实为 mA 量级 (OEM 偏离 AOSP) → 归一为 µA
+                longUa * 1000L
+            } else {
+                // 标准 µA 直出
+                longUa
+            }
+        }
     }
 
     private fun getCurrentNowFull(): Pair<Long, String> {
@@ -677,13 +712,20 @@ class BatteryDataSource(private val context: Context) {
         // ★ P0 根因修复: 原 getIntProperty(2) 不支持时返回 0, 与"有效0电流"无法区分,
         //   导致穿透到 sysfs 风暴。改用 getLongProperty + Long.MIN_VALUE 哨兵区分
         //   "不支持"与"有效0" (Volta / BatteryX 同款做法, AOSP 派生)。
+        // ★ 原因A修复 (ColorOS 电流偏小 1000×): AOSP 约定 getLongProperty(CURRENT_NOW)
+        //   返回 µA、getIntProperty 返回 mA。但 ColorOS 等 OEM 的 getLongProperty 实际
+        //   返回 mA 量级(与 getIntProperty 同量级)，若盲目按 µA 处理并 ÷1000，电流偏小 1000×。
+        //   故用 getIntProperty 交叉验证量级，详见 resolveBinderCurrentMicroamps()。
         try {
             val bm = appContext.getSystemService(Context.BATTERY_SERVICE) as? BatteryManager
             if (bm != null) {
-                val cur = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) // µA 直出
-                if (cur != Long.MIN_VALUE) {
-                    Log.d(TAG, "current_now from BatteryManager.getLongProperty(CURRENT_NOW): $cur µA")
-                    return Pair(cur, "BatteryManager binder")
+                val longUa = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW) // 标准 µA，OEM 可能返回 mA 量级
+                val intMa = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)   // 标准 mA，交叉验证基准
+                if (longUa != Long.MIN_VALUE) {
+                    // ★ 原因A: 交叉验证 long 是否违背 AOSP 约定返回了 mA 量级
+                    val resolvedUa = resolveBinderCurrentMicroamps(longUa, intMa)
+                    Log.d(TAG, "current_now binder: longUa=$longUa intMa=$intMa → resolvedUa=$resolvedUa")
+                    return Pair(resolvedUa, "BatteryManager binder")
                 }
                 // 诊断: CHARGE_COUNTER (1) 非零仅记录, 不参与电流主值
                 val counter = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
