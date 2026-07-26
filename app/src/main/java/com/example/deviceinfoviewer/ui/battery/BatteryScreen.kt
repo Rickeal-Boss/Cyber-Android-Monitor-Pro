@@ -10,10 +10,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragHandle
@@ -427,11 +430,18 @@ fun BatteryScreen(
     }
 
     val listState = rememberLazyListState()
+    val visibleCards = getVisibleItems()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
-        // onMove 读取最新可见快照 (闭包内 getVisibleItems() 始终反映当前可见序，避免捕获旧快照)
+        // onMove 索引基于内层 LazyColumn 的 items 列表 (== visibleCards, 不含外层固定头部)，
+        // 故 from/to 与 getVisibleItems() 天然对齐，无需偏移。
         val visible = getVisibleItems()
+        if (visible.isEmpty()) return@rememberReorderableLazyListState
+        // 防御：拖拽期间数据轮询可能改变可见集，clamp 避免 IndexOutOfBounds (原崩溃即此类越界)
+        val fromIdx = from.index.coerceIn(0, visible.lastIndex)
+        val toIdx = to.index.coerceIn(0, visible.size)
+        if (fromIdx !in visible.indices) return@rememberReorderableLazyListState
         val newVisible = visible.toMutableList()
-        newVisible.add(to.index, newVisible.removeAt(from.index))
+        newVisible.add(toIdx, newVisible.removeAt(fromIdx))
         // 合并回全量顺序：隐藏卡片保持原相对位置，仅可见卡片被重排
         val visibleSet = visible.toSet()
         val it = newVisible.iterator()
@@ -439,37 +449,47 @@ fun BatteryScreen(
         onReorder(newFull)
     }
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+    // 外层可滚动 Column：固定头部 + 可重排卡片列表（与概览页 ReorderableCardGrid 同构）。
+    // 内层 LazyColumn 用 userScrollEnabled=false + heightIn(max) 上限，规避 infinity-max-height 崩溃。
+    Column(
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // ── 状态概览 (固定头部, 不参与重排) ──
-        item(key = "battery_status_header") {
-            InfoCard(
-                title = statusText,
-                subtitle = techText.ifEmpty { batteryInfo?.chargeStatus?.takeIf { it.isNotEmpty() } ?: "" },
-                icon = Icons.Filled.Favorite, iconTint = NeonPurple
-            )
-        }
+        InfoCard(
+            title = statusText,
+            subtitle = techText.ifEmpty { batteryInfo?.chargeStatus?.takeIf { it.isNotEmpty() } ?: "" },
+            icon = Icons.Filled.Favorite, iconTint = NeonPurple
+        )
 
-        // ── 可重排卡片区 ──
-        items(getVisibleItems(), key = { it }, contentType = { it }) { id ->
-            if (reorderEnabled) {
-                ReorderableItem(reorderState, key = id) {
-                    // 拖拽手柄 Modifier 必须在 ReorderableItem 作用域内计算
-                    val ctx = LocalContext.current
-                    val handleModifier = Modifier.draggableHandle(
-                        onDragStarted = { HapticUtils.dragStart(ctx) },
-                        onDragStopped = { HapticUtils.dragEnd(ctx) }
-                    )
-                    Box(Modifier.fillMaxWidth()) {
-                        CardContent(id)
-                        ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp), handleModifier)
+        // ── 可重排卡片区 (内层 LazyColumn, items 列表 == getVisibleItems()，索引与 onMove 对齐) ──
+        val itemCount = visibleCards.size
+        // 安全上限：按 item 数估算 (每卡 400dp 上限 + 12dp 间距)，仅作为有限高度约束防崩溃，
+        // 实际高度由内容决定 (heightIn 为 max 约束，不会拉伸/留白)
+        val listMaxHeight = (itemCount * 400 + (itemCount - 1) * 12).dp
+        LazyColumn(
+            state = listState,
+            userScrollEnabled = false,
+            modifier = Modifier.fillMaxWidth().heightIn(max = listMaxHeight),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(visibleCards, key = { it }, contentType = { it }) { id ->
+                if (reorderEnabled) {
+                    ReorderableItem(reorderState, key = id) {
+                        // 拖拽手柄 Modifier 必须在 ReorderableItem 作用域内计算
+                        val ctx = LocalContext.current
+                        val handleModifier = Modifier.draggableHandle(
+                            onDragStarted = { HapticUtils.dragStart(ctx) },
+                            onDragStopped = { HapticUtils.dragEnd(ctx) }
+                        )
+                        Box(Modifier.fillMaxWidth()) {
+                            CardContent(id)
+                            ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp), handleModifier)
+                        }
                     }
+                } else {
+                    CardContent(id)
                 }
-            } else {
-                CardContent(id)
             }
         }
     }
