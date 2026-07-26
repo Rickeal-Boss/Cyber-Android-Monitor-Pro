@@ -120,4 +120,66 @@ class BatteryDataSourceCurrentUnitTest {
         val result = BatteryDataSource.convertCurrentToMicroamps(-800L, "/sys/class/oplus_chg/battery/current_now")
         assertEquals("oplus negative -800mA → -800,000µA", -800_000L, result)
     }
+
+    // ========================
+    // 原因A修复: Binder 电流单位解析 (getLongProperty × getIntProperty 交叉验证)
+    // ========================
+
+    @Test
+    fun `AOSP标准 long返回µA int同量级1000倍 应直出`() {
+        // AOSP 合规: 充电 1500mA → longUa=1,500,000 (µA), intMa=1500 (mA)
+        // ratio≈1000 → 判定为合法 µA，保持不变
+        val result = BatteryDataSource.resolveBinderCurrentMicroamps(1_500_000L, 1500)
+        assertEquals("AOSP long µA should pass through", 1_500_000L, result)
+    }
+
+    @Test
+    fun `ColorOS long返回mA量级 应与int同量级并×1000`() {
+        // ColorOS 偏离 AOSP: 充电 1500mA，但 getLongProperty 返回 1500 (实为 mA)
+        // longUa=1500, intMa=1500 → ratio≈1 <50 → 判定为 mA → ×1000 = 1,500,000 µA
+        val result = BatteryDataSource.resolveBinderCurrentMicroamps(1500L, 1500)
+        assertEquals("ColorOS mA-scale long should be ×1000 normalized to µA", 1_500_000L, result)
+    }
+
+    @Test
+    fun `ColorOS 放电负值 mA量级 应保留符号并×1000`() {
+        // 放电 500mA → getLongProperty 返回 -500 (mA 量级), getIntProperty 返回 -500
+        // ratio≈1 → 判定为 mA → -500 ×1000 = -500,000 µA (放电)
+        val result = BatteryDataSource.resolveBinderCurrentMicroamps(-500L, -500)
+        assertEquals("ColorOS negative mA-scale should keep sign and ×1000", -500_000L, result)
+    }
+
+    @Test
+    fun `ColorOS 大电流 mA量级 5000 应×1000`() {
+        // 快充 5000mA → longUa=5000, intMa=5000 → ratio≈1 → 5,000,000 µA
+        val result = BatteryDataSource.resolveBinderCurrentMicroamps(5000L, 5000)
+        assertEquals("ColorOS high-current mA-scale → 5,000,000 µA", 5_000_000L, result)
+    }
+
+    @Test
+    fun `long为MIN_VALUE 用intmA兜底转µA`() {
+        // getLongProperty 不支持(返回 MIN_VALUE)，退回 getIntProperty(mA) → ×1000
+        val result = BatteryDataSource.resolveBinderCurrentMicroamps(Long.MIN_VALUE, 800)
+        assertEquals("long unsupported → int(mA)×1000 fallback", 800_000L, result)
+    }
+
+    @Test
+    fun `long为MIN_VALUE 且int为0 应返回0`() {
+        val result = BatteryDataSource.resolveBinderCurrentMicroamps(Long.MIN_VALUE, 0)
+        assertEquals(0L, result)
+    }
+
+    @Test
+    fun `int为0无法交叉验证 大值应按标准µA直出`() {
+        // getIntProperty 返回 0 (可能不支持或真为0)，long 为大值 → 默认 µA 直出
+        val result = BatteryDataSource.resolveBinderCurrentMicroamps(500_000L, 0)
+        assertEquals("cannot cross-check → treat large long as µA", 500_000L, result)
+    }
+
+    @Test
+    fun `long为0 直出0 不误判`() {
+        // 有效 0 电流: longUa=0, intMa=0 → ratio=MAX → 直出 0 (不×1000)
+        val result = BatteryDataSource.resolveBinderCurrentMicroamps(0L, 0)
+        assertEquals(0L, result)
+    }
 }
