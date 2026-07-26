@@ -670,6 +670,47 @@ class BatteryDataSource(private val context: Context) {
 
         internal fun resolveUnitHint(pathHint: String): String =
             BatteryCurrentNormalizer.resolveUnitHint(pathHint)
+
+        /**
+         * 电流单位归一化核心决策 (可单测纯函数)。
+         *
+         * 判定规则:
+         *   - 框架主路 (BatteryManager): AOSP 标准返回 µA → ÷1000。
+         *     ColorOS/OPlus 等 BBK 厂商的 getLongProperty 实际返回 mA 量级(小值)，
+         *     若也 ÷1000 会偏小 1000×。故 BBK 厂商 + 小值(<20mA) → 已是 mA 直出；其余 ÷1000。
+         *     非 BBK 设备一律 ÷1000，维持原行为不受影响 (修复原因A回归)。
+         *   - BBK 路径(oplus/vooc/bms) + 典型 mA 范围 → 视为 mA 直出。
+         *   - 非 BBK + 极小值(<100) → 极可能是 mA 上报，×1000 放大为 µA。
+         *
+         * @param isBbKVendor 厂商是否为 BBK/OPlus 家族 (oneplus/oppo/realme)，由调用方据 Build.MANUFACTURER 判定
+         * @return 归一化电流 (mA, 带符号)
+         */
+        internal fun normalizeBinderCurrent(rawValue: Long, sourcePath: String, isBbKVendor: Boolean): Int {
+            if (rawValue == 0L || rawValue == Long.MIN_VALUE) return 0
+
+            val isBbKPath = sourcePath.contains("oplus")
+                    || sourcePath.contains("vooc")
+                    || sourcePath.contains("bms")
+
+            val absRaw = kotlin.math.abs(rawValue)
+
+            return when {
+                // 框架主路 (binder / hidden API): 见上文说明
+                sourcePath.contains("BatteryManager") -> {
+                    if (isBbKVendor && absRaw < 20_000L) rawValue.toInt() else (rawValue / 1000).toInt()
+                }
+                // 明确 BBK 路径 + 典型 mA 范围 → 直接视为 mA
+                isBbKPath && absRaw in 100..20000 -> rawValue.toInt()
+                // BBK 厂商 + 路径不详 + 小数值 → 按 µA 处理
+                isBbKVendor && absRaw < 20000 -> (rawValue / 1000).toInt()
+                // BBK 厂商 + 路径不详 + 大数值 → 按 µA 处理 (已是 µA)
+                isBbKVendor && absRaw >= 20000 -> (rawValue / 1000).toInt()
+                // 非 BBK + 小数值 → 按 µA 处理
+                absRaw < 100 -> (rawValue * 1000).toInt()
+                // 非 BBK + 大数值 → 按 µA 处理 (标准)
+                else -> (rawValue / 1000).toInt()
+            }
+        }
     }
 
     private fun getCurrentNowFull(): Pair<Long, String> {
@@ -1881,47 +1922,6 @@ class BatteryDataSource(private val context: Context) {
                 || manufacturer.contains("oppo")
                 || manufacturer.contains("realme")
         return normalizeBinderCurrent(rawValue, sourcePath, isBbKVendor)
-    }
-
-    /**
-     * 电流单位归一化核心决策 (可单测纯函数)。
-     *
-     * 判定规则:
-     *   - 框架主路 (BatteryManager): AOSP 标准返回 µA → ÷1000。
-     *     ColorOS/OPlus 等 BBK 厂商的 getLongProperty 实际返回 mA 量级(小值)，
-     *     若也 ÷1000 会偏小 1000×。故 BBK 厂商 + 小值(<20mA) → 已是 mA 直出；其余 ÷1000。
-     *     非 BBK 设备一律 ÷1000，维持原行为不受影响 (修复原因A回归)。
-     *   - BBK 路径(oplus/vooc/bms) + 典型 mA 范围 → 视为 mA 直出。
-     *   - 非 BBK + 极小值(<100) → 极可能是 mA 上报，×1000 放大为 µA。
-     *
-     * @param isBbKVendor 厂商是否为 BBK/OPlus 家族 (oneplus/oppo/realme)，由调用方据 Build.MANUFACTURER 判定
-     * @return 归一化电流 (mA, 带符号)
-     */
-    internal fun normalizeBinderCurrent(rawValue: Long, sourcePath: String, isBbKVendor: Boolean): Int {
-        if (rawValue == 0L || rawValue == Long.MIN_VALUE) return 0
-
-        val isBbKPath = sourcePath.contains("oplus")
-                || sourcePath.contains("vooc")
-                || sourcePath.contains("bms")
-
-        val absRaw = kotlin.math.abs(rawValue)
-
-        return when {
-            // 框架主路 (binder / hidden API): 见上文说明
-            sourcePath.contains("BatteryManager") -> {
-                if (isBbKVendor && absRaw < 20_000L) rawValue.toInt() else (rawValue / 1000).toInt()
-            }
-            // 明确 BBK 路径 + 典型 mA 范围 → 直接视为 mA
-            isBbKPath && absRaw in 100..20000 -> rawValue.toInt()
-            // BBK 厂商 + 路径不详 + 小数值 → 按 µA 处理
-            isBbKVendor && absRaw < 20000 -> (rawValue / 1000).toInt()
-            // BBK 厂商 + 路径不详 + 大数值 → 按 µA 处理 (已是 µA)
-            isBbKVendor && absRaw >= 20000 -> (rawValue / 1000).toInt()
-            // 非 BBK + 小数值 → 按 µA 处理
-            absRaw < 100 -> (rawValue * 1000).toInt()
-            // 非 BBK + 大数值 → 按 µA 处理 (标准)
-            else -> (rawValue / 1000).toInt()
-        }
     }
 
     /** 为 BBK 机型快速归一化 (仅依赖 raw value，不查路径) */
