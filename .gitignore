@@ -1,0 +1,31 @@
+# ===================== Android / Gradle =====================
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+*.dex
+
+# Generated build outputs
+bin/
+gen/
+out/
+release/
+build/
+.gradle/
+.externalNativeBuild/
+.cxx/
+
+# Local SDK / signing config (never commit)
+local.properties
+*.jks
+*.keystore
+
+# ===================== IDE (Android Studio / IntelliJ) =====================
+*.iml
+.idea/
+captures/
+.DS_Store
+
+# ===================== Logs / OS =====================
+*.log
