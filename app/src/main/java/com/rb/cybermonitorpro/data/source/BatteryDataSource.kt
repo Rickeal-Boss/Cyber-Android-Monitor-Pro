@@ -297,6 +297,26 @@ class BatteryDataSource(private val context: Context) {
         // === BBK 电流归一化 (mA, 含方向) ===
         info.currentNormalizedMa = normalizeBbKCurrent(currentUA, currentSource)
 
+        // ★ 归一化回写: normalizeBbKCurrent 对 BBK 厂商的 BatteryManager 路径返回 mA 直通值,
+        //   但下游 UI/瓦特/内阻全部基于 currentUA(µA) 计算。若不回写, 会出现
+        //   "Normalized: 301 mA" 正确但主显示 "0 mA" 的分裂现象 (301µA ÷ 1000 ≈ 0)。
+        //   回写规则: 命中 BBK 直通分支时 (归一化值 == 原始值, 语义从 µA 变为 mA), 将 mA 转回 µA。
+        val normalizedMa = info.currentNormalizedMa
+        if (normalizedMa != 0) {
+            val manufacturer = Build.MANUFACTURER.lowercase()
+            val isBbKVendor = manufacturer.contains("oneplus")
+                    || manufacturer.contains("oppo")
+                    || manufacturer.contains("realme")
+            val isBbKPassThrough = isBbKVendor
+                    && currentSource.contains("BatteryManager")
+                    && kotlin.math.abs(currentUA) < 20_000L
+            if (isBbKPassThrough) {
+                currentUA = (normalizedMa * 1000L).toLong()  // mA → µA, 保持单位一致
+                info.currentNowUA = currentUA
+                info.currentNowSource = "${currentSource} (已归一化)"
+            }
+        }
+
         // === 电源来源标签 (EXTRA_PLUGGED 三级检测) ===
         // 返回语义 key (ps_ac/ps_usb/ps_wireless/ps_external/ps_battery)，
         // UI 层通过 stringResource() 翻译为用户可见文本。
