@@ -181,9 +181,13 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         return
     }
 
+    // ★ F5 (2026-07-27): 监控生命周期由 AppViewModel.onCleared 统一接管, 此处不再 stop。
+    //   屏幕旋转(配置变更)时 DisposableEffect 会 dispose→re-enter, 旧代码的 onDispose{ stop } 
+    //   会触发 repo 全量重启 + 重读静态数据, 导致数据空窗/闪烁。startMonitoring 已幂等,
+    //   重入时直接返回, 采集连续无空窗; 真正退出由 onCleared → stopMonitoring 处理。
     DisposableEffect(Unit) {
         safeViewModel.startMonitoring()
-        onDispose { safeViewModel.stopMonitoring() }
+        onDispose { /* 监控在 ViewModel 存活期间持续运行, 不在此停止 */ }
     }
 
     // ★ 前后台统一刷新策略 (2026-06-21):
