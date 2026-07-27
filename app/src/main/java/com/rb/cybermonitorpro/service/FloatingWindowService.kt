@@ -287,6 +287,10 @@ class FloatingWindowService : Service() {
     }
 
     private fun startDataCollection() {
+        // ★ F10 (2026-07-27): 重入取消 — START_STICKY 回收重投 onStartCommand 时会再次
+        //   startDataCollection(), 若不先 cancel 旧 collectionJob, 两个 combine 收集器并发,
+        //   refreshAllMetrics 每源执行两次 (重复 setText 触发 layout)。开头先取消旧的。
+        stopDataCollection()
         collectionJob = serviceScope.launch {
             combine(
                 repo.cpuFlow,
