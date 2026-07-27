@@ -34,6 +34,8 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 /**
@@ -291,15 +293,27 @@ class FloatingWindowService : Service() {
         //   startDataCollection(), 若不先 cancel 旧 collectionJob, 两个 combine 收集器并发,
         //   refreshAllMetrics 每源执行两次 (重复 setText 触发 layout)。开头先取消旧的。
         stopDataCollection()
+        // ★ F2 (2026-07-27): baseTickMs 成为真实节流阈值 — combine 仅缓存最新快照,
+        //   debounce(baseTickMs) 按用户设置间隔合并刷新, 避免每源发射即刷新 (每 tick ≤4 次)。
+        //   注: baseTickMs 小于 repo 发射间隔时不会更密 (受 repo 下限约束, 此为预期行为)。
         collectionJob = serviceScope.launch {
+            var latestCpu: CpuInfo? = null
+            var latestGpu: GpuInfo? = null
+            var latestBat: BatteryInfo? = null
+            var latestMem: MemoryInfo? = null
             combine(
                 repo.cpuFlow,
                 repo.gpuFlow,
                 repo.batteryFlow,
                 repo.memoryFlow
             ) { cpu, gpu, bat, mem ->
-                refreshAllMetrics(cpu, gpu, bat, mem)
-            }.collect()
+                latestCpu = cpu; latestGpu = gpu; latestBat = bat; latestMem = mem
+            }.debounce(baseTickMs)
+             .onEach {
+                 if (latestCpu != null && latestGpu != null && latestBat != null && latestMem != null) {
+                     refreshAllMetrics(latestCpu!!, latestGpu!!, latestBat!!, latestMem!!)
+                 }
+             }.collect()
         }
     }
 
