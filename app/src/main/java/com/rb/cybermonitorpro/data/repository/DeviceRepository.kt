@@ -3,7 +3,9 @@ package com.rb.cybermonitorpro.data.repository
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.asLiveData
 import com.rb.cybermonitorpro.AppSettings
 import com.rb.cybermonitorpro.RefreshPolicy
 import com.rb.cybermonitorpro.data.model.*
@@ -71,15 +73,15 @@ class DeviceRepository(context: Context) {
     private val _batteryFlow = MutableSharedFlow<BatteryInfo>(replay = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val batteryFlow: SharedFlow<BatteryInfo> = _batteryFlow.asSharedFlow()
 
-    // ═══════ LiveData (UI 主用 — 暂保留) ═══════
-    // 全部 ViewModel (Dashboard/Cpu/Gpu/Memory/Battery) + ExportHelper 经此消费,
-    // 故为当前 UI 主数据管道; SharedFlow 并行 emit 以服务悬浮窗。
-    // P2#8: 完整迁移 (LiveData → SharedFlow + collectAsStateWithLifecycle) 属大型 UI 改动,
-    //       需严格审查 + 真机验证, 当前保留双管道 (collect 块内双写在后续去重)。
-    val cpuLiveData = MutableLiveData<CpuInfo>()
-    val gpuLiveData = MutableLiveData<GpuInfo>()
-    val memoryLiveData = MutableLiveData<MemoryInfo>()
-    val batteryLiveData = MutableLiveData<BatteryInfo>()
+    // ═══════ LiveData (UI 主用 — 从 SharedFlow 派生, 单一来源) ═══════
+    // ★ F8 (2026-07-27): 双管道统一 — 4 个核心 LiveData 改为由对应 SharedFlow 经 asLiveData
+    //   派生, 单一数据源 = Flow, 消除 collect 块内每 tick 的 emit+postValue 双写分歧。
+    //   全部 ViewModel (Dashboard/Cpu/Gpu/Memory/Battery) + ExportHelper 经此消费, 接口不变;
+    //   SharedFlow 仍并行 emit 以服务悬浮窗。彻底迁移 collectAsStateWithLifecycle 留待 UI 重构。
+    val cpuLiveData: LiveData<CpuInfo> = _cpuFlow.asLiveData()
+    val gpuLiveData: LiveData<GpuInfo> = _gpuFlow.asLiveData()
+    val memoryLiveData: LiveData<MemoryInfo> = _memoryFlow.asLiveData()
+    val batteryLiveData: LiveData<BatteryInfo> = _batteryFlow.asLiveData()
 
     // 辅助模块 LiveData (委托 AuxiliaryCollector)
     val storageLiveData get() = auxCollector.storageLiveData
@@ -193,7 +195,7 @@ class DeviceRepository(context: Context) {
             val perCoreUsage = cpuDataSource.getPerCoreUsage()
             cpu.cores.forEach { core -> core.usagePercent = perCoreUsage[core.coreIndex] ?: Float.NaN }
             cachedChip?.let { CpuCache.injectCpuInfo(it, cpu) }
-            _cpuFlow.emit(cpu); cpuLiveData.postValue(cpu)
+            _cpuFlow.emit(cpu)
             if (!cpu.temperatureCelsius.isNaN()) historyCache.addPoint("cpu_temp", cpu.temperatureCelsius)
             val maxFreq = cpu.cores.maxOfOrNull { it.currentFreqKHz } ?: 0L
             if (maxFreq > 0) historyCache.addPoint("cpu_freq", maxFreq.toFloat())
@@ -211,7 +213,7 @@ class DeviceRepository(context: Context) {
             val gpu = gpuDataSource.getGpuInfo()
             cachedChip?.let { CpuCache.injectGpuInfo(it, gpu) }
             gpu.isThrottled = gpu.maxFreqKHz > 0 && gpu.frequencyKHz > 0 && gpu.frequencyKHz < gpu.maxFreqKHz * 0.7f
-            _gpuFlow.emit(gpu); gpuLiveData.postValue(gpu)
+            _gpuFlow.emit(gpu)
             if (!gpu.loadPercentage.isNaN()) historyCache.addPoint("gpu_load", gpu.loadPercentage)
             if (!gpu.temperatureCelsius.isNaN()) historyCache.addPoint("gpu_temp", gpu.temperatureCelsius)
             if (gpu.frequencyKHz > 0 && gpu.maxFreqKHz > 0)
@@ -226,7 +228,7 @@ class DeviceRepository(context: Context) {
     private suspend fun collectMemoryBlock() {
         try {
             val mem = memoryDataSource.getMemoryInfo()
-            _memoryFlow.emit(mem); memoryLiveData.postValue(mem)
+            _memoryFlow.emit(mem)
             if (mem.totalKB > 0) historyCache.addPoint("ram_usage", mem.usedKB.toFloat() / mem.totalKB * 100f)
             healthTracker.mark(HealthTracker.SourceHealth.Health.OK, "memory")
         } catch (e: Throwable) {
@@ -238,7 +240,7 @@ class DeviceRepository(context: Context) {
     private suspend fun collectBatteryBlock() {
         try {
             val bat = batteryDataSource.getBatteryInfo()
-            _batteryFlow.emit(bat); batteryLiveData.postValue(bat)
+            _batteryFlow.emit(bat)
             RefreshPolicy.isPowerSaveMode = bat.isPowerSaveMode
             if (!bat.temperatureCelsius.isNaN()) historyCache.addPoint("battery_temp", bat.temperatureCelsius)
             val batPowerMw = if (bat.isCharging) bat.chargingPowerMw else bat.dischargingPowerMw
