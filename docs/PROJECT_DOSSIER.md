@@ -18,7 +18,7 @@
 | 架构 | MVVM + **Koin 3.5.6**（`app/build.gradle:96-97`）、lifecycle **2.8.4** |
 | 三方库 | `sh.calvin.reorderable:reorderable:3.1.0`、`gson 2.10.1`、`kotlinx-coroutines-android:1.11.0`（`app/build.gradle`） |
 | SDK | `compileSdk 36` / `minSdk 21` / `targetSdk 36`（已升，Android 16，满足 2026-08-31 Play 目标 API 截止）（`app/build.gradle:9,37-38`）；Java17 toolchain（`:62-69`） |
-| 版本号 | `versionCode 404` / `versionName 4.0.404.0`（`app/build.gradle:39-40`） |
+| 版本号 | `versionCode 500` / `versionName 5.0.0`（`app/build.gradle:39-40`） |
 | 构建/混淆 | Release：`minifyEnabled true` + `shrinkResources true`；AGP9 要求 `getDefaultProguardFile('proguard-android-optimize.txt')`（已改）；`proguard-rules.pro` 仍 `-dontobfuscate` → **"缩而不混"**，App 自身代码整体 keep、仅第三方被缩减（`proguard-rules.pro:44-66`） |
 | 签名 | **仅 CI 签名**：`KEYSTORE_BASE64` 环境变量解码到临时文件（`app/build.gradle:10-33`） |
 | 模块 | **单模块 `app`**（`settings.gradle:16-17` 仅 `include ':app'`） |

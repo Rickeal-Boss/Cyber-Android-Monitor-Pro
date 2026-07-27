@@ -36,8 +36,8 @@ defaultConfig {
     applicationId "com.rb.cybermonitorpro"
     minSdk 21
     targetSdk 36   // Android 16 (API 36)；2026-08-31 Play 目标 API 截止。健康权限: 本应用未声明/使用 BODY_SENSORS 或 android.permission.health.*，无需迁移。
-    versionCode 404
-    versionName "4.0.404.0"
+    versionCode 500
+    versionName "5.0.0"
 
     buildConfigField "long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L"
     def buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date())
