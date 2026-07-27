@@ -107,6 +107,11 @@ class DeviceRepository(context: Context) {
     @Volatile private var monitoring = false
     @Volatile private var intervalMs: Long = RefreshPolicy.Tier.NORMAL.defaultMs
 
+    // ★ F1 (2026-07-27): 全局间隔 override — setIntervalMs 设置后优先级最高, 覆盖
+    //   AppSettings per-module 值。解决 policy 观察者(pushPolicyAdjustedIntervals)在
+    //   前后台/省电翻转时用 AppSettings 值把用户全局间隔"打回"的问题。
+    @Volatile private var globalOverrideMs: Long? = null
+
     private var cpuJob: Job? = null
     private var gpuJob: Job? = null
     private var memoryJob: Job? = null
@@ -309,35 +314,41 @@ class DeviceRepository(context: Context) {
 
     // ═══════ 分模块间隔控制 ═══════
 
+    // ★ F1 (2026-07-27): 统一 interval 解析 — globalOverrideMs 优先级最高, 覆盖
+    //   AppSettings per-module 值; 最终经 RefreshPolicy.effectiveMs 叠加省电/前后台调整。
+    //   解决 policy 观察者(pushPolicyAdjustedIntervals)在状态翻转时用 AppSettings 值
+    //   把 setIntervalMs 设的全局间隔"打回"的问题。
+    // fallbackMs: startMonitoring 传入的初始间隔, 仅当 AppSettings 值无效时兜底
+    private fun resolveInterval(moduleMs: Int, fallbackMs: Long): Long {
+        val settings = AppSettings.getInstance(appContext)
+        val appMs = settings.effectiveRefreshMs(moduleMs).toLong()
+        val base = globalOverrideMs ?: if (appMs > 0) appMs else fallbackMs
+        return RefreshPolicy.effectiveMs(base, RefreshPolicy.Tier.NORMAL)
+    }
+
     private fun pushAllIntervalFlows(baseMs: Long) {
         val settings = AppSettings.getInstance(appContext)
-        cpuIntervalFlow.value = settings.effectiveRefreshMs(settings.cpuRefreshMs).toLong()
-        gpuIntervalFlow.value = settings.effectiveRefreshMs(settings.gpuRefreshMs).toLong()
-        memIntervalFlow.value = settings.effectiveRefreshMs(settings.memoryRefreshMs).toLong()
-        batIntervalFlow.value = settings.effectiveRefreshMs(settings.batteryRefreshMs).toLong()
+        cpuIntervalFlow.value = resolveInterval(settings.cpuRefreshMs, baseMs)
+        gpuIntervalFlow.value = resolveInterval(settings.gpuRefreshMs, baseMs)
+        memIntervalFlow.value = resolveInterval(settings.memoryRefreshMs, baseMs)
+        batIntervalFlow.value = resolveInterval(settings.batteryRefreshMs, baseMs)
     }
 
     // Applies RefreshPolicy (省电模式封装，前后台不降频)
     private fun pushPolicyAdjustedIntervals() {
         val settings = AppSettings.getInstance(appContext)
-        val tier = RefreshPolicy.Tier.NORMAL
-        cpuIntervalFlow.value = RefreshPolicy.effectiveMs(
-            settings.effectiveRefreshMs(settings.cpuRefreshMs).toLong(), tier)
-        gpuIntervalFlow.value = RefreshPolicy.effectiveMs(
-            settings.effectiveRefreshMs(settings.gpuRefreshMs).toLong(), tier)
-        memIntervalFlow.value = RefreshPolicy.effectiveMs(
-            settings.effectiveRefreshMs(settings.memoryRefreshMs).toLong(), tier)
-        batIntervalFlow.value = RefreshPolicy.effectiveMs(
-            settings.effectiveRefreshMs(settings.batteryRefreshMs).toLong(), tier)
+        // fallback 0: policy 变化时 AppSettings 值恒有效, override 优先
+        cpuIntervalFlow.value = resolveInterval(settings.cpuRefreshMs, 0L)
+        gpuIntervalFlow.value = resolveInterval(settings.gpuRefreshMs, 0L)
+        memIntervalFlow.value = resolveInterval(settings.memoryRefreshMs, 0L)
+        batIntervalFlow.value = resolveInterval(settings.batteryRefreshMs, 0L)
     }
 
     fun setIntervalMs(ms: Long) {
-        if (ms == this.intervalMs) return
-        this.intervalMs = ms
-        cpuIntervalFlow.value = ms
-        gpuIntervalFlow.value = ms
-        memIntervalFlow.value = ms
-        batIntervalFlow.value = ms
+        if (globalOverrideMs == ms) return
+        globalOverrideMs = ms
+        // 立即生效 (含 policy 调整); 后续 policy 变化也持续透传 override, 不再被打回
+        pushPolicyAdjustedIntervals()
     }
 
     fun getIntervalMs(): Long = intervalMs
