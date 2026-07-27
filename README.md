@@ -164,7 +164,7 @@ Cyber-Android-Monitor-Pro
 compileSdk  = 35  (锁定，Material Design 3兼容性约束)
 targetSdk   = 35
 minSdk     = 21
-Kotlin     = 2.1.0
+Kotlin     = 2.2.10
 Compose    = BOM 2024.12.01
 Koin DI    = 3.5.6
 Java       = 17

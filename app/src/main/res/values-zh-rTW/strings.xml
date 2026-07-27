@@ -739,8 +739,8 @@
     <string name="settings_haptic_medium">中</string>
     <string name="settings_haptic_strong">强</string>
     <string name="settings_app_name">Cyber Android Monitor Pro</string>
-    <string name="settings_app_version">v4.0.404.0</string>
-    <string name="settings_app_tech">Kotlin 2.1.0 · Compose · Bat Theme</string>
+    <string name="settings_app_version">v5.0.0</string>
+    <string name="settings_app_tech">Kotlin 2.2.10 · Compose · Bat Theme</string>
     <string name="settings_app_author">by Rickeal-Boss</string>
     <string name="settings_language_title">語言</string>
     <string name="settings_language_desc">應用顯示語言</string>
