@@ -110,7 +110,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
             MetricCard(
                 title = stringResource(R.string.network_wifi_chip_title),
                 value = FormatUtils.joinNonBlank("  ·  ",
-                    wifiChipTemp?.let { "${it.toInt()}°C" },
+                    wifiChipTemp?.let { "%.1f°C".format(it) },
                     wifiPowerSave
                 ),
                 valueColor = NeonPurpleBright

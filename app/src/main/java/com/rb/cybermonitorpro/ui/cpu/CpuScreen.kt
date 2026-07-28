@@ -64,7 +64,7 @@ fun CpuScreen(
 
     val arch = cpuInfo?.architecture ?: stringResource(R.string.common_detecting)
     val coreCount = cpuInfo?.coreCount ?: 0
-    val temp = cpuInfo?.temperatureCelsius?.let { if (it.isNaN()) "---" else "${it.toInt()}°C" } ?: "---"
+    val temp = cpuInfo?.temperatureCelsius?.let { if (it.isNaN()) "---" else "%.1f°C".format(it) } ?: "---"
     val tempSource = cpuInfo?.temperatureSource?.takeIf { it.isNotEmpty() }
     val cores = cpuInfo?.cores ?: emptyList()
     // ★ 按 coreCluster 分组 (由 CpuDataSource 通过 distinct+sortedDescending 推断)

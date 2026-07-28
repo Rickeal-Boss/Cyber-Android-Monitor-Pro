@@ -54,7 +54,7 @@ fun GpuScreen(
     val maxFreq = gpuInfo?.maxFreqKHz?.let { if (it > 0) "${it / 1000} MHz" else null }
     val load = gpuInfo?.loadPercentage?.let { if (!it.isNaN()) "${it.toInt()}%" else null } ?: "---"
     val loadSource = gpuInfo?.loadSource?.takeIf { it.isNotEmpty() }
-    val temp = gpuInfo?.temperatureCelsius?.let { if (!it.isNaN()) "${it.toInt()}°C" else null } ?: "---"
+    val temp = gpuInfo?.temperatureCelsius?.let { if (!it.isNaN()) "%.1f°C".format(it) else null } ?: "---"
     val governor = gpuInfo?.governor?.takeIf { it.isNotEmpty() }
     val isThrottled = gpuInfo?.isThrottled ?: false
     val effectiveUtil = gpuInfo?.effectiveUtilization

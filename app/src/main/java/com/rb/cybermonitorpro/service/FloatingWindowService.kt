@@ -313,11 +313,11 @@ class FloatingWindowService : Service() {
         val gpuLoad = if (!gpu.loadPercentage.isNaN()) gpu.loadPercentage.toInt() else -1
         setText("gpu_usage", if (gpuLoad >= 0) "$gpuLabel $gpuLoad%" else "$gpuLabel --%")
 
-        val cpuTemp = if (!cpu.temperatureCelsius.isNaN()) cpu.temperatureCelsius.toInt() else -1
-        setText("cpu_temp", if (cpuTemp > 0) "$cpuLabel ${cpuTemp}°C" else "$cpuLabel --°C")
+        val cpuTemp = if (!cpu.temperatureCelsius.isNaN()) cpu.temperatureCelsius else -1f
+        setText("cpu_temp", if (cpuTemp > 0) "$cpuLabel ${String.format("%.1f", cpuTemp)}°C" else "$cpuLabel --°C")
 
-        val gpuTemp = if (!gpu.temperatureCelsius.isNaN()) gpu.temperatureCelsius.toInt() else -1
-        setText("gpu_temp", if (gpuTemp > 0) "$gpuLabel ${gpuTemp}°C" else "$gpuLabel --°C")
+        val gpuTemp = if (!gpu.temperatureCelsius.isNaN()) gpu.temperatureCelsius else -1f
+        setText("gpu_temp", if (gpuTemp > 0) "$gpuLabel ${String.format("%.1f", gpuTemp)}°C" else "$gpuLabel --°C")
 
         val allFreqs = cpu.cores.mapIndexed { idx, core ->
             val freqMHz = core.currentFreqKHz / 1000
@@ -333,8 +333,8 @@ class FloatingWindowService : Service() {
             "$ramLabel $ramPct% (${mem.usedKB / 1024}MB/${mem.totalKB / 1024}MB)"
         } else "$ramLabel --%")
 
-        val batTemp = if (!bat.temperatureCelsius.isNaN()) bat.temperatureCelsius.toInt() else -1
-        setText("battery_temp", if (batTemp > 0) "$batLabel ${batTemp}°C" else "$batLabel --°C")
+        val batTemp = if (!bat.temperatureCelsius.isNaN()) bat.temperatureCelsius else -1f
+        setText("battery_temp", if (batTemp > 0) "$batLabel ${String.format("%.1f", batTemp)}°C" else "$batLabel --°C")
 
         // ★ 仅使用 currentNowUA (微安→毫安) — 这是真正的电流值
         //   chargingPowerMw/dischargingPowerMw 是功率 (毫瓦)，不可显示为 mA!

@@ -408,7 +408,7 @@ fun BatteryScreen(
                 if (temp != null) {
                     MetricCard(
                         title = stringResource(R.string.battery_temperature_title),
-                        value = "${temp.toInt()}°C",
+                        value = "%.1f°C".format(temp),
                         valueColor = NeonPurpleBright
                     ) {
                         LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth())

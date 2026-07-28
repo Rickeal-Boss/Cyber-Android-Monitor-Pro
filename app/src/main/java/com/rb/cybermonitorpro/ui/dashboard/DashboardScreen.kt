@@ -63,9 +63,9 @@ fun DashboardScreen(
     val systemInfo by viewModel.systemInfo.observeAsState()
 
     val deviceName = cpuInfo?.architecture?.let { "$it · ${cpuInfo?.coreCount ?: 0}${stringResource(R.string.dashboard_core_suffix)}" } ?: stringResource(R.string.common_detecting)
-    val cpuTemp = cpuInfo?.temperatureCelsius?.let { if (it.isNaN()) "---" else "${it.toInt()}°C" } ?: "---"
+    val cpuTemp = cpuInfo?.temperatureCelsius?.let { if (it.isNaN()) "---" else "%.1f°C".format(it) } ?: "---"
     val batteryLevel = batteryInfo?.levelPercent?.let { "${it}%" } ?: "---"
-    val batteryTemp = batteryInfo?.temperatureCelsius?.let { if (it.isNaN()) "---" else "${it.toInt()}°C" } ?: "---"
+    val batteryTemp = batteryInfo?.temperatureCelsius?.let { if (it.isNaN()) "---" else "%.1f°C".format(it) } ?: "---"
     val memUsed = memoryInfo?.let { FormatUtils.formatBytes(it.usedKB * 1024) } ?: "---"
     val memTotal = memoryInfo?.let { FormatUtils.formatBytes(it.totalKB * 1024) } ?: "---"
     // SWAP/ZRAM 数据（利用内存卡片下部空间）
