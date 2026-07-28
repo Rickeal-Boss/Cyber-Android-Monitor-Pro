@@ -58,12 +58,15 @@ fun GlobalLightProvider(
     val animatedPosition = rememberAnimatedLightPosition(lightState)
 
     // ── 空闲超时检测: 超过 idleTimeoutMs 无交互则切换到 IDLE 模式 ──
-    LaunchedEffect(lightState.lastEventTime, lightState.mode) {
-        if (lightState.mode != GlobalLightState.Mode.IDLE) {
+    // ★ F9 (2026-07-28): 去掉 60 次/秒的协程取消/重建 — 原 LaunchedEffect 以 lastEventTime 为
+    //   key, 每次指针事件都取消并重启协程。改为 LaunchedEffect(Unit) 常驻循环, 内部 delay 后
+    //   判超时; 仅在非 IDLE 且确实空闲超时才 toIdle(), 避免重复触发淡出动画。
+    LaunchedEffect(Unit) {
+        while (true) {
             delay(idleTimeoutMs)
-            // 只有在 timeout 期间确实没有新事件时才切换
-            val elapsed = System.currentTimeMillis() - lightState.lastEventTime
-            if (elapsed >= idleTimeoutMs) {
+            if (lightState.mode != GlobalLightState.Mode.IDLE &&
+                System.currentTimeMillis() - lightState.lastEventTime >= idleTimeoutMs
+            ) {
                 lightState.toIdle()
             }
         }
