@@ -97,7 +97,8 @@ class GlobalLightState {
  */
 @Composable
 fun rememberAnimatedLightPosition(state: GlobalLightState): Offset {
-    val target = if (state.mode != GlobalLightState.Mode.IDLE && state.visible)
+    // ★ 淡出时保持最后位置 (仅强度动画归零), 避免位置弹飞致淡出被截断; 仅覆盖层 hide() 才弹飞
+    val target = if (state.visible)
         state.targetPosition
     else
         Offset(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY)

@@ -7,6 +7,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -21,19 +26,22 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 
+/** ȫ�ֹ��յ���ʱ�� (ms) �� IDLE ʱǿ�Ȼ�������, ʵ��ƽ����������˲�� */
+private const val GLOBAL_LIGHT_FADE_OUT_MS = 1200
+
 /**
- * Windows 10 Fluent Design — Reveal Light 光照效果 Modifier
+ * Windows 10 Fluent Design �? Reveal Light 光照效果 Modifier
  *
- * 性能迁移 (2026-06-21): 移除 `composed { }` 包装，改为直接 `@Composable fun Modifier.revealLight()`。
- * `composed` 会在 modifier 链中注入额外 composition 边界，每个使用 revealLight 的组件 (InfoCard、
- * MetricCard、Dashboard 等多个) 都会产生额外开销。改为 @Composable 函数声明后，组合状态读取
- * 直接发生在调用方的 composition 上下文中，无额外边界。
+ * 性能迁移 (2026-06-21): 移除 `composed { }` 包装，改为直�? `@Composable fun Modifier.revealLight()`�?
+ * `composed` 会在 modifier 链中注入额外 composition 边界，每个使�? revealLight 的组�? (InfoCard�?
+ * MetricCard、Dashboard 等多�?) 都会产生额外开销。改�? @Composable 函数声明后，组合状态读�?
+ * 直接发生在调用方�? composition 上下文中，无额外边界�?
  *
  * 核心算法 (基于 Microsoft RevealBrush):
- * 1. 从 CompositionLocal (LocalLightState) 获取全局光照动画位置
+ * 1. �? CompositionLocal (LocalLightState) 获取全局光照动画位置
  * 2. 通过 onGloballyPositioned 获知元素在窗口中的位置和尺寸
- * 3. 将全局光照坐标映射到元素本地坐标空间
- * 4. 若光照点在元素范围内 → 绘制径向渐变光斑
+ * 3. 将全局光照坐标映射到元素本地坐标空�?
+ * 4. 若光照点在元素范围内 �? 绘制径向渐变光斑
  *
  * @param radius 光照半径, 默认 180.dp
  * @param intensity 悬停光照强度, 0-1, 默认 0.25f
@@ -57,16 +65,28 @@ fun Modifier.revealLight(
     var elementWindowPos by remember { mutableStateOf(Offset.Zero) }
     var elementSize by remember { mutableStateOf(Size.Zero) }
 
-    val effectiveIntensity = when (lightState.mode) {
+    val targetIntensity = when (lightState.mode) {
         GlobalLightState.Mode.TOUCH -> (intensity + touchIntensity).coerceIn(0f, 0.6f)
         GlobalLightState.Mode.HOVER -> intensity
         GlobalLightState.Mode.IDLE -> 0f
     }
 
+    // �� ��������: IDLE ʱǿ�������� tween ����; ��ͣ/����ʱ���� spring ��Ӧ, ���ָ���
+    val effectiveIntensity by animateFloatAsState(
+        targetValue = targetIntensity,
+        animationSpec = if (lightState.mode == GlobalLightState.Mode.IDLE) {
+            tween(durationMillis = GLOBAL_LIGHT_FADE_OUT_MS, easing = FastOutSlowInEasing)
+        } else {
+            spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)
+        },
+        label = "lightIntensity"
+    )
+
+    // �� �����ڼ� mode ��Ϊ IDLE ��ǿ�����ڽ���, ���ԡ�����ǿ��>0���ж���Ծ, ���򵭳���;������
     val isActive = lightState.visible &&
-            lightState.mode != GlobalLightState.Mode.IDLE &&
             animatedPos.x.isFinite() && animatedPos.y.isFinite() &&
-            animatedPos.x >= 0 && animatedPos.y >= 0
+            animatedPos.x >= 0 && animatedPos.y >= 0 &&
+            effectiveIntensity > 0.001f
 
     val radiusPx = with(density) { radius.toPx() }
 
@@ -84,16 +104,16 @@ fun Modifier.revealLight(
         )
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  Canvas 实现 (API 21+ — 全版本兼容)
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
+//  Canvas 实现 (API 21+ �? 全版本兼�?)
+// ══════════════════════════════════════════════════════════════�?
 
 /**
- * Canvas 径向渐变路径 — 兼容所有 API 级别 (21+)
+ * Canvas 径向渐变路径 �? 兼容所�? API 级别 (21+)
  *
- * 渐变结构 (4 级 alpha 阶梯):
- *   center → edge
- *   [intensity] → [intensity*0.5] → [intensity*0.15] → [0.0]
+ * 渐变结构 (4 �? alpha 阶梯):
+ *   center �? edge
+ *   [intensity] �? [intensity*0.5] �? [intensity*0.15] �? [0.0]
  */
 private fun Modifier.revealLightCanvas(
     animatedPos: Offset,
@@ -137,9 +157,9 @@ private fun Modifier.revealLightCanvas(
     )
 }
 
-// ═══════════════════════════════════════════════════════════════
-//  AGSL 着色器实现 (API 33+ — GPU 原生硬件加速)
-// ═══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════�?
+//  AGSL 着色器实现 (API 33+ �? GPU 原生硬件加�?)
+// ══════════════════════════════════════════════════════════════�?
 
 private val SHADER_REVEAL_LIGHT = """
     uniform float2 uLightCenter;
@@ -161,7 +181,7 @@ private val SHADER_REVEAL_LIGHT = """
 """.trimIndent()
 
 /**
- * AGSL RuntimeShader GPU 加速路径 (API 33+)
+ * AGSL RuntimeShader GPU 加速路�? (API 33+)
  */
 private fun Modifier.revealLightAGSL(
     animatedPos: Offset,
