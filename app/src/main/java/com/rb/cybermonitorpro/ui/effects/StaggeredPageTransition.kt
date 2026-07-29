@@ -15,19 +15,22 @@ import androidx.compose.foundation.pager.PagerState
 import kotlin.math.abs
 
 /**
- * 页面滑动交错变换 v2 — 澎湃OS 3.0 通知栏风格
+ * 页面滑动交错变换 v2 — 多卡片左右平移甩尾(tail-whip)动效
  *
- * 核心改进 (v1→v2):
+ * 核心机制:
  * ┌──────────────────────────────────────────────────────────────┐
- * │  v1 问题          │  v2 修复                                 │
+ * │  要点              │  实现                                    │
  * ├───────────────────┼──────────────────────────────────────────┤
- * │  全局 pager 偏移   │  ★ 每页独立偏移 (per-page offset)        │
- * │  pageOffset==0    │  ★ 弹簧平滑 animateFloatAsState(spring)  │
- * │  → return 跳变    │  ★ 无 early return，自然归零              │
- * │  水平视差主导      │  ★ 垂直级联为主 (translationY > X)       │
- * │  VERTICAL=0.008   │  ★ VERTICAL_CASCADE=0.10 (可见波浪)       │
- * │  无时间差          │  ★ 空间级联 cascade = 1+idx*STAGGER_STEP  │
+ * │  主运动轴          │  ★ 水平主导 translationX (HORIZONTAL_PARALLAX) │
+ * │  多卡片级联        │  ★ cascade = 1 + idx*STAGGER_STEP        │
+ * │  (甩尾/鞭梢)       │    越靠下摆幅越大 → 横向弯曲成鞭尾         │
+ * │  每页独立偏移      │  ★ per-page offset: page-(cur+frac)       │
+ * │  无跳变            │  ★ animateFloatAsState(spring) 平滑 + 无 early return │
+ * │  辅助景深          │  scale + alpha 轻度衰减                   │
  * └───────────────────┴──────────────────────────────────────────┘
+ *
+ * v1 教训: 水平视差绑定全局 pager 偏移 → 各页同值 → 看起来像原生滑动。
+ *          v2 改用每页独立偏移 + 逐卡片 cascade 差异 → 卡片以不同率左右平移 → 甩尾。
  *
  * 使用方式:
  * ```
@@ -48,39 +51,41 @@ val LocalPageOffset: ProvidableCompositionLocal<Float> =
     compositionLocalOf { 0f }
 
 // ═══════════════════════════════════════════════════════════════
-//  可调参数 — 参考澎湃OS 3.0 通知栏/快捷设置面板动效参数
+//  可调参数 — 甩尾(tail-whip)动效: 多卡片左右平移 + 横向级联弯曲
 // ═══════════════════════════════════════════════════════════════
 
-/** 级联步进 — 每递增一张卡片增加的交错系数 (越大底部卡片越滞后) */
-private const val STAGGER_STEP = 0.08f
+/** 级联步进 — 每递增一张卡片增加的交错系数 (越大=越靠下的卡片摆幅越大=鞭梢) */
+private const val STAGGER_STEP = 0.09f
 
-/** 垂直级联强度 — 过渡中卡片的垂直位移倍率 (相对自身高度) */
-private const val VERTICAL_CASCADE = 0.10f
+/** ★ 水平甩尾主导强度 — 卡片左右平移位移倍率 (相对屏宽), 这是动效的主运动轴 */
+private const val HORIZONTAL_PARALLAX = 0.16f
 
-/** 缩放衰减基数 — 过程中卡片缩小幅度 */
-private const val SCALE_DECAY = 0.07f
+/** 极弱垂直余量 — 保持结构对称, 几乎不可见 (0=纯水平甩尾) */
+private const val VERTICAL_WAVE = 0.0f
 
-/** 透明度衰减基数 — 过程中卡片淡出幅度 */
-private const val ALPHA_DECAY = 0.22f
+/** 缩放衰减基数 — 过程中卡片缩小幅度 (辅助景深) */
+private const val SCALE_DECAY = 0.06f
 
-/** 微弱水平视差 — 辅助增强方向感 (不主导) */
-private const val HORIZONTAL_PARALLAX = 0.05f
+/** 透明度衰减基数 — 过程中卡片淡出幅度 (辅助景深) */
+private const val ALPHA_DECAY = 0.18f
 
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * 卡片级联滑动 Modifier
+ * 卡片级联滑动 Modifier — 甩尾(tail-whip)风格
  *
  * 通过 [LocalPageOffset] 读取本页的弹簧平滑偏移,
- * 按 [cardIndex] 施加空间级联 (越靠下的卡片位移/缩放/透明度变化越大),
- * 形成从上到下的波浪式跟随效果。
+ * 按 [cardIndex] 施加横向级联:
+ *   - 顶部卡片领动, 越靠下的卡片 [cascade] 越大 → 左右平移摆幅越大(鞭梢)
+ *   - 多张卡片以不同水平位移率跟随 → 页面横向弯曲成"甩尾"形状
+ *   - 配合 spring 欠阻尼, 落定时轻微回弹 → 鞭尾甩动感
  */
 @Stable
 fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
     // 本页的平滑偏移: 由 StaggeredPageProvider 提供, 已经过 spring 平滑
     val pageOffset = LocalPageOffset.current
 
-    // 级联因子: 序号越大(越靠下)滞后越多 → 波浪从上到下传播
+    // 级联因子: 序号越大(越靠下)摆幅越大 → 鞭梢效应 (tip of the whip)
     val stagger = cardIndex.toFloat() * STAGGER_STEP
     val cascade = 1f + stagger
 
@@ -90,14 +95,14 @@ fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
 
         val eff = pageOffset * cascade // 每张卡片的实际有效偏移
 
-        // ── 主运动: 垂直级联 (卡片上下浮动形成波浪) ──
-        translationY = size.height * eff * VERTICAL_CASCADE
-
-        // ── 辅助: 微弱水平视差 (增强滑动方向感, 但不主导) ──
+        // ── ★ 主运动: 水平甩尾 (多卡片左右平移, 越靠下摆幅越大 → 横向鞭尾弯曲) ──
         translationX = size.width * eff * HORIZONTAL_PARALLAX
 
+        // ── 极弱垂直余量 (几乎为 0, 保留结构对称) ──
+        translationY = size.height * eff * VERTICAL_WAVE
+
         // ── 缩放: 过渡中轻微缩小 (景深层次感) ──
-        val s = (1f - abs(eff) * SCALE_DECAY).coerceIn(0.75f, 1f)
+        val s = (1f - abs(eff) * SCALE_DECAY).coerceIn(0.82f, 1f)
         scaleX = s
         scaleY = s
 
