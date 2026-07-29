@@ -39,7 +39,6 @@ import com.rb.cybermonitorpro.ui.oem.OemViewModel
 import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
 import com.rb.cybermonitorpro.R
-import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
 @Composable
 fun DeviceScreen(
@@ -53,12 +52,11 @@ fun DeviceScreen(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        var cardIdx = 0
         Text(stringResource(R.string.device_title), fontSize = 18.sp, fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface)
 
         // ═══════ 1. 芯片 SoC ═══════
-        SectionCard(stringResource(R.string.device_section_soc), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+        SectionCard(stringResource(R.string.device_section_soc)) {
             if (oem != null && oem!!.socModel.isNotEmpty()) {
                 RowItem(stringResource(R.string.device_soc_model), "${oem!!.socManufacturer} ${oem!!.socModel}")
             }
@@ -95,7 +93,7 @@ fun DeviceScreen(
             it.cpuCacheL1iKb > 0 || it.cpuCacheL1dKb > 0 || it.cpuCacheL2Kb > 0
         } == true
         if (hasCacheInfo) {
-            SectionCard(stringResource(R.string.device_section_cpu_cache), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_cpu_cache)) {
                 if (detail!!.cpuCacheL1iKb > 0)
                     RowItem(stringResource(R.string.device_l1_instruction_cache), "${detail!!.cpuCacheL1iKb} KB")
                 if (detail!!.cpuCacheL1dKb > 0)
@@ -115,7 +113,7 @@ fun DeviceScreen(
 
         // ═══════ 3. GPU 图形 ═══════
         val hasRealGpu = detail?.glRenderer?.isNotEmpty() == true && detail?.glRenderer != "0"
-        SectionCard(if (hasRealGpu) "${stringResource(R.string.device_section_gpu)} · ${detail!!.glRenderer}" else stringResource(R.string.device_section_gpu), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+        SectionCard(if (hasRealGpu) "${stringResource(R.string.device_section_gpu)} · ${detail!!.glRenderer}" else stringResource(R.string.device_section_gpu)) {
             if (hasRealGpu) {
                 RowItem(stringResource(R.string.device_gpu_model), detail!!.glRenderer)
                 RowItem(stringResource(R.string.device_gpu_vendor), detail!!.glVendor)
@@ -146,7 +144,7 @@ fun DeviceScreen(
         val vkExts = detail?.vulkanExtensions?.takeIf { it.isNotEmpty() }
         val vkDevCount = detail?.vulkanDeviceCount?.takeIf { it > 0 }
         if (vkVersion != null || vkLevel != null || vkExts != null || vkDevCount != null) {
-            SectionCard("Vulkan", modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard("Vulkan") {
                 if (vkVersion != null) {
                     // 细化至小数点后
                     val parts = vkVersion.split(".")
@@ -193,7 +191,7 @@ fun DeviceScreen(
         }
 
         // ═══════ 5. 显示 ═══════
-        SectionCard(stringResource(R.string.device_section_display), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+        SectionCard(stringResource(R.string.device_section_display)) {
             RowItem(stringResource(R.string.device_resolution), detail?.resolution ?: "")
             RowItem(stringResource(R.string.device_density), "${detail?.densityDpi ?: 0} dpi (${detail?.density?.let { "%.1f".format(it) } ?: "-"}×)")
             RowItem(stringResource(R.string.device_refresh_rate), detail?.refreshRateHz?.takeIf { it > 0 }?.let { "%.1f Hz".format(it) } ?: "-")
@@ -218,7 +216,7 @@ fun DeviceScreen(
         // ═══════ 6. 内存 (新增) ═══════
         val hasMemType = detail?.memoryType?.isNotEmpty() == true
         if (hasMemType || detail?.memorySpeedMhz?.compareTo(0) == 1) {
-            SectionCard(stringResource(R.string.device_section_memory_spec), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_memory_spec)) {
                 if (detail?.memoryType?.isNotEmpty() == true)
                     RowItem(stringResource(R.string.device_memory_type), detail!!.memoryType)
                 if (detail?.memorySpeedMhz?.compareTo(0) == 1)
@@ -231,7 +229,7 @@ fun DeviceScreen(
         // ═══════ 7. 存储 (新增) ═══════
         val hasStorage = detail?.storageType?.isNotEmpty() == true
         if (hasStorage) {
-            SectionCard(stringResource(R.string.device_section_storage_spec), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_storage_spec)) {
                 RowItem(stringResource(R.string.device_storage_type), detail!!.storageType)
                 if (detail?.storageProtocol?.isNotEmpty() == true)
                     RowItem(stringResource(R.string.device_protocol), detail!!.storageProtocol)
@@ -243,19 +241,19 @@ fun DeviceScreen(
         // ═══════ 8. 相机 ═══════
         val sensors = detail?.cameraSensors
         if (sensors != null && sensors.isNotEmpty()) {
-            SectionCard(stringResource(R.string.device_section_camera), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_camera)) {
                 sensors.forEach { sensor ->
                     CameraRow(sensor)
                 }
             }
         } else {
-            SectionCard(stringResource(R.string.device_section_camera), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_camera)) {
                 RowItem(stringResource(R.string.device_camera_facing_suffix), detail?.cameraIds?.joinToString(", ").orEmpty().ifEmpty { stringResource(R.string.common_not_detected) })
             }
         }
 
         // ═══════ 9. 音频 ═══════
-        SectionCard(stringResource(R.string.device_section_audio), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+        SectionCard(stringResource(R.string.device_section_audio)) {
             RowItem(stringResource(R.string.device_speaker), if (detail?.stereoSpeakers == true) stringResource(R.string.device_stereo) else stringResource(R.string.device_mono))
             RowItem(stringResource(R.string.device_output_sample_rate), detail?.audioSampleRate?.takeIf { it != "-" } ?: "-")
             RowItem(stringResource(R.string.device_hires_audio), if (detail?.supportsHiResAudio == true) stringResource(R.string.common_yes) else "-")
@@ -265,7 +263,7 @@ fun DeviceScreen(
         }
 
         // ═══════ 10. SIM / 通讯 ═══════
-        SectionCard(stringResource(R.string.device_section_sim), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+        SectionCard(stringResource(R.string.device_section_sim)) {
             RowItem(stringResource(R.string.device_operator_label), detail?.simOperator?.takeIf { it.isNotEmpty() } ?: "-")
             RowItem(stringResource(R.string.device_mcc_mnc), detail?.simMccMnc?.takeIf { it != "0" } ?: "-")
             RowItem(stringResource(R.string.device_network_standard), when (detail?.phoneType) {
@@ -276,7 +274,7 @@ fun DeviceScreen(
         }
 
         // ═══════ 11. 连接 (增强) ═══════
-        SectionCard(stringResource(R.string.device_section_connection), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+        SectionCard(stringResource(R.string.device_section_connection)) {
             RowItem(stringResource(R.string.device_bluetooth),
                 if (detail?.bluetoothSupported == true)
                     FormatUtils.joinNonBlank(" · ",
@@ -308,7 +306,7 @@ fun DeviceScreen(
         }
 
         // ═══════ 12. 多媒体解码器 ═══════
-        SectionCard(stringResource(R.string.device_section_codecs), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+        SectionCard(stringResource(R.string.device_section_codecs)) {
             val vCount = detail?.videoCodecs?.size ?: 0
             val aCount = detail?.audioCodecs?.size ?: 0
             val hwCount = detail?.hwAcceleratedCodecs?.size ?: 0
@@ -324,7 +322,7 @@ fun DeviceScreen(
 
         // ═══════ 13. 热管理 (新增) ═══════
         if (detail?.thermalZoneCount?.compareTo(0) == 1) {
-            SectionCard(stringResource(R.string.device_section_thermal), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_thermal)) {
                 RowItem(stringResource(R.string.device_thermal_zones), "${detail!!.thermalZoneCount}")
                 val types = detail!!.thermalZoneTypes
                 if (types.isNotEmpty()) {
@@ -337,7 +335,7 @@ fun DeviceScreen(
         }
 
         // ═══════ 14. DRM ═══════
-        SectionCard(stringResource(R.string.device_section_drm), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+        SectionCard(stringResource(R.string.device_section_drm)) {
             RowItem(stringResource(R.string.device_widevine_level), when (detail?.widevineLevel) {
                 "L1", "l1" -> stringResource(R.string.widevine_l1)
                 "L3", "l3" -> stringResource(R.string.widevine_l3)
@@ -349,7 +347,7 @@ fun DeviceScreen(
         }
 
         // ═══════ 15. 安全 ═══════
-        SectionCard(stringResource(R.string.device_section_security), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+        SectionCard(stringResource(R.string.device_section_security)) {
             RowItem(stringResource(R.string.device_tee), if (detail?.teeSupported == true) stringResource(R.string.common_yes) else stringResource(R.string.common_not_detected),
                 if (detail?.teeSupported == true) SuccessNeon else WarningNeon)
             RowItem(stringResource(R.string.device_verified_boot), if (detail?.secureBootEnabled == true) stringResource(R.string.device_activated) else stringResource(R.string.device_not_activated),
@@ -374,7 +372,7 @@ fun DeviceScreen(
         val hasHwSerial = detail?.hardwareSerial?.isNotEmpty() == true
         val hasFingerprint = detail?.deviceFingerprint?.isNotEmpty() == true
         if (hasAndroidId || hasSerial || hasHwSerial || hasFingerprint) {
-            SectionCard(stringResource(R.string.device_section_identifiers), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_identifiers)) {
                 if (hasFingerprint) {
                     RowItem(stringResource(R.string.device_fingerprint), detail!!.deviceFingerprint,
                         valueColor = NeonCyan)
@@ -398,7 +396,7 @@ fun DeviceScreen(
         val bootloaderVersion = try { android.os.Build.BOOTLOADER.takeIf { it.isNotEmpty() } } catch (_: Throwable) { null }
         val bootUnlocked = detail?.bootloaderUnlocked
         if (bootloaderVersion != null || bootUnlocked != null) {
-            SectionCard(stringResource(R.string.device_section_bootloader), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_bootloader)) {
                 if (bootloaderVersion != null) {
                     RowItem(stringResource(R.string.device_version), bootloaderVersion)
                 }
@@ -419,7 +417,7 @@ fun DeviceScreen(
         val openssl = detail?.opensslVersion?.takeIf { it.isNotEmpty() }
         val buildTime = detail?.buildTimestamp?.takeIf { it.isNotEmpty() && it != "common_unknown" }
         if (javaRuntime != null || openssl != null || buildTime != null) {
-            SectionCard(stringResource(R.string.device_section_runtime), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_runtime)) {
                 if (javaRuntime != null) {
                     RowItem(stringResource(R.string.device_java_runtime), javaRuntime,
                         valueColor = NeonPurpleBright)
@@ -444,14 +442,14 @@ fun DeviceScreen(
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(top = 8.dp))
 
-            SectionCard("${oem!!.osName} · ${oem!!.oem}", modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard("${oem!!.osName} · ${oem!!.oem}") {
                 RowItem(stringResource(R.string.device_version), oem!!.osVersion.ifEmpty { stringResource(R.string.common_detecting) })
                 RowItem(stringResource(R.string.device_build_id), oem!!.buildDisplayId.ifEmpty { "-" })
                 RowItem(stringResource(R.string.device_security_patch), oem!!.securityPatch.ifEmpty { "-" })
             }
 
             when (oem!!.oem) {
-                "Xiaomi" -> SectionCard(stringResource(R.string.device_section_xiaomi), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+                "Xiaomi" -> SectionCard(stringResource(R.string.device_section_xiaomi)) {
                     RowItem(stringResource(R.string.device_version), oem!!.miuiVersion.ifEmpty { "-" })
                     RowItem(stringResource(R.string.device_region), oem!!.miuiRegion.ifEmpty { "-" })
                     RowItem(stringResource(R.string.device_hardware_model), oem!!.miuiHardware.ifEmpty { "-" })
@@ -459,19 +457,19 @@ fun DeviceScreen(
                         RowItem(stringResource(R.string.device_features), it.trim())
                     }
                 }
-                "OPPO" -> SectionCard(stringResource(R.string.device_section_oppo), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+                "OPPO" -> SectionCard(stringResource(R.string.device_section_oppo)) {
                     RowItem(stringResource(R.string.device_version), oem!!.oppoVersion.ifEmpty { "-" })
                     RowItem(stringResource(R.string.device_screen_ratio), oem!!.oppoScreenRatio.ifEmpty { "-" })
                     oem!!.oplusCharging.takeIf { it.isNotBlank() }?.let {
                         RowItem(stringResource(R.string.device_charging_solution), it.trim())
                     }
                 }
-                "Vivo" -> SectionCard(stringResource(R.string.device_section_vivo), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+                "Vivo" -> SectionCard(stringResource(R.string.device_section_vivo)) {
                     RowItem(stringResource(R.string.device_version), oem!!.vivoOsVersion.ifEmpty { "-" })
                     RowItem(stringResource(R.string.device_solution), oem!!.vivoProductSolution.ifEmpty { "-" })
                     RowItem(stringResource(R.string.device_model), oem!!.vivoModel.ifEmpty { "-" })
                 }
-                "Samsung" -> SectionCard(stringResource(R.string.device_section_samsung), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+                "Samsung" -> SectionCard(stringResource(R.string.device_section_samsung)) {
                     RowItem(stringResource(R.string.device_oneui_version), oem!!.osVersion.ifEmpty { "-" })
                     oem!!.buildDisplayId.takeIf { it.isNotBlank() }?.let {
                         RowItem("Build", it)
@@ -480,7 +478,7 @@ fun DeviceScreen(
             }
 
             // 性能模式
-            SectionCard(stringResource(R.string.device_section_perf_mode), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+            SectionCard(stringResource(R.string.device_section_perf_mode)) {
                 RowItem(stringResource(R.string.device_game_mode), if (oem!!.gameModeSupported) stringResource(R.string.common_yes) else stringResource(R.string.device_not_activated))
                 RowItem(stringResource(R.string.device_current_scheduler), stringResource(oem!!.powerMode.labelRes))
             }
@@ -494,7 +492,7 @@ fun DeviceScreen(
                 oem!!.displayFeatures.takeIf { it.isNotBlank() }?.let { add(stringResource(R.string.device_display_features) to it) }
             }
             if (subsystems.isNotEmpty()) {
-                SectionCard(stringResource(R.string.device_section_vendor_subsystems), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+                SectionCard(stringResource(R.string.device_section_vendor_subsystems)) {
                     subsystems.forEach { (k, v) -> RowItem(k, v) }
                 }
             }
@@ -502,7 +500,7 @@ fun DeviceScreen(
             // 原始属性
             val props = oem!!.rawProperties
             if (props.isNotEmpty()) {
-                SectionCard(stringResource(R.string.device_section_vendor_props, props.size), modifier = Modifier.staggeredSwipe(cardIdx++)) {
+                SectionCard(stringResource(R.string.device_section_vendor_props, props.size)) {
                     props.forEach { (k, v) ->
                         Column(Modifier.fillMaxWidth().padding(vertical = 1.dp)) {
                             Text(k, fontSize = 11.sp,
@@ -546,9 +544,9 @@ private fun CameraRow(sensor: CameraSensorInfo) {
 private val SectionGradient = Brush.linearGradient(listOf(CyberCardStart, CyberCardEnd))
 
 @Composable
-private fun SectionCard(title: String, content: @Composable () -> Unit, modifier: Modifier = Modifier) {
+private fun SectionCard(title: String, content: @Composable () -> Unit) {
     Card(
-        modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+        Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
