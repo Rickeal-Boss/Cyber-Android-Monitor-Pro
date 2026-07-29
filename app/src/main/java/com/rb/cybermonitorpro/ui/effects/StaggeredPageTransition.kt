@@ -55,19 +55,19 @@ val LocalPageOffset: ProvidableCompositionLocal<Float> =
 // ═══════════════════════════════════════════════════════════════
 
 /** 级联步进 — 每递增一张卡片增加的交错系数 (越大=越靠下的卡片摆幅越大=鞭梢) */
-private const val STAGGER_STEP = 0.09f
+private const val STAGGER_STEP = 0.11f
 
 /** ★ 水平甩尾主导强度 — 卡片左右平移位移倍率 (相对屏宽), 这是动效的主运动轴 */
-private const val HORIZONTAL_PARALLAX = 0.16f
+private const val HORIZONTAL_PARALLAX = 0.19f
 
 /** 极弱垂直余量 — 保持结构对称, 几乎不可见 (0=纯水平甩尾) */
 private const val VERTICAL_WAVE = 0.0f
 
 /** 缩放衰减基数 — 过程中卡片缩小幅度 (辅助景深) */
-private const val SCALE_DECAY = 0.06f
+private const val SCALE_DECAY = 0.05f
 
 /** 透明度衰减基数 — 过程中卡片淡出幅度 (辅助景深) */
-private const val ALPHA_DECAY = 0.18f
+private const val ALPHA_DECAY = 0.15f
 
 // ═══════════════════════════════════════════════════════════════
 
