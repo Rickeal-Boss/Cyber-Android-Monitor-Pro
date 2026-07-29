@@ -515,9 +515,10 @@ private fun MainTabs(
         // ★ 性能优化 (2026-06-19): 去掉嵌套 AnimatedContent
         //   HorizontalPager 自带页面切换滑动动画，内部 AnimatedContent(fadeIn/fadeOut 300ms)
         //   是双重动画 + 每个 page 额外重组，去掉后滑动更流畅且减少重组开销。
-        // ★ StaggeredPageProvider: 提供 PagerState 给子卡片, 驱动左右滑动时从上到下级联变换
-        StaggeredPageProvider(pagerState = pagerState) {
+        // ★ StaggeredPageProvider v2: 按页提供独立弹簧平滑偏移, 驱动卡片级联变换
         HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+            // v2: 每页独立的偏移量 + 弹簧平滑 → 消除跳变 + 垂直级联波浪
+            StaggeredPageProvider(pagerState = pagerState, page = page) {
             val navigate: (Int) -> Unit = remember(scope, pagerState) {
                 { target: Int -> scope.launch { pagerState.animateScrollToPage(target) }; Unit }
             }
@@ -534,7 +535,7 @@ private fun MainTabs(
                 )
                 8 -> DeviceScreen()
             }
+            } // end StaggeredPageProvider (per-page)
         }
-        } // end StaggeredPageProvider
     }
 }

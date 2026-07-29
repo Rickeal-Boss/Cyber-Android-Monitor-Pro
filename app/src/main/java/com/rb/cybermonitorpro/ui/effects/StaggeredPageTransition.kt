@@ -1,12 +1,12 @@
 package com.rb.cybermonitorpro.ui.effects
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocal
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
@@ -14,116 +14,134 @@ import androidx.compose.foundation.pager.PagerState
 import kotlin.math.abs
 
 /**
- * 页面滑动交错变换 — 左右切换页面时, 卡片从上到下逐个跟随滑动方向做级联位移/缩放/透明度变换
+ * 页面滑动交错变换 v2 — 澎湃OS 3.0 通知栏风格
  *
- * 视觉效果参考 Android 12+ 通知中心 / 快捷设置面板的左右滑动过渡动画:
- *   - 顶部卡片最先响应滑动方向, 底部卡片滞后跟随 → 形成波浪级联
- *   - 每张卡片有独立的水平视差位移 + 轻微缩放 + 透明度渐变 + 垂直微偏移
+ * 核心改进 (v1→v2):
+ * ┌──────────────────────────────────────────────────────────────┐
+ * │  v1 问题          │  v2 修复                                 │
+ * ├───────────────────┼──────────────────────────────────────────┤
+ * │  全局 pager 偏移   │  ★ 每页独立偏移 (per-page offset)        │
+ * │  pageOffset==0    │  ★ 弹簧平滑 animateFloatAsState(spring)  │
+ * │  → return 跳变    │  ★ 无 early return，自然归零              │
+ * │  水平视差主导      │  ★ 垂直级联为主 (translationY > X)       │
+ * │  VERTICAL=0.008   │  ★ VERTICAL_CASCADE=0.10 (可见波浪)       │
+ * │  无时间差          │  ★ 空间级联 cascade = 1+idx*STAGGER_STEP  │
+ * └───────────────────┴──────────────────────────────────────────┘
  *
  * 使用方式:
  * ```
- * // 1) 在 HorizontalPager 外层提供 PagerState:
- * StaggeredPageProvider(pagerState = pagerState) {
- *     HorizontalPager(state = pagerState) { ... }
+ * // 在 HorizontalPager 内容 lambda 内按页包裹:
+ * HorizontalPager(state = pagerState) { page ->
+ *     StaggeredPageProvider(pagerState = pagerState, page = page) {
+ *         when (page) { 0 -> DashboardScreen() ... }
+ *     }
  * }
  *
- * // 2) 每张卡片按从上到下顺序编号并包裹:
- * MetricCard(
- *     modifier = Modifier.staggeredSwipe(cardIndex = 0),  // 最顶部卡片
- *     ...
- * )
+ * // 每张卡片按从上到下顺序编号:
+ * MetricCard(modifier = Modifier.staggeredSwipe(cardIndex = 0), ...)
  * ```
  */
 
-/** ★ 页面状态 CompositionLocal — 由 MainTabs 在 HorizontalPager 层提供 */
-val LocalPagerState: ProvidableCompositionLocal<Lazy<PagerState>> =
-    compositionLocalOf { error("LocalPagerState not provided — wrap HorizontalPager with StaggeredPageProvider") }
+/** 当前页面相对于屏幕中心的平滑偏移量: 0=居中激活, ±1=偏离一屏 */
+val LocalPageOffset: ProvidableCompositionLocal<Float> =
+    compositionLocalOf { 0f }
 
 // ═══════════════════════════════════════════════════════════════
-//  可调参数 (可在后续通过参数化 Modifier 或 theme token 统一管理)
+//  可调参数 — 参考澎湃OS 3.0 通知栏/快捷设置面板动效参数
 // ═══════════════════════════════════════════════════════════════
 
-/** 水平视差强度 — 卡片随页面滑动的水平偏移倍率 (相对于屏幕宽度) */
-private const val SWIPE_PARALLAX_X = 0.28f
+/** 级联步进 — 每递增一张卡片增加的交错系数 (越大底部卡片越滞后) */
+private const val STAGGER_STEP = 0.08f
 
-/** 级联步进 — 每递增一张卡片增加的交错延迟系数 (越大=底部卡片越滞后) */
-private const val STAGGER_STEP = 0.07f
+/** 垂直级联强度 — 过渡中卡片的垂直位移倍率 (相对自身高度) */
+private const val VERTICAL_CASCADE = 0.10f
 
-/** 缩放衰减 — 滑动过程中卡片的缩小幅度基数 */
-private const val SCALE_DECAY_BASE = 0.04f
+/** 缩放衰减基数 — 过程中卡片缩小幅度 */
+private const val SCALE_DECAY = 0.07f
 
-/** 透明度衰减 — 滑动过程中卡片的淡出幅度基数 */
-private const val ALPHA_DECAY_BASE = 0.18f
+/** 透明度衰减基数 — 过程中卡片淡出幅度 */
+private const val ALPHA_DECAY = 0.22f
 
-/** 垂直微偏移 — 滑动过程中卡片的垂直偏移 (增强"波浪"感, 相对于屏幕高度) */
-private const val VERTICAL_WAVE = 0.008f
+/** 微弱水平视差 — 辅助增强方向感 (不主导) */
+private const val HORIZONTAL_PARALLAX = 0.05f
 
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * 页面滑动交错变换 Modifier
+ * 卡片级联滑动 Modifier
  *
- * 通过 composed 工厂在组合上下文中读取 LocalPagerState,
- * 将 [pagerState.currentPageOffsetFraction] 驱动的级联变换应用到每张卡片。
- *
- * @param cardIndex 卡片在页面中的垂直序号 (从上到下: 0, 1, 2, ...)
- *   — 序号越小(越靠上)响应越快, 序号越大(越靠下)滞后越多, 形成级联波浪
+ * 通过 [LocalPageOffset] 读取本页的弹簧平滑偏移,
+ * 按 [cardIndex] 施加空间级联 (越靠下的卡片位移/缩放/透明度变化越大),
+ * 形成从上到下的波浪式跟随效果。
  */
 @Stable
 fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
-    val pagerState = LocalPagerState.current.value
-    // currentPageOffsetFraction: 当前页偏离 settled 位置的比例
-    //   向左滑到下一页: 0 → -1    向右滑到上一页: 0 → +1
-    val pageOffset = pagerState.currentPageOffsetFraction
+    // 本页的平滑偏移: 由 StaggeredPageProvider 提供, 已经过 spring 平滑
+    val pageOffset = LocalPageOffset.current
 
-    // ★ 级联因子: 越靠下的卡片交错延迟越大
+    // 级联因子: 序号越大(越靠下)滞后越多 → 波浪从上到下传播
     val stagger = cardIndex.toFloat() * STAGGER_STEP
     val cascade = 1f + stagger
 
     this.graphicsLayer {
-        // settled 态零开销 — 直接跳过所有计算
-        if (pageOffset == 0f) return@graphicsLayer
+        // ★ 不做 early return — pageOffset=0 时所有变换自动为 identity (0 × 任何值 = 0)
+        // 这消除了 v1 的跳变根因
 
-        // 水平视差: 顶部卡片跟随最紧, 底部卡片被"拖拽"得更远
-        translationX = size.width * pageOffset * SWIPE_PARALLAX_X * cascade
+        val eff = pageOffset * cascade // 每张卡片的实际有效偏移
 
-        // 垂直微偏移: 增强波浪感 (顶部卡片几乎不动Y, 底部卡片略上下浮动)
-        translationY = size.height * abs(pageOffset) * VERTICAL_WAVE * stagger *
-            if (pageOffset > 0) 1f else -1f
+        // ── 主运动: 垂直级联 (卡片上下浮动形成波浪) ──
+        translationY = size.height * eff * VERTICAL_CASCADE
 
-        // 缩放: 滑动中轻微缩小, 底部卡片缩小更多 (透视深度感)
-        val scaleDecay = SCALE_DECAY_BASE * cascade
-        scaleX = 1f - abs(pageOffset) * scaleDecay
-        scaleY = scaleX
+        // ── 辅助: 微弱水平视差 (增强滑动方向感, 但不主导) ──
+        translationX = size.width * eff * HORIZONTAL_PARALLAX
 
-        // 透明度: 滑动中轻微淡出, 底部卡片更透明 (景深层次感)
-        alpha = (1f - abs(pageOffset) * ALPHA_DECAY_BASE * (1f + stagger * 0.4f))
-            .coerceIn(0f, 1f)
+        // ── 缩放: 过渡中轻微缩小 (景深层次感) ──
+        val s = (1f - abs(eff) * SCALE_DECAY).coerceIn(0.75f, 1f)
+        scaleX = s
+        scaleY = s
+
+        // ── 透明度: 过渡中轻微淡出 ──
+        alpha = (1f - abs(eff) * ALPHA_DECAY).coerceIn(0f, 1f)
     }
 }
 
+// ═══════════════════════════════════════════════════════════════
+
 /**
- * 页面滑动交错变换 Provider — 包裹 HorizontalPager 以提供 PagerState 给子卡片
+ * 页面级联变换 Provider — 在 [HorizontalPager] 内容 lambda 内按页调用
  *
- * 使用方式 (在 MainTabs 中):
- * ```
- * StaggeredPageProvider(pagerState = pagerState) {
- *     HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
- *         when (page) {
- *             0 -> DashboardScreen(onNavigate = navigate)
- *             ...
- *         }
- *     }
- * }
- * ```
+ * 计算本页 [page] 相对于屏幕中心的原始偏移,
+ * 经弹簧物理 ([spring]) 平滑后通过 [LocalPageOffset] 提供给子卡片。
+ *
+ * 弹簧参数调优:
+ * - dampingRatio=0.72: 轻微欠阻尼 → 澎湃OS 的弹性回弹感
+ * - stiffness=380: 中等刚度 → 跟手灵敏但不生硬
  */
 @Composable
 fun StaggeredPageProvider(
     pagerState: PagerState,
+    page: Int,
     content: @Composable () -> Unit
 ) {
-    val lazyPagerState = remember { lazy { pagerState } }
-    CompositionLocalProvider(LocalPagerState provides lazyPagerState) {
+    // 原始偏移: page - (currentPage + currentPageOffsetFraction)
+    //   = 0  → 本页完全居中 (激活态)
+    //   = +1 → 本页在右侧一屏外
+    //   = -1 → 本页在左侧一屏外
+    val rawOffset = page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+
+    // ★ 弹簧物理平滑 — 消除跳变的根本手段
+    // 当手指释放/页面落定时, rawOffset 从非零过渡到 0,
+    // spring 自然地将其弹回零位 → 卡片平滑归位, 无突变
+    val smoothed by animateFloatAsState(
+        targetValue = rawOffset,
+        animationSpec = spring(
+            dampingRatio = 0.72f,
+            stiffness = 380f
+        ),
+        label = "staggeredPageOffset"
+    )
+
+    CompositionLocalProvider(LocalPageOffset provides smoothed) {
         content()
     }
 }
