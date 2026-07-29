@@ -38,6 +38,7 @@ import com.rb.cybermonitorpro.ui.components.charts.DualLineChart
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
+import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
 @Composable
 fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
@@ -67,6 +68,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        var cardIdx = 0
         val wifiConnectedLabel = stringResource(R.string.network_wifi_connected)
         val wifiDisconnectedLabel = stringResource(R.string.network_wifi_not_connected)
         val wifiStatus = buildString {
@@ -79,10 +81,10 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
             wifiInfo?.linkSpeedMbps?.takeIf { it > 0 }?.let { "$it Mbps" },
             networkType
         )
-        InfoCard(title = wifiStatus, subtitle = wifiSubtitle.ifEmpty { stringResource(R.string.common_waiting_data) },
+        InfoCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = wifiStatus, subtitle = wifiSubtitle.ifEmpty { stringResource(R.string.common_waiting_data) },
             icon = Icons.Filled.Share, iconTint = NeonPurple)
 
-        MetricCard(title = "Network activity", value = "${wifiInfo?.linkSpeedMbps ?: 0} Mbps", valueColor = NeonPurpleBright) {
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Network activity", value = "${wifiInfo?.linkSpeedMbps ?: 0} Mbps", valueColor = NeonPurpleBright) {
             DualLineChart(data1 = wifiSpeedChart, data2 = signalChart,
                 modifier = Modifier.fillMaxWidth(), lineColor1 = NeonPurple, lineColor2 = NeonMagenta)
         }
@@ -93,6 +95,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
         val chWidth = wifiInfo?.channelWidth?.takeIf { it.isNotEmpty() }
         if (freqMhz != null || wifiStd != null || chWidth != null) {
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = stringResource(R.string.network_wifi_details_title),
                 value = wifiStd ?: "---",
                 valueColor = NeonPurpleBright,
@@ -108,6 +111,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
         val wifiPowerSave = wifiInfo?.powerSaveMode?.takeIf { it.isNotEmpty() }
         if (wifiChipTemp != null || wifiPowerSave != null) {
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = stringResource(R.string.network_wifi_chip_title),
                 value = FormatUtils.joinNonBlank("  ·  ",
                     wifiChipTemp?.let { "%.1f°C".format(it) },
@@ -118,38 +122,39 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
         }
 
         // 详细网络信息
-        MetricCard(title = stringResource(R.string.network_ip_address_title),
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = stringResource(R.string.network_ip_address_title),
             value = wifiInfo?.ipv4?.takeIf { it.isNotEmpty() } ?: "---", valueColor = NeonPurpleBright)
 
-        MetricCard(title = stringResource(R.string.network_gateway_title),
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = stringResource(R.string.network_gateway_title),
             value = wifiInfo?.gateway?.takeIf { it.isNotEmpty() } ?: "---", valueColor = NeonPurpleBright)
 
-        MetricCard(title = "DNS",
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "DNS",
             value = wifiInfo?.dns?.takeIf { it.isNotEmpty() } ?: "---", valueColor = NeonPurpleBright)
 
-        MetricCard(title = "MAC",
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "MAC",
             value = wifiInfo?.macAddress?.takeIf { it.isNotEmpty() } ?: "---", valueColor = NeonPurpleBright)
 
-        MetricCard(title = stringResource(R.string.network_subnet_mask_title),
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = stringResource(R.string.network_subnet_mask_title),
             value = wifiInfo?.subnetMask?.takeIf { it.isNotEmpty() } ?: "---", valueColor = NeonPurpleBright)
 
-        MetricCard(title = "BSSID",
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "BSSID",
             value = wifiInfo?.bssid?.takeIf { it.isNotEmpty() } ?: "---", valueColor = NeonPurpleBright)
 
         // 移动网络
         if (networkType != null) {
-            MetricCard(title = stringResource(R.string.network_type_title),
+            MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = stringResource(R.string.network_type_title),
                 value = networkType, valueColor = NeonPurpleBright)
         }
-        MetricCard(title = stringResource(R.string.network_operator_title),
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = stringResource(R.string.network_operator_title),
             value = mobileNetwork?.operatorName?.takeIf { it.isNotEmpty() } ?: "---", valueColor = NeonPurpleBright)
 
         // ── NR/LTE 独立信号强度 dBm ──
         if (nrDbm != null) {
             // 5G NR SS-RSRP 阈值 (3GPP TS 38.215: -156~-31 dBm)
             val nrLevel = signalLevelText(nrDbm, -85, -95, -105)
-            MetricCard(
-                title = stringResource(R.string.network_nr_5g_signal_title),
+                MetricCard(
+                    modifier = Modifier.staggeredSwipe(cardIdx++),
+                    title = stringResource(R.string.network_nr_5g_signal_title),
                 value = "$nrDbm dBm  ·  $nrLevel",
                 valueColor = signalLevelColor(nrDbm, -95, -105)
             )
@@ -158,6 +163,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
             // LTE RSRP 阈值 (3GPP TS 36.133)
             val lteLevel = signalLevelText(lteDbm, -85, -100, -115)
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = stringResource(R.string.network_lte_4g_signal_title),
                 value = "$lteDbm dBm  ·  $lteLevel",
                 valueColor = signalLevelColor(lteDbm, -100, -115)
@@ -166,7 +172,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
         // 通用信号强度卡片（RSRP 兜底）
         if (signalStrength != null && nrDbm == null && lteDbm == null) {
             val pct = kotlin.math.min(100, (signalStrength + 120) * 100 / 60).coerceIn(0, 100)
-            MetricCard(title = stringResource(R.string.network_signal_strength_title), value = "$signalStrength dBm · $pct%",
+            MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = stringResource(R.string.network_signal_strength_title), value = "$signalStrength dBm · $pct%",
                 valueColor = signalLevelColor(signalStrength, -80, -100)) {
                 LineChart(data = signalChart, modifier = Modifier.fillMaxWidth())
             }
@@ -175,12 +181,13 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
         // ── 5G / LTE 小区详情 ──
         val mn = mobileNetwork
         if (mn != null && hasCellInfo(mn)) {
-            CellDetailCard(mn)
+            CellDetailCard(mn, modifier = Modifier.staggeredSwipe(cardIdx++))
         }
 
         // 附近 AP (始终显示，无数据时给出提示)
         val aps = wifiInfo?.nearbyAps ?: emptyList()
         MetricCard(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             title = stringResource(R.string.network_nearby_aps_title),
             value = if (aps.isNotEmpty()) aps.joinToString("\n")
                     else stringResource(R.string.network_no_aps_found),
@@ -198,9 +205,9 @@ private fun hasCellInfo(info: MobileNetworkInfo): Boolean {
 }
 
 @Composable
-private fun CellDetailCard(info: MobileNetworkInfo) {
+private fun CellDetailCard(info: MobileNetworkInfo, modifier: Modifier = Modifier) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

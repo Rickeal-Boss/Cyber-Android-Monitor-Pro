@@ -46,6 +46,7 @@ import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.NeonMagenta
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
+import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import org.koin.androidx.compose.koinViewModel
 
@@ -83,11 +84,15 @@ fun CpuScreen(
     val cpuFreqChart by remember(histData) { derivedStateOf { ChartUtils.normalizeChartData(histData["cpu_freq"], 3500f) } }
     val deepSleepChart by remember(histData) { derivedStateOf { ChartUtils.normalizeChartData(histData["cpu_deep_sleep"], 100f) } }
 
+    // 滑动交错索引：自上而下递增，条件块与 forEach 动态卡片均基于此累加
+    var cardIdx = 0
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         InfoCard(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             title = arch,
             subtitle = "$coreCount cores · ARMv8",
             icon = Icons.Filled.PlayArrow,
@@ -98,6 +103,7 @@ fun CpuScreen(
         Text(stringResource(R.string.cpu_temp_status_label, tempStatus), fontSize = 16.sp, fontWeight = FontWeight.Medium, color = NeonPurple)
 
         MetricCard(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             title = "CPU temperature",
             value = temp,
             valueColor = NeonPurpleBright,
@@ -110,6 +116,7 @@ fun CpuScreen(
         if (deepSleepPct != null && !deepSleepPct.isNaN() && cStates.isNotEmpty()) {
             Text(stringResource(R.string.cpu_title_deep_sleep), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = stringResource(R.string.cpu_title_c_states),
                 value = "${deepSleepPct.toInt()}%",
                 valueColor = NeonPurpleBright,
@@ -119,7 +126,7 @@ fun CpuScreen(
             }
 
             // 各 C-State 详情
-            cStates.forEach { state ->
+            cStates.forEachIndexed { idx, state ->
                 val totalTime = cStates.sumOf { it.timeUs }
                 val pct = if (totalTime > 0) (state.timeUs.toFloat() / totalTime * 100f).coerceIn(0f, 100f) else 0f
                 val color = when {
@@ -128,6 +135,7 @@ fun CpuScreen(
                     else -> NeonPurple.copy(alpha = 0.6f)
                 }
                 MetricCard(
+                    modifier = Modifier.staggeredSwipe(cardIdx++),
                     title = "${state.name} (C${state.level}·${cStateDesc(ctx, state.name, state.level)})",
                     value = "${pct.toInt()}%",
                     valueColor = color,
@@ -141,14 +149,17 @@ fun CpuScreen(
         // CPU 缓存信息 — 完整展开, 不压缩
         if (cacheL1 != null || cacheL2 != null || cacheL3 != null) {
             if (cacheL1 != null) MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = "L1 Cache", value = cacheL1,
                 valueColor = NeonPurpleBright
             )
             if (cacheL2 != null) MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = "L2 Cache", value = cacheL2,
                 valueColor = NeonPurpleBright
             )
             if (cacheL3 != null) MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = "L3 Cache", value = cacheL3,
                 valueColor = NeonPurpleBright
             )
@@ -157,7 +168,7 @@ fun CpuScreen(
         // 支持的 ABI
         if (supportedAbis.isNotEmpty()) {
             Text(stringResource(R.string.cpu_title_supported_abis), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-            supportedAbis.forEach { abi ->
+            supportedAbis.forEachIndexed { idx, abi ->
                 val abiLabel = when {
                     abi.contains("arm64") -> "ARM 64-bit (arm64-v8a)"
                     abi.contains("armeabi-v7a") -> "ARM 32-bit (armeabi-v7a)"
@@ -167,7 +178,8 @@ fun CpuScreen(
                     else -> abi
                 }
                 MetricCard(
-                    title = if (supportedAbis.indexOf(abi) == 0) stringResource(R.string.cpu_abi_primary) else stringResource(R.string.cpu_abi_compatible),
+                    modifier = Modifier.staggeredSwipe(cardIdx++),
+                    title = if (idx == 0) stringResource(R.string.cpu_abi_primary) else stringResource(R.string.cpu_abi_compatible),
                     value = abiLabel,
                     valueColor = NeonPurpleBright,
                     subtitle = abi
@@ -178,11 +190,12 @@ fun CpuScreen(
         // CPU 各核心实时频率
         if (cores.isNotEmpty()) {
             Text(stringResource(R.string.cpu_title_core_freq), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-            cores.take(8).forEach { core ->
+            cores.take(8).forEachIndexed { idx, core ->
                 val freqMhz = core.currentFreqKHz / 1000f
                 val maxMhz = core.maxFreqKHz / 1000f
                 val pct = if (maxMhz > 0) (core.currentFreqKHz.toFloat() / core.maxFreqKHz).coerceIn(0f, 1f) else 0f
                 MetricCard(
+                    modifier = Modifier.staggeredSwipe(cardIdx++),
                     title = "Core ${core.coreIndex}",
                     value = "%.0f MHz".format(freqMhz),
                     valueColor = NeonPurpleBright,
@@ -208,11 +221,12 @@ fun CpuScreen(
             Text(stringResource(R.string.common_waiting_data), Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else if (selectedView == 0) {
             // Per cluster — 按 maxFreq 分组，使用真实频率历史
-            coreGroups.values.sortedByDescending { it.first().maxFreqKHz }.forEach { group ->
+            coreGroups.values.sortedByDescending { it.first().maxFreqKHz }.forEachIndexed { groupIdx, group ->
                 val maxFreq = group.first().maxFreqKHz / 1000
                 val clusterMaxFreq = group.first().maxFreqKHz.toFloat()
                 val clusterType = group.first().coreType.ifEmpty { null }
                 ClusterCard(
+                    modifier = Modifier.staggeredSwipe(cardIdx++),
                     name = group.first().coreCluster.ifEmpty {
                         when { maxFreq > 2500 -> "Prime"; maxFreq > 1800 -> "Performance"; else -> "Efficiency" }
                     },
@@ -243,8 +257,8 @@ fun CpuScreen(
 }
 
 @Composable
-private fun ClusterCard(name: String, subtitle: String, frequency: String, freqData: List<Float>) {
-    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+private fun ClusterCard(name: String, subtitle: String, frequency: String, freqData: List<Float>, modifier: Modifier = Modifier) {
+    Card(modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {

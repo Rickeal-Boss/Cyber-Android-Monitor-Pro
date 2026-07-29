@@ -24,6 +24,7 @@ import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import org.koin.androidx.compose.koinViewModel
+import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
 @Composable
 fun MemoryScreen(
@@ -47,7 +48,9 @@ fun MemoryScreen(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        var cardIdx = 0
         MetricCard(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             title = stringResource(R.string.memory_title),
             value = "${FormatUtils.formatBytes(availableKB * 1024)} ${stringResource(R.string.memory_available_suffix)}",
             valueColor = NeonPurpleBright,
@@ -58,6 +61,7 @@ fun MemoryScreen(
 
         if (swapTotalKB > 0) {
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = "SWAP / ZRAM",
                 value = "${FormatUtils.formatBytes(swapUsedKB * 1024)} in use",
                 valueColor = NeonPurpleBright,
@@ -68,7 +72,7 @@ fun MemoryScreen(
         }
 
         if (zramUsed > 0) {
-            MetricCard(title = "ZRAM used", value = FormatUtils.formatBytes(zramUsed * 1024), valueColor = NeonPurpleBright) {
+            MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "ZRAM used", value = FormatUtils.formatBytes(zramUsed * 1024), valueColor = NeonPurpleBright) {
                 LineChart(data = ramChart, modifier = Modifier.fillMaxWidth())
             }
         }
@@ -77,6 +81,7 @@ fun MemoryScreen(
         val mem = memoryInfo
         if (mem != null && mem.totalKB > 0) {
             MemoryDistributionCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 totalKB = mem.totalKB,
                 appKB = mem.appMemoryKB,
                 cachedKB = mem.cachedMemoryKB,
@@ -86,11 +91,11 @@ fun MemoryScreen(
             )
         }
 
-        MetricCard(title = "Memory available", value = FormatUtils.formatBytes(availableKB * 1024), valueColor = NeonPurpleBright) {
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Memory available", value = FormatUtils.formatBytes(availableKB * 1024), valueColor = NeonPurpleBright) {
             LineChart(data = ramChart, modifier = Modifier.fillMaxWidth())
         }
 
-        MetricCard(title = "Memory used", value = FormatUtils.formatBytes(usedKB * 1024), valueColor = NeonPurpleBright) {
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Memory used", value = FormatUtils.formatBytes(usedKB * 1024), valueColor = NeonPurpleBright) {
             LineChart(data = ramChart, modifier = Modifier.fillMaxWidth())
         }
 
@@ -98,6 +103,7 @@ fun MemoryScreen(
         val processes = memoryInfo?.topProcesses?.takeIf { it.isNotEmpty() }
         if (processes != null) {
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = "Top processes",
                 value = processes.joinToString("\n"),
                 valueColor = NeonPurpleBright

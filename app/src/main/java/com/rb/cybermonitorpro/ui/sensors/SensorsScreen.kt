@@ -34,6 +34,7 @@ import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
 import org.koin.androidx.compose.koinViewModel
+import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
 /**
  * 传感器列表页 — 现在通过回调将传感器选择上抛给 MainActivity 以全屏覆盖层展示
@@ -60,6 +61,7 @@ private fun SensorListContent(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        var cardIdx = 0
         Text(
             stringResource(R.string.sensor_list_title),
             fontSize = 18.sp,
@@ -72,19 +74,20 @@ private fun SensorListContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        sensors.forEach { sensor ->
-            SensorItemCard(sensor = sensor, onClick = { onSensorClick(sensor) })
+        sensors.forEachIndexed { idx, sensor ->
+            SensorItemCard(sensor = sensor, onClick = { onSensorClick(sensor) }, modifier = Modifier.staggeredSwipe(cardIdx + idx))
         }
+        cardIdx += sensors.size
     }
 }
 
 @Composable
-private fun SensorItemCard(sensor: SensorItemInfo, onClick: () -> Unit) {
+private fun SensorItemCard(sensor: SensorItemInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val meta = SensorTypeMeta.fromTypeId(sensor.type)
     val ctx = LocalContext.current
 
     Card(
-        Modifier
+        modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),

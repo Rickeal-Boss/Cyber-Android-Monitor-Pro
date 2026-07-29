@@ -35,6 +35,7 @@ import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
+import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import org.koin.androidx.compose.koinViewModel
 
@@ -67,6 +68,9 @@ fun GpuScreen(
     val gpuTempChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["gpu_temp"], 100f) } }
     val gpuFreqChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["gpu_freq"], 100f) } }
 
+    // 滑动交错索引：自上而下递增，条件块卡片均基于此累加
+    var cardIdx = 0
+
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -77,6 +81,7 @@ fun GpuScreen(
             governor
         )
         InfoCard(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             title = model,
             subtitle = subtitle,
             icon = Icons.Filled.Info,
@@ -94,7 +99,7 @@ fun GpuScreen(
         }
 
         // GPU 负载 + 有效利用率
-        MetricCard(title = "GPU load", value = load, valueColor = NeonPurpleBright,
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU load", value = load, valueColor = NeonPurpleBright,
             subtitle = loadSource ?: "") {
             if (effectiveUtil != null && !effectiveUtil.isNaN()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -107,6 +112,7 @@ fun GpuScreen(
 
         // GPU 频率 (DVFS 感知)
         MetricCard(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             title = "GPU frequency (DVFS)",
             value = frequency,
             valueColor = if (isThrottled) WarningNeon else NeonPurpleBright,
@@ -119,13 +125,14 @@ fun GpuScreen(
         }
 
         // GPU 温度
-        MetricCard(title = "GPU temperature", value = temp, valueColor = NeonPurpleBright) {
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU temperature", value = temp, valueColor = NeonPurpleBright) {
             LineChart(data = gpuTempChart, modifier = Modifier.fillMaxWidth())
         }
 
         // 调速器信息
         if (governor != null) {
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = "Governor",
                 value = governor,
                 valueColor = NeonPurpleBright,
@@ -136,6 +143,7 @@ fun GpuScreen(
         // 渲染器
         if (renderer != null) {
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = "Renderer",
                 value = renderer,
                 valueColor = NeonPurpleBright
@@ -151,6 +159,7 @@ fun GpuScreen(
                 else -> vulkanDriver
             }
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = "Vulkan Driver Version",
                 value = displayVer,
                 valueColor = SuccessNeon,

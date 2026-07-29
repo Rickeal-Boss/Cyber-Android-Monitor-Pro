@@ -32,6 +32,7 @@ import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
+import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
 @Composable
 fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
@@ -47,6 +48,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        var cardIdx = 0
         // ── 状态卡片 ──
         val statusTitle = when {
             !enabled -> stringResource(R.string.gps_not_enabled)
@@ -61,6 +63,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
         }
 
         InfoCard(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             title = statusTitle,
             subtitle = statusSubtitle,
             icon = Icons.Filled.PlayArrow,
@@ -71,6 +74,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
         gps?.latitude?.takeIf { it != 0.0 && !it.isNaN() }?.let { lat ->
             gps?.longitude?.takeIf { it != 0.0 && !it.isNaN() }?.let { lon ->
                 MetricCard(
+                    modifier = Modifier.staggeredSwipe(cardIdx++),
                     title = stringResource(R.string.gps_coordinates_title),
                     value = "%.6f, %.6f".format(lat, lon),
                     valueColor = NeonPurpleBright
@@ -81,6 +85,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
         // ── 精度 ──
         gps?.accuracy?.takeIf { it > 0 && !it.isNaN() }?.let { acc ->
             MetricCard(
+                modifier = Modifier.staggeredSwipe(cardIdx++),
                 title = stringResource(R.string.gps_accuracy_title),
                 value = "%.1f m".format(acc),
                 valueColor = NeonPurpleBright
@@ -90,6 +95,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
         // ── 速度 (始终显示，无数据按 0.0 展示) ──
         val speedMps = gps?.speedMps?.takeIf { it >= 0f && !it.isNaN() } ?: 0f
         MetricCard(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             title = stringResource(R.string.gps_speed_title),
             value = "%.1f km/h".format(speedMps * 3.6f),
             valueColor = NeonCyan,
@@ -98,6 +104,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
 
         // ── 卫星计数（内/外圈环形统计）──
         MetricCard(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             title = stringResource(R.string.gps_satellite_count_title),
             value = "$fixCount / $totalCount",
             valueColor = if (fixCount > 0) SuccessNeon else NeonPurpleBright,
@@ -111,6 +118,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
 
         // ── 卫星分布天空图（始终显示，用于确认新代码已部署）──
         SatelliteSkyView(
+            modifier = Modifier.staggeredSwipe(cardIdx++),
             satellites = satellites,
             title = if (satellites.isEmpty()) stringResource(R.string.gps_sky_plot_no_signal) else stringResource(R.string.gps_sky_plot_title)
         )
@@ -125,17 +133,18 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
                 modifier = Modifier.padding(top = 4.dp)
             )
 
-            satellites.forEach { sat ->
-                SatelliteCard(sat)
+            satellites.forEachIndexed { idx, sat ->
+                SatelliteCard(sat, modifier = Modifier.staggeredSwipe(cardIdx + idx))
             }
+            cardIdx += satellites.size
         }
     }
 }
 
 @Composable
-private fun SatelliteCard(sat: GpsSatelliteInfo) {
+private fun SatelliteCard(sat: GpsSatelliteInfo, modifier: Modifier = Modifier) {
     Card(
-        Modifier.fillMaxWidth(),
+        modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

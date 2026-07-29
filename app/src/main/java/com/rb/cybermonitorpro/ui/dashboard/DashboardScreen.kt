@@ -42,6 +42,7 @@ import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.effects.revealLight
+import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
@@ -75,12 +76,12 @@ fun DashboardScreen(
         ?: memoryInfo?.zramCompressedKB?.takeIf { it > 0 } ?: 0L
     val zramOriginalKB = memoryInfo?.zramOriginalKB?.takeIf { it > 0 } ?: 0L
     val hasSwapZram = (swapTotalKB > 0 || zramOriginalKB > 0)
-    // 取较大者作为 "SWAP/ZRAM in use" 的主展示值（swap 优先）
+    // 取较大者作�? "SWAP/ZRAM in use" 的主展示值（swap 优先�?
     val swapzramUsedKB = if (swapUsedKB >= zramUsedKB) swapUsedKB else zramUsedKB
     val swapzramTotalKB = if (swapUsedKB >= zramUsedKB) swapTotalKB else zramOriginalKB
     val swapzramPct = if (swapzramTotalKB > 0 && swapzramUsedKB > 0)
         (swapzramUsedKB.toFloat() / swapzramTotalKB).coerceIn(0f, 1f) else -1f
-    // 实时开机时长 (每分钟刷新)
+    // 实时开机时�? (每分钟刷�?)
     var liveUptime by remember { mutableStateOf(android.os.SystemClock.elapsedRealtime() / 1000) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -95,7 +96,7 @@ fun DashboardScreen(
 
     val ctx = LocalContext.current
 
-    // ── 卡片排序 (可拖拽重排) ──
+    // ── 卡片排序 (可拖拽重�?) ──
     val appSettings = AppSettings.getInstance(ctx)
     val reorderEnabled = appSettings.dashboardReorderEnabled
     var metricOrder by remember { mutableStateOf(resolveCardOrder(appSettings.metricCardOrder, METRIC_CARD_IDS)) }
@@ -109,12 +110,12 @@ fun DashboardScreen(
         appSettings.quickCardOrder = newOrder.joinToString(",")
     }
 
-    // 预计算：内存进度（供 MetricCardByType 按 ID 渲染）
+    // 预计算：内存进度（供 MetricCardByType �? ID 渲染�?
     val memProgress = if (memoryInfo?.totalKB ?: 0L > 0)
         (memoryInfo!!.usedKB.toFloat() / memoryInfo!!.totalKB).coerceIn(0f, 1f) else -1f
 
 
-    // ★ 图表缓存: 避免每次重组重算 normalizeChartData
+    // �? 图表缓存: 避免每次重组重算 normalizeChartData
     val cpuTempChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["cpu_temp"], 100f) } }
     val ramChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["ram_usage"], 100f) } }
     val gpuLoadChart by remember(historyData) { derivedStateOf { ChartUtils.normalizeChartData(historyData["gpu_load"], 100f) } }
@@ -127,7 +128,7 @@ fun DashboardScreen(
     val pluggedNotChargingStr = stringResource(R.string.battery_status_plugged_not_charging)
     val dischargingStr = stringResource(R.string.battery_status_discharging)
 
-    // 电池副标题：按充电状态组合（供电池指标卡 subtitle 使用）
+    // 电池副标题：按充电状态组合（供电池指标卡 subtitle 使用�?
     val batterySubtitle = buildString {
         when {
             batteryInfo?.isPlugged == true && batteryInfo?.isCharging == true -> append(chargingStr)
@@ -140,8 +141,9 @@ fun DashboardScreen(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // ── 设备信息卡片 (开机时间 + 深度待机) ──
+        // ── 设备信息卡片 (开机时�? + 深度待机) ──
         InfoCard(
+            modifier = Modifier.staggeredSwipe(0),
             title = deviceName,
             subtitle = FormatUtils.joinNonBlank("  ·  ",
                 "$uptimePrefix $uptimeStr",
@@ -153,17 +155,17 @@ fun DashboardScreen(
         // ── 数据源健康指示条 ──
         DataSourceHealthBar(sourceHealth)
 
-        // ── 分割线 ──
+        // ── 分割�? ──
         HorizontalDivider(thickness = 1.dp, color = NeonPurpleDeep.copy(alpha = 0.3f))
 
-        // ── 2×2 实时指标网格 (可拖拽重排) ──
+        // ── 2×2 实时指标网格 (可拖拽重�?) ──
         ReorderableCardGrid(
             getItems = { metricOrder },
             onReorder = onMetricReorder,
             enabled = reorderEnabled,
             keyOf = { it }
         ) { id, handleMod ->
-            Box(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.indexOf(id))) {
                 MetricCardByType(
                     id = id,
                     cpuTemp = cpuTemp, cpuTempChart = cpuTempChart,
@@ -179,10 +181,10 @@ fun DashboardScreen(
             }
         }
 
-        // ── 分割线 ──
+        // ── 分割�? ──
         HorizontalDivider(thickness = 1.dp, color = NeonPurpleDeep.copy(alpha = 0.3f))
 
-        // ── 快速访问 (可拖拽重排) ──
+        // ── 快速访�? (可拖拽重�?) ──
         Text(stringResource(R.string.dashboard_quick_access), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
 
         ReorderableCardGrid(
@@ -191,7 +193,7 @@ fun DashboardScreen(
             enabled = reorderEnabled,
             keyOf = { it }
         ) { id, handleMod ->
-            Box(Modifier.fillMaxWidth()) {
+            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.size + quickOrder.indexOf(id))) {
                 QuickLinkByType(id = id, onNavigate = onNavigate, memUsed = memUsed, memTotal = memTotal)
                 if (reorderEnabled) {
                     ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp), handleMod)
@@ -203,7 +205,7 @@ fun DashboardScreen(
     }
 }
 
-// ── 快速访问卡片组件 ──
+// ── 快速访问卡片组�? ──
 @Composable
 private fun QuickLinkCard(
     title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -249,7 +251,7 @@ private val QUICK_NAV = mapOf(
 /**
  * 将持久化的逗号分隔顺序解析为有效卡片有序列表：
  * - 保留已存顺序中的已知 ID
- * - 追加存储中缺失的新 ID（版本增减卡片时不丢、不崩）
+ * - 追加存储中缺失的�? ID（版本增减卡片时不丢、不崩）
  * - 剔除未知 ID
  * - 存储为空/非法时回落默认序
  */
@@ -261,9 +263,9 @@ private fun resolveCardOrder(stored: String, validIds: List<String>): List<Strin
 }
 
 /**
- * 可重排 2 列网格。
- * enabled=true：挂 ReorderableItem + 拖拽手柄（闭包内 getItems() 始终读取最新顺序，避免捕获旧快照）。
- * enabled=false：回落普通 LazyVerticalGrid（静态，便于特性开关一键回滚）。
+ * 可重�? 2 列网格�?
+ * enabled=true：挂 ReorderableItem + 拖拽手柄（闭包内 getItems() 始终读取最新顺序，避免捕获旧快照）�?
+ * enabled=false：回落普�? LazyVerticalGrid（静态，便于特性开关一键回滚）�?
  */
 @Composable
 private fun ReorderableCardGrid(
@@ -273,11 +275,11 @@ private fun ReorderableCardGrid(
     keyOf: (String) -> String,
     itemContent: @Composable (String, Modifier) -> Unit,
 ) {
-    // ★ 崩溃修复 (HCP-5): 静态 2 列网格(userScrollEnabled=false)必须处于有限高度约束下。
-    //   外层 DashboardScreen 是 Column(Modifier.verticalScroll), 会向子节点传 maxHeight=Infinity;
-    //   LazyVerticalGrid 即便禁用滚动也过不了 checkScrollableContainerConstraints → 抛
-    //   IllegalStateException("measured with an infinity maximum height")，即为 vivo 真机"启动即闪退"根因。
-    //   这里用基于 item 数的安全上限约束 maxHeight（网格仍按自身内容自适应高度，不拉伸/不截断）。
+    // �? 崩溃修复 (HCP-5): 静�? 2 列网�?(userScrollEnabled=false)必须处于有限高度约束下�?
+    //   外层 DashboardScreen �? Column(Modifier.verticalScroll), 会向子节点传 maxHeight=Infinity;
+    //   LazyVerticalGrid 即便禁用滚动也过不了 checkScrollableContainerConstraints �? �?
+    //   IllegalStateException("measured with an infinity maximum height")，即�? vivo 真机"启动即闪退"根因�?
+    //   这里用基�? item 数的安全上限约束 maxHeight（网格仍按自身内容自适应高度，不拉伸/不截断）�?
     val itemCount = getItems().size
     val rowCount = (itemCount + 1) / 2
     // 避免 maxOf(本构建链曾因 kotlin.math.maxOf 解析失败 CI #568): 手写非负守卫
@@ -301,8 +303,8 @@ private fun ReorderableCardGrid(
         ) {
             items(getItems(), key = keyOf) { item ->
                 ReorderableItem(reorderState, key = keyOf(item)) {
-                    // 拖拽手柄 Modifier 必须在 ReorderableItem 作用域内计算
-                    // （draggableHandle 是 ReorderableCollectionItemScope 的成员，非顶层函数）
+                    // 拖拽手柄 Modifier 必须�? ReorderableItem 作用域内计算
+                    // （draggableHandle �? ReorderableCollectionItemScope 的成员，非顶层函数）
                     val ctx = LocalContext.current
                     val handleModifier = Modifier.draggableHandle(
                         onDragStarted = { HapticUtils.dragStart(ctx) },
@@ -326,8 +328,8 @@ private fun ReorderableCardGrid(
     }
 }
 
-/** 拖拽手柄（仅 enabled 时显示），绑定拾起/落下震动反馈。
- *  handleModifier 由 ReorderableItem 作用域内计算的 draggableHandle 传入。 */
+/** 拖拽手柄（仅 enabled 时显示），绑定拾�?/落下震动反馈�?
+ *  handleModifier �? ReorderableItem 作用域内计算�? draggableHandle 传入�? */
 @Composable
 private fun ReorderHandle(modifier: Modifier, handleModifier: Modifier) {
     IconButton(
@@ -345,7 +347,7 @@ private fun ReorderHandle(modifier: Modifier, handleModifier: Modifier) {
     }
 }
 
-/** 按 ID 渲染对应的 2×2 实时指标卡 */
+/** �? ID 渲染对应�? 2×2 实时指标�? */
 @Composable
 private fun MetricCardByType(
     id: String,
@@ -397,7 +399,7 @@ private fun MetricCardByType(
             title = stringResource(R.string.dashboard_metric_battery_level), value = batteryLevel,
             valueColor = SuccessNeon, modifier = Modifier.fillMaxWidth(), subtitle = batterySubtitle
         ) {
-            // 利用卡片下部剩余空间显示电池温度（与 mem_usage 的 SWAP/ZRAM 区块同构）
+            // 利用卡片下部剩余空间显示电池温度（与 mem_usage �? SWAP/ZRAM 区块同构�?
             if (batteryTemp != "---") {
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
@@ -424,7 +426,7 @@ private data class QuickMeta(
     val tint: androidx.compose.ui.graphics.Color, val nav: Int
 )
 
-/** 按 ID 渲染对应的快速访问卡（点击导航，拖拽手柄独立处理排序） */
+/** �? ID 渲染对应的快速访问卡（点击导航，拖拽手柄独立处理排序�? */
 @Composable
 private fun QuickLinkByType(
     id: String, onNavigate: (Int) -> Unit, memUsed: String, memTotal: String
@@ -454,7 +456,7 @@ private fun gpuLoad(historyData: Map<String, List<HistoryDataPoint>>): String {
     return "${last.toInt()}%"
 }
 
-// normalizeChartData 已迁移到 ChartUtils.kt — 全局共享，消除 6 份重复定义
+// normalizeChartData 已迁移到 ChartUtils.kt �? 全局共享，消�? 6 份重复定�?
 
 // ── 数据源健康状态指示条 ──
 @Composable

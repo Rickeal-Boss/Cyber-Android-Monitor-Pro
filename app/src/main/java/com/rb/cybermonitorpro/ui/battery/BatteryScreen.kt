@@ -60,6 +60,7 @@ import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.components.CardGradient
 import com.rb.cybermonitorpro.ui.components.hdrHighlight
 import com.rb.cybermonitorpro.ui.effects.revealLight
+import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
@@ -431,6 +432,8 @@ fun BatteryScreen(
 
     val listState = rememberLazyListState()
     val visibleCards = getVisibleItems()
+    // 滑动交错索引映射：固定状态概览 InfoCard 占 0，列表卡片依可视化顺序(含拖拽重排)从 1 递增
+    val cardIndexById = visibleCards.mapIndexed { index, id -> id to (index + 1) }.toMap()
     val reorderState = rememberReorderableLazyListState(listState) { from, to ->
         // onMove 索引基于内层 LazyColumn 的 items 列表 (== visibleCards, 不含外层固定头部)，
         // 故 from/to 与 getVisibleItems() 天然对齐，无需偏移。
@@ -457,6 +460,7 @@ fun BatteryScreen(
     ) {
         // ── 状态概览 (固定头部, 不参与重排) ──
         InfoCard(
+            modifier = Modifier.staggeredSwipe(0),
             title = statusText,
             subtitle = techText.ifEmpty { batteryInfo?.chargeStatus?.takeIf { it.isNotEmpty() } ?: "" },
             icon = Icons.Filled.Favorite, iconTint = NeonPurple
@@ -474,6 +478,8 @@ fun BatteryScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(visibleCards, key = { it }, contentType = { it }) { id ->
+                // 按可视化顺序（含拖拽重排后的顺序）取交错索引
+                val staggerModifier = Modifier.staggeredSwipe(cardIndexById[id] ?: 0)
                 if (reorderEnabled) {
                     ReorderableItem(reorderState, key = id) {
                         // 拖拽手柄 Modifier 必须在 ReorderableItem 作用域内计算
@@ -482,13 +488,15 @@ fun BatteryScreen(
                             onDragStarted = { HapticUtils.dragStart(ctx) },
                             onDragStopped = { HapticUtils.dragEnd(ctx) }
                         )
-                        Box(Modifier.fillMaxWidth()) {
+                        Box(Modifier.fillMaxWidth().then(staggerModifier)) {
                             CardContent(id)
                             ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp), handleModifier)
                         }
                     }
                 } else {
-                    CardContent(id)
+                    Box(staggerModifier) {
+                        CardContent(id)
+                    }
                 }
             }
         }
