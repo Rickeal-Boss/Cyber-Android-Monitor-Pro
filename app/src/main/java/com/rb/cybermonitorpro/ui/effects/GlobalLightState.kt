@@ -101,7 +101,8 @@ fun rememberAnimatedLightPosition(state: GlobalLightState): Offset {
     val target = if (state.visible)
         state.targetPosition
     else
-        Offset(Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY)
+        // 隐藏时弹飞出屏: 用 -100_000f 哨兵替代 NEGATIVE_INFINITY, 避免弹簧趋向无穷产生超大中间坐标 (code smell)
+        Offset(-100_000f, -100_000f)
 
     val animatedPos by animateValueAsState(
         targetValue = target,

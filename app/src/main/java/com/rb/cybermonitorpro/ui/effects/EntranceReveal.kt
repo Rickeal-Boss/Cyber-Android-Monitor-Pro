@@ -43,19 +43,30 @@ private const val FIRST_FRAME_DEFER_MS = 16L
 private val REVEAL_OFFSET = 18.dp
 
 /**
+ * 进程级一次性标记: 概览页首次入场动画是否已播放。
+ * 仅软件冷启动后的第一次入场播放; 应用内导航 / 后台回前台导致的重组一律跳过。
+ * (在首次入场完成后置 true, 故同进程首次 composition 的所有卡片都读到 false → 整段错峰播放)
+ */
+private var entrancePlayed = false
+
+/**
  * 首屏入场错峰 reveal — draw 域 (graphicsLayer) 应用, 不触发卡片 content 重组。
  *
  * @param order 入场顺序, 0 = 最先显. 概览页按视觉/重要度自上而下赋值。
  */
 fun Modifier.entranceReveal(order: Int = 0): Modifier = composed {
-    val progress = remember { Animatable(0f) }
+    // 非首次入场(应用内导航/后台回前台重组)→ Animatable 直接以 1f 初始化, 首帧即 alpha=1, 无闪烁无动画
+    val progress = remember { Animatable(if (entrancePlayed) 1f else 0f) }
     LaunchedEffect(Unit) {
+        if (entrancePlayed) return@LaunchedEffect
         // ① 首帧延后一帧: 冷启动首帧(布局/Pager 初始化)先过, 避免入场动画与首帧抢占
         delay(FIRST_FRAME_DEFER_MS)
         // ② 错峰: 按 order 递延各自启动时刻
         delay((order * REVEAL_STAGGER_MS).toLong())
         // ③ 渐显 + 抬升归位
         progress.animateTo(1f, tween(REVEAL_DURATION_MS, easing = FastOutSlowInEasing))
+        // 首次入场完成 → 标记已播放, 同进程后续重组(导航/回前台)一律跳过
+        entrancePlayed = true
     }
     val density = LocalDensity.current
     val offsetPx = REVEAL_OFFSET.value * density.density
