@@ -15,50 +15,42 @@ import androidx.compose.foundation.pager.PagerState
 import kotlin.math.abs
 
 /**
- * 页面滑动交错变换 v2 — 多卡片左右平移甩尾(tail-whip)动效
+ * 页面滑动交错变换 v3 — 多卡片左右平移甩尾(tail-whip) + 逐卡片独立弹簧
+ *
+ * 相比 v2 的关键变化 (丝滑度):
+ *   v2: StaggeredPageProvider 算一次 spring → 解包成 Float 提供给子卡片
+ *       → 整个页面每帧全量重组 (DeviceScreen 27 卡片的所有 Text/Row 每帧重算) → 卡顿
+ *   v3: 仅提供 pagerState + page 给子卡片, 每张卡片在 staggeredSwipe 内部跑自己的
+ *       animateFloatAsState → 动画只更新各自的 graphicsLayer 绘制层, 不触发卡片
+ *       content 重组 → 滑动丝滑
  *
  * 核心机制:
- * ┌──────────────────────────────────────────────────────────────┐
- * │  要点              │  实现                                    │
- * ├───────────────────┼──────────────────────────────────────────┤
- * │  主运动轴          │  ★ 水平主导 translationX (HORIZONTAL_PARALLAX) │
- * │  多卡片级联        │  ★ cascade = 1 + idx*STAGGER_STEP        │
- * │  (甩尾/鞭梢)       │    越靠下摆幅越大 → 横向弯曲成鞭尾         │
- * │  每页独立偏移      │  ★ per-page offset: page-(cur+frac)       │
- * │  无跳变            │  ★ animateFloatAsState(spring) 平滑 + 无 early return │
- * │  辅助景深          │  scale + alpha 轻度衰减                   │
- * └───────────────────┴──────────────────────────────────────────┘
- *
- * v1 教训: 水平视差绑定全局 pager 偏移 → 各页同值 → 看起来像原生滑动。
- *          v2 改用每页独立偏移 + 逐卡片 cascade 差异 → 卡片以不同率左右平移 → 甩尾。
- *
- * 使用方式:
- * ```
- * // 在 HorizontalPager 内容 lambda 内按页包裹:
- * HorizontalPager(state = pagerState) { page ->
- *     StaggeredPageProvider(pagerState = pagerState, page = page) {
- *         when (page) { 0 -> DashboardScreen() ... }
- *     }
- * }
- *
- * // 每张卡片按从上到下顺序编号:
- * MetricCard(modifier = Modifier.staggeredSwipe(cardIndex = 0), ...)
- * ```
+ *   rawOffset = page - (currentPage + currentPageOffsetFraction)  // 每页自身居中偏移
+ *   eff = spring(rawOffset) * cascade(cardIndex)                  // 逐卡片弹簧 + 级联
+ *   translationX = width * eff * HORIZONTAL_PARALLAX              // ★ 水平甩尾主导
+ *   cascade = (1 + cardIndex*STAGGER_STEP).coerceAtMost(MAX_CASCADE)  // 越靠下摆幅越大=鞭梢
  */
 
-/** 当前页面相对于屏幕中心的平滑偏移量: 0=居中激活, ±1=偏离一屏 */
-val LocalPageOffset: ProvidableCompositionLocal<Float> =
-    compositionLocalOf { 0f }
+/** 页面 PagerState — 由 StaggeredPageProvider 提供 */
+val LocalPagerState: ProvidableCompositionLocal<PagerState> =
+    compositionLocalOf { error("LocalPagerState not provided — wrap content with StaggeredPageProvider") }
+
+/** 当前页索引 — 由 StaggeredPageProvider 提供, 用于计算每页自身偏移 */
+val LocalPageIndex: ProvidableCompositionLocal<Int> =
+    compositionLocalOf { 0 }
 
 // ═══════════════════════════════════════════════════════════════
 //  可调参数 — 甩尾(tail-whip)动效: 多卡片左右平移 + 横向级联弯曲
 // ═══════════════════════════════════════════════════════════════
 
 /** 级联步进 — 每递增一张卡片增加的交错系数 (越大=越靠下的卡片摆幅越大=鞭梢) */
-private const val STAGGER_STEP = 0.11f
+private const val STAGGER_STEP = 0.13f
+
+/** cascade 上限 — 防止底部(鞭梢)卡片位移过大飞出屏幕 (DeviceScreen 27 卡时尤需) */
+private const val MAX_CASCADE = 3.0f
 
 /** ★ 水平甩尾主导强度 — 卡片左右平移位移倍率 (相对屏宽), 这是动效的主运动轴 */
-private const val HORIZONTAL_PARALLAX = 0.19f
+private const val HORIZONTAL_PARALLAX = 0.20f
 
 /** 极弱垂直余量 — 保持结构对称, 几乎不可见 (0=纯水平甩尾) */
 private const val VERTICAL_WAVE = 0.0f
@@ -69,31 +61,48 @@ private const val SCALE_DECAY = 0.05f
 /** 透明度衰减基数 — 过程中卡片淡出幅度 (辅助景深) */
 private const val ALPHA_DECAY = 0.15f
 
+/** 弹簧阻尼比 — 0.78 略欠阻尼 → 落定轻微回弹甩动, 同时比 0.72 更顺滑 */
+private const val SPRING_DAMPING = 0.78f
+
+/** 弹簧刚度 — 400 适中跟手, 不过硬也不过慵懒 */
+private const val SPRING_STIFFNESS = 400f
+
 // ═══════════════════════════════════════════════════════════════
 
 /**
  * 卡片级联滑动 Modifier — 甩尾(tail-whip)风格
  *
- * 通过 [LocalPageOffset] 读取本页的弹簧平滑偏移,
- * 按 [cardIndex] 施加横向级联:
+ * 每张卡片独立运行弹簧动画:
  *   - 顶部卡片领动, 越靠下的卡片 [cascade] 越大 → 左右平移摆幅越大(鞭梢)
  *   - 多张卡片以不同水平位移率跟随 → 页面横向弯曲成"甩尾"形状
- *   - 配合 spring 欠阻尼, 落定时轻微回弹 → 鞭尾甩动感
+ *   - 动画仅更新 graphicsLayer 绘制层, 不重组卡片 content → 丝滑
  */
 @Stable
 fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
-    // 本页的平滑偏移: 由 StaggeredPageProvider 提供, 已经过 spring 平滑
-    val pageOffset = LocalPageOffset.current
+    val pagerState = LocalPagerState.current
+    val page = LocalPageIndex.current
+
+    // 本页自身相对于屏幕中心的原始偏移 (pager 的 snapshot state, 自动观察)
+    val rawOffset = page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+
+    // ★ 逐卡片独立弹簧 — 只驱动本卡片的 graphicsLayer, 不触发 content 重组
+    val smoothed by animateFloatAsState(
+        targetValue = rawOffset,
+        animationSpec = spring(
+            dampingRatio = SPRING_DAMPING,
+            stiffness = SPRING_STIFFNESS
+        ),
+        label = "cardStagger"
+    )
 
     // 级联因子: 序号越大(越靠下)摆幅越大 → 鞭梢效应 (tip of the whip)
     val stagger = cardIndex.toFloat() * STAGGER_STEP
-    val cascade = 1f + stagger
+    val cascade = (1f + stagger).coerceAtMost(MAX_CASCADE)
 
     this.graphicsLayer {
-        // ★ 不做 early return — pageOffset=0 时所有变换自动为 identity (0 × 任何值 = 0)
-        // 这消除了 v1 的跳变根因
+        // ★ 不做 early return — smoothed=0 时所有变换自动为 identity, 无突变/跳变
 
-        val eff = pageOffset * cascade // 每张卡片的实际有效偏移
+        val eff = smoothed * cascade // 每张卡片的实际有效偏移
 
         // ── ★ 主运动: 水平甩尾 (多卡片左右平移, 越靠下摆幅越大 → 横向鞭尾弯曲) ──
         translationX = size.width * eff * HORIZONTAL_PARALLAX
@@ -116,12 +125,8 @@ fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
 /**
  * 页面级联变换 Provider — 在 [HorizontalPager] 内容 lambda 内按页调用
  *
- * 计算本页 [page] 相对于屏幕中心的原始偏移,
- * 经弹簧物理 ([spring]) 平滑后通过 [LocalPageOffset] 提供给子卡片。
- *
- * 弹簧参数调优:
- * - dampingRatio=0.72: 轻微欠阻尼 → 澎湃OS 的弹性回弹感
- * - stiffness=380: 中等刚度 → 跟手灵敏但不生硬
+ * 仅提供 [pagerState] 与 [page] 给子卡片, 由每张卡片的 [staggeredSwipe]
+ * 自行计算偏移并运行独立弹簧 (避免整页重组, 保证丝滑)。
  */
 @Composable
 fun StaggeredPageProvider(
@@ -129,25 +134,10 @@ fun StaggeredPageProvider(
     page: Int,
     content: @Composable () -> Unit
 ) {
-    // 原始偏移: page - (currentPage + currentPageOffsetFraction)
-    //   = 0  → 本页完全居中 (激活态)
-    //   = +1 → 本页在右侧一屏外
-    //   = -1 → 本页在左侧一屏外
-    val rawOffset = page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)
-
-    // ★ 弹簧物理平滑 — 消除跳变的根本手段
-    // 当手指释放/页面落定时, rawOffset 从非零过渡到 0,
-    // spring 自然地将其弹回零位 → 卡片平滑归位, 无突变
-    val smoothed by animateFloatAsState(
-        targetValue = rawOffset,
-        animationSpec = spring(
-            dampingRatio = 0.72f,
-            stiffness = 380f
-        ),
-        label = "staggeredPageOffset"
-    )
-
-    CompositionLocalProvider(LocalPageOffset provides smoothed) {
+    CompositionLocalProvider(
+        LocalPagerState provides pagerState,
+        LocalPageIndex provides page
+    ) {
         content()
     }
 }

@@ -479,7 +479,8 @@ fun BatteryScreen(
         ) {
             items(visibleCards, key = { it }, contentType = { it }) { id ->
                 // 按可视化顺序（含拖拽重排后的顺序）取交错索引
-                val staggerModifier = Modifier.staggeredSwipe(cardIndexById[id] ?: 0)
+                // 防御: id 不在映射时退回 (visibleCards.size+1) 而非 0, 避免与概览 InfoCard(0) 重复索引
+                val staggerModifier = Modifier.staggeredSwipe(cardIndexById[id] ?: (visibleCards.size + 1))
                 if (reorderEnabled) {
                     ReorderableItem(reorderState, key = id) {
                         // 拖拽手柄 Modifier 必须在 ReorderableItem 作用域内计算
