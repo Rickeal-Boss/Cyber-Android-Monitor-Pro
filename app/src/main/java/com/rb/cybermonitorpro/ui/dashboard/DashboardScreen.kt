@@ -41,6 +41,7 @@ import com.rb.cybermonitorpro.data.repository.HealthTracker.SourceHealth
 import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
+import com.rb.cybermonitorpro.ui.effects.cardEdgeGlow
 import com.rb.cybermonitorpro.ui.effects.entranceReveal
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
@@ -215,6 +216,7 @@ private fun QuickLinkCard(
     Card(
         modifier = modifier
             .revealLight(radius = 140.dp, intensity = 0.18f)
+            .cardEdgeGlow()
             .fillMaxWidth().height(56.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
