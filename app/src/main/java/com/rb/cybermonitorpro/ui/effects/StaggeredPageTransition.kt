@@ -61,11 +61,11 @@ private const val SCALE_DECAY = 0.05f
 /** 透明度衰减基数 — 过程中卡片淡出幅度 (辅助景深) */
 private const val ALPHA_DECAY = 0.15f
 
-/** 弹簧阻尼比 — 0.78 略欠阻尼 → 落定轻微回弹甩动, 同时比 0.72 更顺滑 */
-private const val SPRING_DAMPING = 0.78f
+/** 弹簧阻尼比 — 0.9 近临界阻尼 → 手指抬起/Pager吸附时不过冲回弹, 消除"断触"感 */
+private const val SPRING_DAMPING = 0.9f
 
-/** 弹簧刚度 — 400 适中跟手, 不过硬也不过慵懒 */
-private const val SPRING_STIFFNESS = 400f
+/** 弹簧刚度 — 520 紧跟手指, Pager 吸附瞬间不滞后脱节 */
+private const val SPRING_STIFFNESS = 520f
 
 // ═══════════════════════════════════════════════════════════════
 

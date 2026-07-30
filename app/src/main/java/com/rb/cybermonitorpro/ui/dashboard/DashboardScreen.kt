@@ -165,7 +165,7 @@ fun DashboardScreen(
             enabled = reorderEnabled,
             keyOf = { it }
         ) { id, handleMod ->
-            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.indexOf(id))) {
+            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.indexOf(id).coerceAtLeast(0))) {
                 MetricCardByType(
                     id = id,
                     cpuTemp = cpuTemp, cpuTempChart = cpuTempChart,
@@ -193,7 +193,7 @@ fun DashboardScreen(
             enabled = reorderEnabled,
             keyOf = { it }
         ) { id, handleMod ->
-            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.size + quickOrder.indexOf(id))) {
+            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.size + quickOrder.indexOf(id).coerceAtLeast(0))) {
                 QuickLinkByType(id = id, onNavigate = onNavigate, memUsed = memUsed, memTotal = memTotal)
                 if (reorderEnabled) {
                     ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp), handleMod)
