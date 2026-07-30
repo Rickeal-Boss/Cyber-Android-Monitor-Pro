@@ -5,11 +5,13 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toPx
+import kotlinx.coroutines.delay
 
 // ═══════════════════════════════════════════════════════════════
 //  首屏入场 — 每卡错峰 Animatable reveal (draw 域)
@@ -56,7 +58,8 @@ fun Modifier.entranceReveal(order: Int = 0): Modifier = composed {
         // ③ 渐显 + 抬升归位
         progress.animateTo(1f, tween(REVEAL_DURATION_MS, easing = FastOutSlowInEasing))
     }
-    val offsetPx = REVEAL_OFFSET.toPx()
+    val density = LocalDensity.current
+    val offsetPx = with(density) { REVEAL_OFFSET.toPx() }
     graphicsLayer {
         alpha = progress.value
         translationY = (1f - progress.value) * offsetPx
