@@ -10,7 +10,6 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.toPx
 import kotlinx.coroutines.delay
 
 // ═══════════════════════════════════════════════════════════════
@@ -59,7 +58,7 @@ fun Modifier.entranceReveal(order: Int = 0): Modifier = composed {
         progress.animateTo(1f, tween(REVEAL_DURATION_MS, easing = FastOutSlowInEasing))
     }
     val density = LocalDensity.current
-    val offsetPx = with(density) { REVEAL_OFFSET.toPx() }
+    val offsetPx = REVEAL_OFFSET.value * density.density
     graphicsLayer {
         alpha = progress.value
         translationY = (1f - progress.value) * offsetPx
