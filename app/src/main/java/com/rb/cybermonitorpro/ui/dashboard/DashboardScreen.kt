@@ -41,6 +41,7 @@ import com.rb.cybermonitorpro.data.repository.HealthTracker.SourceHealth
 import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
+import com.rb.cybermonitorpro.ui.effects.entranceReveal
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.*
@@ -143,7 +144,7 @@ fun DashboardScreen(
     ) {
         // ── 设备信息卡片 (开机时�? + 深度待机) ──
         InfoCard(
-            modifier = Modifier.staggeredSwipe(0),
+            modifier = Modifier.staggeredSwipe(0).entranceReveal(0),
             title = deviceName,
             subtitle = FormatUtils.joinNonBlank("  ·  ",
                 "$uptimePrefix $uptimeStr",
@@ -153,7 +154,7 @@ fun DashboardScreen(
         )
 
         // ── 数据源健康指示条 ──
-        DataSourceHealthBar(sourceHealth)
+        DataSourceHealthBar(sourceHealth, Modifier.entranceReveal(1))
 
         // ── 分割�? ──
         HorizontalDivider(thickness = 1.dp, color = NeonPurpleDeep.copy(alpha = 0.3f))
@@ -165,7 +166,7 @@ fun DashboardScreen(
             enabled = reorderEnabled,
             keyOf = { it }
         ) { id, handleMod ->
-            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.indexOf(id).coerceAtLeast(0))) {
+            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.indexOf(id).coerceAtLeast(0)).entranceReveal(1 + metricOrder.indexOf(id).coerceAtLeast(0))) {
                 MetricCardByType(
                     id = id,
                     cpuTemp = cpuTemp, cpuTempChart = cpuTempChart,
@@ -193,7 +194,7 @@ fun DashboardScreen(
             enabled = reorderEnabled,
             keyOf = { it }
         ) { id, handleMod ->
-            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.size + quickOrder.indexOf(id).coerceAtLeast(0))) {
+            Box(Modifier.fillMaxWidth().staggeredSwipe(1 + metricOrder.size + quickOrder.indexOf(id).coerceAtLeast(0)).entranceReveal(1 + metricOrder.size + quickOrder.indexOf(id).coerceAtLeast(0))) {
                 QuickLinkByType(id = id, onNavigate = onNavigate, memUsed = memUsed, memTotal = memTotal)
                 if (reorderEnabled) {
                     ReorderHandle(Modifier.align(Alignment.TopEnd).padding(2.dp), handleMod)
@@ -460,11 +461,11 @@ private fun gpuLoad(historyData: Map<String, List<HistoryDataPoint>>): String {
 
 // ── 数据源健康状态指示条 ──
 @Composable
-private fun DataSourceHealthBar(health: SourceHealth) {
+private fun DataSourceHealthBar(health: SourceHealth, modifier: Modifier = Modifier) {
     if (health.allHealthy) return // 全部正常则不显示
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(CyberPill)
