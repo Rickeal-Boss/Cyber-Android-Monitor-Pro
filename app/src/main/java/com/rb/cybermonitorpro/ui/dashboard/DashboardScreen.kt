@@ -184,6 +184,7 @@ fun DashboardScreen(
                     swapzramUsedKB = swapzramUsedKB, swapzramTotalKB = swapzramTotalKB, swapzramPct = swapzramPct,
                     hasSwapZram = hasSwapZram,
                     batteryLevel = batteryLevel, batterySubtitle = batterySubtitle, batteryTemp = batteryTemp,
+                    batteryBorderColor = batteryBorderColor,
                     gpuLoadText = gpuLoadText, gpuLoadChart = gpuLoadChart
                 )
                 if (reorderEnabled) {
@@ -367,6 +368,7 @@ private fun MetricCardByType(
     memUsed: String, memTotal: String, memProgress: Float,
     swapzramUsedKB: Long, swapzramTotalKB: Long, swapzramPct: Float, hasSwapZram: Boolean,
     batteryLevel: String, batterySubtitle: String, batteryTemp: String,
+    batteryBorderColor: Color?,
     gpuLoadText: String, gpuLoadChart: List<Float>,
 ) {
     val memValueColor = NeonPurpleBright

@@ -365,9 +365,10 @@ private class CardEnlargeBevelNode(
             val midCorner = (innerCorner + outerCorner) / 2f
             val strokeWidth = minOf(hPx, vPx).coerceAtLeast(1.5f)
 
-            val borderBrush = if (borderColor != null) {
+            val bc = borderColor
+            val borderBrush = if (bc != null) {
                 Brush.horizontalGradient(
-                    listOf(borderColor.copy(alpha = 0.9f), borderColor.copy(alpha = 0.6f))
+                    listOf(bc.copy(alpha = 0.9f), bc.copy(alpha = 0.6f))
                 )
             } else {
                 Brush.linearGradient(
