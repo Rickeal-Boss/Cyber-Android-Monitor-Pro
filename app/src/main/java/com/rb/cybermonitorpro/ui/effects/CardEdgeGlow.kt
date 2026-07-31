@@ -252,18 +252,35 @@ private val BEVEL_GLOW_COLORS = listOf(
  * 环带内绘制 sweep 渐变霓虹发光边框。所有接入点卡片统一生效。
  */
 fun Modifier.cardEnlargeBevel(enlarge: Dp = BEVEL_ENLARGE): Modifier =
-    this then CardEnlargeBevelElement(enlarge)
+    cardEnlargeBevel(horizontal = enlarge, vertical = enlarge)
 
-private data class CardEnlargeBevelElement(val enlarge: Dp) :
-    ModifierNodeElement<CardEnlargeBevelNode>() {
-    override fun create() = CardEnlargeBevelNode(enlarge)
+/**
+ * 卡片微放大 + 霓虹光边框（非对称版）。
+ *
+ * 水平方向外扩 [horizontal], 垂直方向外扩 [vertical].
+ * 适用场景: 全宽卡片在 LazyColumn 中滚动时, 水平方向收窄以避免光晕被父容器裁切,
+ * 同时保持垂直方向的立体感.
+ */
+fun Modifier.cardEnlargeBevel(
+    horizontal: Dp = BEVEL_ENLARGE,
+    vertical: Dp = BEVEL_ENLARGE
+): Modifier = this then CardEnlargeBevelElement(horizontal, vertical)
+
+private data class CardEnlargeBevelElement(
+    val horizontal: Dp,
+    val vertical: Dp
+) : ModifierNodeElement<CardEnlargeBevelNode>() {
+    override fun create() = CardEnlargeBevelNode(horizontal, vertical)
     override fun update(node: CardEnlargeBevelNode) {
-        node.enlarge = enlarge
+        node.horizontal = horizontal
+        node.vertical = vertical
     }
 }
 
-private class CardEnlargeBevelNode(var enlarge: Dp) :
-    Modifier.Node(),
+private class CardEnlargeBevelNode(
+    var horizontal: Dp,
+    var vertical: Dp
+) : Modifier.Node(),
     LayoutModifierNode,
     DrawModifierNode {
 
@@ -271,24 +288,30 @@ private class CardEnlargeBevelNode(var enlarge: Dp) :
         measurable: Measurable,
         constraints: Constraints
     ): MeasureResult {
-        val e = enlarge.roundToPx()
+        val hPx = horizontal.roundToPx()
+        val vPx = vertical.roundToPx()
         // 子项(卡片)按【原始约束】测量 → 卡片本体尺寸不变 (内容不变大、不重叠)
         val placeable = measurable.measure(constraints)
-        // 对外报告外扩后的尺寸 → 父布局为环带让出空间, 兄弟卡片被推开
-        return layout(placeable.width + 2 * e, placeable.height + 2 * e) {
-            placeable.place(e, e)
+        // 对外报告非对称外扩后的尺寸 → 父布局为环带让出空间
+        return layout(placeable.width + 2 * hPx, placeable.height + 2 * vPx) {
+            placeable.place(hPx, vPx)
         }
     }
 
     override fun ContentDrawScope.draw() {
-        val ePx = enlarge.toPx()
+        val hPx = horizontal.toPx()
+        val vPx = vertical.toPx()
         val w = size.width
         val h = size.height
         if (w <= 0f || h <= 0f) {
             drawContent()
             return
         }
-        val outerCorner = (BEVEL_CARD_CORNER + enlarge).toPx()
+        // 外圆角取较大值确保渐变覆盖完整
+        val outerCorner = maxOf(
+            (BEVEL_CARD_CORNER + horizontal).toPx(),
+            (BEVEL_CARD_CORNER + vertical).toPx()
+        )
         val innerCorner = BEVEL_CARD_CORNER.toPx()
 
         // ── 1) 霓虹光边框 (sweep 渐变填充外层圆角矩形) ──
@@ -312,8 +335,8 @@ private class CardEnlargeBevelNode(var enlarge: Dp) :
         //    模拟玻璃/亚克力的边缘反光, 增强"浮起"分离感 (非阴影, 是亮线)
         drawRoundRect(
             color = Color.White.copy(alpha = BEVEL_HIGHLIGHT_ALPHA),
-            topLeft = Offset(ePx, ePx),
-            size = Size(w - 2f * ePx, h - 2f * ePx),
+            topLeft = Offset(hPx, vPx),
+            size = Size(w - 2f * hPx, h - 2f * vPx),
             cornerRadius = CornerRadius(innerCorner),
             style = Stroke(width = 1f)
         )
