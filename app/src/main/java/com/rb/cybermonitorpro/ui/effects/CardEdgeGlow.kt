@@ -21,7 +21,6 @@ import androidx.compose.ui.node.ModifierNodeElement
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import kotlin.math.hypot
 
 // ═══════════════════════════════════════════════════════════════
 //  固定软件背景光晕 — 全页面统一浮光效果 (一次性渲染)
@@ -210,15 +209,15 @@ private fun buildRimBrush(w: Float, h: Float, alphaScale: Float): Brush {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  卡片微放大 + 斜面光晕 — cardEnlargeBevel
+//  卡片微放大 + 霓虹光边框 — cardEnlargeBevel
 //
-//  作用: 在所有卡片四周外扩 BEVEL_ENLARGE 一圈"斜面环带":
+//  作用: 在所有卡片四周外扩 BEVEL_ENLARGE 一圈"发光环带":
 //  - 卡片本体(背景/内容)尺寸与原来完全一致 —— LayoutModifier 仅把"对外报告的尺寸"
 //    向外扩 2*enlarge, 但用【原始约束】测量卡片并把内容内缩放置 (内容布局尺寸不变)
 //    → 父布局自动为环带让出空间, 兄弟卡片被推开, 不会重叠。
-//  - 环带内绘制: 外侧 GLOW_COLOR 静态光晕 (与背景光晕同源) + 内缘暗色阴影线,
-//    形成"内侧阴影 → 外侧光晕"的立体斜面, 强化卡片悬浮立体感。
-//  性能: 单次径向 drawRoundRect 填充 + 单次 drawRoundRect 暗线描边, 静态无动画。
+//  - 环带内绘制: sweep 渐变霓虹光边框 (沿卡片外围一周的彩色发光描边),
+//    颜色基于 GLOW_COLOR 的青蓝→蓝紫→亮青变化, 营造"浮起发光"的立体感。
+//  性能: 单次 sweepGradient drawRoundRect 填充 + 单次高光线描边, 静态无动画。
 // ═══════════════════════════════════════════════════════════════
 
 /** 外扩环带宽度 (每侧) — 8dp 在典型 16dp 页面内边距内不会溢出屏幕 */
@@ -227,20 +226,30 @@ private val BEVEL_ENLARGE = 8.dp
 /** 卡片圆角 — 须与所有卡片 RoundedCornerShape(12.dp) 保持一致 */
 private val BEVEL_CARD_CORNER = 12.dp
 
-/** 内缘暗线宽度 — 立体分离的"阴影"边 */
-private val BEVEL_INNER_SHADOW = 1.5.dp
+/** 霓虹光边框基础 alpha */
+private const val BEVEL_GLOW_ALPHA = 0.65f
 
-/** 外圈光晕峰值 alpha (柔和, 与背景光晕同源色) */
-private const val BEVEL_GLOW_ALPHA = 0.5f
-
-/** 内缘暗线 alpha */
-private const val BEVEL_SHADOW_ALPHA = 0.30f
+/** 内缘高光线 alpha (白色/浅色细线, 增强"玻璃边缘"浮起感) */
+private const val BEVEL_HIGHLIGHT_ALPHA = 0.12f
 
 /**
- * 卡片微放大 + 斜面静态光晕。
+ * 霓虹光边框渐变色组 (基于 GLOW_COLOR 0xFF5599CC 青蓝的变体).
+ * 按 sweep 方向排列: 顶(青蓝) → 右(蓝紫) → 底(亮青) → 左(靛蓝) → 回到顶.
+ * 5 色确保过渡平滑且首尾衔接.
+ */
+private val BEVEL_GLOW_COLORS = listOf(
+    Color(0xFF5599CC),  // 青蓝 (顶) — GLOW_COLOR 本体
+    Color(0xFF6655DD),  // 蓝紫 (右偏)
+    Color(0xFF77BBEE),  // 亮青 (底偏)
+    Color(0xFF4477BB),  // 靛蓝 (左偏)
+    Color(0xFF5599CC),  // 回到青蓝 (闭合)
+)
+
+/**
+ * 卡片微放大 + 霓虹光边框。
  *
  * 在卡片四周各外扩 [enlarge] 一圈环带; 卡片本体(背景/内容)尺寸保持不变,
- * 环带内绘制"内侧阴影 → 外侧光晕"的立体斜面。所有接入点卡片统一生效。
+ * 环带内绘制 sweep 渐变霓虹发光边框。所有接入点卡片统一生效。
  */
 fun Modifier.cardEnlargeBevel(enlarge: Dp = BEVEL_ENLARGE): Modifier =
     this then CardEnlargeBevelElement(enlarge)
@@ -280,35 +289,33 @@ private class CardEnlargeBevelNode(var enlarge: Dp) :
             return
         }
         val outerCorner = (BEVEL_CARD_CORNER + enlarge).toPx()
-        val center = Offset(w / 2f, h / 2f)
-        val radius = hypot(w / 2f, h / 2f)
+        val innerCorner = BEVEL_CARD_CORNER.toPx()
 
-        // 1) 外圈静态光晕 (径向: 中心透明 → 外缘 GLOW_COLOR 峰值)
-        //    中心被卡片覆盖, 仅环带可见 → 卡片四周浮起柔光晕 (与背景光晕同源)
+        // ── 1) 霓虹光边框 (sweep 渐变填充外层圆角矩形) ──
+        //    sweepGradient 从中心向外辐射角度色环; 卡片本体(drawContent)覆盖中心区域后,
+        //    仅环带(外扩部分)露出渐变 → 形成围绕卡片一周的彩色发光边框.
+        //    效果类似参考图: 沿边缘颜色连续变化的霓虹灯管.
         drawRoundRect(
-            brush = Brush.radialGradient(
-                0.0f to Color.Transparent,
-                0.80f to Color.Transparent,
-                0.93f to GLOW_COLOR.copy(alpha = BEVEL_GLOW_ALPHA * 0.5f),
-                1.0f to GLOW_COLOR.copy(alpha = BEVEL_GLOW_ALPHA),
-                center = center,
-                radius = radius
+            brush = Brush.sweepGradient(
+                colors = BEVEL_GLOW_COLORS.map { it.copy(alpha = BEVEL_GLOW_ALPHA) }
             ),
             topLeft = Offset.Zero,
             size = Size(w, h),
             cornerRadius = CornerRadius(outerCorner)
         )
 
-        // 2) 卡片本体 (含其 elevation 阴影/指针高光) 置于内缩 e 处 — 覆盖中心只留环带
+        // ── 2) 卡片本体 (含其 elevation 阴影/背景/内容) ──
+        //    覆盖中心区域, 仅留下外围环带的 sweep 渐变可见
         drawContent()
 
-        // 3) 内缘暗色阴影线 (环带内缘 = 卡片边界) — 体现立体斜面分离
+        // ── 3) 内缘高光线 (白色极细描边, 卡片边界处) ──
+        //    模拟玻璃/亚克力的边缘反光, 增强"浮起"分离感 (非阴影, 是亮线)
         drawRoundRect(
-            color = Color.Black.copy(alpha = BEVEL_SHADOW_ALPHA),
+            color = Color.White.copy(alpha = BEVEL_HIGHLIGHT_ALPHA),
             topLeft = Offset(ePx, ePx),
             size = Size(w - 2f * ePx, h - 2f * ePx),
-            cornerRadius = CornerRadius(BEVEL_CARD_CORNER.toPx()),
-            style = Stroke(width = BEVEL_INNER_SHADOW.toPx())
+            cornerRadius = CornerRadius(innerCorner),
+            style = Stroke(width = 1f)
         )
     }
 }
