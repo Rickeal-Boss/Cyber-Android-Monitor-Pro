@@ -44,6 +44,7 @@ import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.effects.entranceReveal
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
+import com.rb.cybermonitorpro.ui.effects.cardEnlargeBevel
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
@@ -216,7 +217,7 @@ private fun QuickLinkCard(
         modifier = modifier
             .revealLight(radius = 140.dp, intensity = 0.18f)
 
-            .fillMaxWidth().height(56.dp),
+            .fillMaxWidth().cardEnlargeBevel().height(56.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

@@ -34,6 +34,7 @@ import com.rb.cybermonitorpro.data.model.CameraSensorInfo
 import com.rb.cybermonitorpro.data.model.DeviceDetailInfo
 import com.rb.cybermonitorpro.data.model.OemPowerMode
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
+import com.rb.cybermonitorpro.ui.effects.cardEnlargeBevel
 import com.rb.cybermonitorpro.FormatUtils
 import com.rb.cybermonitorpro.ui.components.hdrHighlight
 import com.rb.cybermonitorpro.ui.oem.OemViewModel
@@ -604,7 +605,7 @@ private val SectionGradient = Brush.linearGradient(listOf(CyberCardStart, CyberC
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
     Card(
-        Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+        Modifier.fillMaxWidth().cardEnlargeBevel(), shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {

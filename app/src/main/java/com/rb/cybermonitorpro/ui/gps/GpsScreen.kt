@@ -33,6 +33,7 @@ import org.koin.androidx.compose.koinViewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
+import com.rb.cybermonitorpro.ui.effects.cardEnlargeBevel
 
 @Composable
 fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
@@ -144,7 +145,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
 @Composable
 private fun SatelliteCard(sat: GpsSatelliteInfo, modifier: Modifier = Modifier) {
     Card(
-        modifier.fillMaxWidth(),
+        modifier.fillMaxWidth().cardEnlargeBevel(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

@@ -47,6 +47,7 @@ import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.NeonMagenta
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
+import com.rb.cybermonitorpro.ui.effects.cardEnlargeBevel
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import org.koin.androidx.compose.koinViewModel
 
@@ -238,7 +239,7 @@ fun CpuScreen(
         } else {
             // Per core view
             coreGroups.values.sortedByDescending { it.first().maxFreqKHz }.forEachIndexed { groupIdx, group ->
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                Card(Modifier.fillMaxWidth().cardEnlargeBevel(), shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
                     Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -258,7 +259,7 @@ fun CpuScreen(
 
 @Composable
 private fun ClusterCard(name: String, subtitle: String, frequency: String, freqData: List<Float>, modifier: Modifier = Modifier) {
-    Card(modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+    Card(modifier.fillMaxWidth().cardEnlargeBevel(), shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {

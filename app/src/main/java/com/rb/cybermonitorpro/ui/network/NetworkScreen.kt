@@ -39,6 +39,7 @@ import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
+import com.rb.cybermonitorpro.ui.effects.cardEnlargeBevel
 
 @Composable
 fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
@@ -207,7 +208,7 @@ private fun hasCellInfo(info: MobileNetworkInfo): Boolean {
 @Composable
 private fun CellDetailCard(info: MobileNetworkInfo, modifier: Modifier = Modifier) {
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().cardEnlargeBevel(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)

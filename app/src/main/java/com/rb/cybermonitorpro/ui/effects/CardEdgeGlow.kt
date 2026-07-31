@@ -10,7 +10,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.Measurable
+import androidx.compose.ui.node.DrawModifierNode
+import androidx.compose.ui.node.LayoutModifierNode
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.MeasureScope
+import kotlin.math.hypot
 
 // ═══════════════════════════════════════════════════════════════
 //  固定软件背景光晕 — 全页面统一浮光效果 (一次性渲染)
@@ -196,4 +205,108 @@ private fun buildRimBrush(w: Float, h: Float, alphaScale: Float): Brush {
     }
     stops.add(1.0f to base)
     return Brush.sweepGradient(*stops.toTypedArray(), center = Offset(w / 2f, h / 2f))
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  卡片微放大 + 斜面光晕 — cardEnlargeBevel
+//
+//  作用: 在所有卡片四周外扩 BEVEL_ENLARGE 一圈"斜面环带":
+//  - 卡片本体(背景/内容)尺寸与原来完全一致 —— LayoutModifier 仅把"对外报告的尺寸"
+//    向外扩 2*enlarge, 但用【原始约束】测量卡片并把内容内缩放置 (内容布局尺寸不变)
+//    → 父布局自动为环带让出空间, 兄弟卡片被推开, 不会重叠。
+//  - 环带内绘制: 外侧 GLOW_COLOR 静态光晕 (与背景光晕同源) + 内缘暗色阴影线,
+//    形成"内侧阴影 → 外侧光晕"的立体斜面, 强化卡片悬浮立体感。
+//  性能: 单次径向 drawRoundRect 填充 + 单次 drawRoundRect 暗线描边, 静态无动画。
+// ═══════════════════════════════════════════════════════════════
+
+/** 外扩环带宽度 (每侧) — 8dp 在典型 16dp 页面内边距内不会溢出屏幕 */
+private val BEVEL_ENLARGE = 8.dp
+
+/** 卡片圆角 — 须与所有卡片 RoundedCornerShape(12.dp) 保持一致 */
+private val BEVEL_CARD_CORNER = 12.dp
+
+/** 内缘暗线宽度 — 立体分离的"阴影"边 */
+private val BEVEL_INNER_SHADOW = 1.5.dp
+
+/** 外圈光晕峰值 alpha (柔和, 与背景光晕同源色) */
+private const val BEVEL_GLOW_ALPHA = 0.5f
+
+/** 内缘暗线 alpha */
+private const val BEVEL_SHADOW_ALPHA = 0.30f
+
+/**
+ * 卡片微放大 + 斜面静态光晕。
+ *
+ * 在卡片四周各外扩 [enlarge] 一圈环带; 卡片本体(背景/内容)尺寸保持不变,
+ * 环带内绘制"内侧阴影 → 外侧光晕"的立体斜面。所有接入点卡片统一生效。
+ */
+fun Modifier.cardEnlargeBevel(enlarge: Dp = BEVEL_ENLARGE): Modifier =
+    this then CardEnlargeBevelElement(enlarge)
+
+private data class CardEnlargeBevelElement(val enlarge: Dp) :
+    ModifierNodeElement<CardEnlargeBevelNode>() {
+    override fun create() = CardEnlargeBevelNode(enlarge)
+    override fun update(node: CardEnlargeBevelNode) {
+        node.enlarge = enlarge
+    }
+}
+
+private class CardEnlargeBevelNode(var enlarge: Dp) :
+    Modifier.Node(),
+    LayoutModifierNode,
+    DrawModifierNode {
+
+    override fun MeasureScope.measure(
+        measurable: Measurable,
+        constraints: Constraints
+    ): MeasureResult {
+        val e = enlarge.roundToPx()
+        // 子项(卡片)按【原始约束】测量 → 卡片本体尺寸不变 (内容不变大、不重叠)
+        val placeable = measurable.measure(constraints)
+        // 对外报告外扩后的尺寸 → 父布局为环带让出空间, 兄弟卡片被推开
+        return layout(placeable.width + 2 * e, placeable.height + 2 * e) {
+            placeable.place(e, e)
+        }
+    }
+
+    override fun ContentDrawScope.draw() {
+        val ePx = enlarge.toPx()
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) {
+            drawContent()
+            return
+        }
+        val outerCorner = (BEVEL_CARD_CORNER + enlarge).toPx()
+        val center = Offset(w / 2f, h / 2f)
+        val radius = hypot(w / 2f, h / 2f)
+
+        // 1) 外圈静态光晕 (径向: 中心透明 → 外缘 GLOW_COLOR 峰值)
+        //    中心被卡片覆盖, 仅环带可见 → 卡片四周浮起柔光晕 (与背景光晕同源)
+        drawRoundRect(
+            brush = Brush.radialGradient(
+                0.0f to Color.Transparent,
+                0.80f to Color.Transparent,
+                0.93f to GLOW_COLOR.copy(alpha = BEVEL_GLOW_ALPHA * 0.5f),
+                1.0f to GLOW_COLOR.copy(alpha = BEVEL_GLOW_ALPHA),
+                center = center,
+                radius = radius
+            ),
+            topLeft = Offset.Zero,
+            size = Size(w, h),
+            cornerRadius = CornerRadius(outerCorner)
+        )
+
+        // 2) 卡片本体 (含其 elevation 阴影/指针高光) 置于内缩 e 处 — 覆盖中心只留环带
+        drawContent()
+
+        // 3) 内缘暗色阴影线 (环带内缘 = 卡片边界) — 体现立体斜面分离
+        drawRoundRect(
+            color = Color.Black.copy(alpha = BEVEL_SHADOW_ALPHA),
+            topLeft = Offset(ePx, ePx),
+            size = Size(w - 2f * ePx, h - 2f * ePx),
+            cornerRadius = CornerRadius(BEVEL_CARD_CORNER.toPx()),
+            style = Stroke(width = BEVEL_INNER_SHADOW.toPx())
+        )
+    }
 }

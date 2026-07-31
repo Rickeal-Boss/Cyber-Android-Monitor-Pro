@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.FormatUtils
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.ui.theme.*
+import com.rb.cybermonitorpro.ui.effects.cardEnlargeBevel
 
 /**
  * 内存分布分类颜色 — Batman 赛博朋克主题下的 5 类
@@ -70,6 +71,7 @@ fun MemoryDistributionCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .cardEnlargeBevel()
 
             .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
         shape = RoundedCornerShape(12.dp),

@@ -35,6 +35,7 @@ import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
 import org.koin.androidx.compose.koinViewModel
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
+import com.rb.cybermonitorpro.ui.effects.cardEnlargeBevel
 
 /**
  * 传感器列表页 — 现在通过回调将传感器选择上抛给 MainActivity 以全屏覆盖层展示
@@ -89,6 +90,7 @@ private fun SensorItemCard(sensor: SensorItemInfo, onClick: () -> Unit, modifier
     Card(
         modifier
             .fillMaxWidth()
+            .cardEnlargeBevel()
 
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.ui.effects.revealLight
+import com.rb.cybermonitorpro.ui.effects.cardEnlargeBevel
 import com.rb.cybermonitorpro.ui.theme.*
 
 /**
@@ -43,6 +44,7 @@ fun InfoCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth()
+            .cardEnlargeBevel()
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 12.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlow),
@@ -79,6 +81,7 @@ fun MetricCard(
     Card(
         modifier = modifier
             .then(if (chart === NoChart) Modifier.fillMaxWidth() else Modifier)
+            .cardEnlargeBevel()
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
