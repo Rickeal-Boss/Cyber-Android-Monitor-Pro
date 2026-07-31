@@ -229,8 +229,26 @@ private val BEVEL_CARD_CORNER = 12.dp
 /** 霓虹光边框基础 alpha */
 private const val BEVEL_GLOW_ALPHA = 0.65f
 
+/** 环带背景光晕 alpha (sweep 渐变底色, 降低以突出前景描边) */
+private const val BEVEL_GLOW_BG_ALPHA = 0.20f
+
 /** 内缘高光线 alpha (白色/浅色细线, 增强"玻璃边缘"浮起感) */
 private const val BEVEL_HIGHLIGHT_ALPHA = 0.12f
+
+/**
+ * 环带渐变描边色组 — 左上(紫) → 右下(蓝) 线性渐变.
+ * 契合赛博霓虹风格, 沿卡片四边形成连续的紫→蓝过渡.
+ */
+private val BEVEL_BORDER_COLORS = listOf(
+    Color(0xFF9966DD),  // 霓虹紫 (左上)
+    Color(0xFF5599CC),  // 赛博青蓝 (右下)
+)
+
+/** 动态边框色 — 高温黄 */
+private val BORDER_WARN_YELLOW = Color(0xFFFFAA00)
+
+/** 动态边框色 — 危险红 */
+private val BORDER_DANGER_RED = Color(0xFFFF3344)
 
 /**
  * 霓虹光边框渐变色组 (基于 GLOW_COLOR 0xFF5599CC 青蓝的变体).
@@ -250,9 +268,14 @@ private val BEVEL_GLOW_COLORS = listOf(
  *
  * 在卡片四周各外扩 [enlarge] 一圈环带; 卡片本体(背景/内容)尺寸保持不变,
  * 环带内绘制 sweep 渐变霓虹发光边框。所有接入点卡片统一生效。
+ *
+ * @param borderColor 动态边框色 (可选). 传入时覆盖默认紫→蓝渐变描边,
+ *   用于语义化状态指示 (如温度过高→红/黄边). 传 null 使用默认渐变.
  */
-fun Modifier.cardEnlargeBevel(enlarge: Dp = BEVEL_ENLARGE): Modifier =
-    cardEnlargeBevel(horizontal = enlarge, vertical = enlarge)
+fun Modifier.cardEnlargeBevel(
+    enlarge: Dp = BEVEL_ENLARGE,
+    borderColor: Color? = null
+): Modifier = cardEnlargeBevel(horizontal = enlarge, vertical = enlarge, borderColor)
 
 /**
  * 卡片微放大 + 霓虹光边框（非对称版）。
@@ -260,26 +283,32 @@ fun Modifier.cardEnlargeBevel(enlarge: Dp = BEVEL_ENLARGE): Modifier =
  * 水平方向外扩 [horizontal], 垂直方向外扩 [vertical].
  * 适用场景: 全宽卡片在 LazyColumn 中滚动时, 水平方向收窄以避免光晕被父容器裁切,
  * 同时保持垂直方向的立体感.
+ *
+ * @param borderColor 动态边框色 (可选). 传入时覆盖默认紫→蓝渐变描边.
  */
 fun Modifier.cardEnlargeBevel(
     horizontal: Dp = BEVEL_ENLARGE,
-    vertical: Dp = BEVEL_ENLARGE
-): Modifier = this then CardEnlargeBevelElement(horizontal, vertical)
+    vertical: Dp = BEVEL_ENLARGE,
+    borderColor: Color? = null
+): Modifier = this then CardEnlargeBevelElement(horizontal, vertical, borderColor)
 
 private data class CardEnlargeBevelElement(
     val horizontal: Dp,
-    val vertical: Dp
+    val vertical: Dp,
+    val borderColor: Color?
 ) : ModifierNodeElement<CardEnlargeBevelNode>() {
-    override fun create() = CardEnlargeBevelNode(horizontal, vertical)
+    override fun create() = CardEnlargeBevelNode(horizontal, vertical, borderColor)
     override fun update(node: CardEnlargeBevelNode) {
         node.horizontal = horizontal
         node.vertical = vertical
+        node.borderColor = borderColor
     }
 }
 
 private class CardEnlargeBevelNode(
     var horizontal: Dp,
-    var vertical: Dp
+    var vertical: Dp,
+    var borderColor: Color?
 ) : Modifier.Node(),
     LayoutModifierNode,
     DrawModifierNode {
@@ -314,13 +343,10 @@ private class CardEnlargeBevelNode(
         )
         val innerCorner = BEVEL_CARD_CORNER.toPx()
 
-        // ── 1) 霓虹光边框 (sweep 渐变填充外层圆角矩形) ──
-        //    sweepGradient 从中心向外辐射角度色环; 卡片本体(drawContent)覆盖中心区域后,
-        //    仅环带(外扩部分)露出渐变 → 形成围绕卡片一周的彩色发光边框.
-        //    效果类似参考图: 沿边缘颜色连续变化的霓虹灯管.
+        // ── 1) 环带背景光晕 (sweep 渐变, 降低 alpha 作为底色) ──
         drawRoundRect(
             brush = Brush.sweepGradient(
-                colors = BEVEL_GLOW_COLORS.map { it.copy(alpha = BEVEL_GLOW_ALPHA) }
+                colors = BEVEL_GLOW_COLORS.map { it.copy(alpha = BEVEL_GLOW_BG_ALPHA) }
             ),
             topLeft = Offset.Zero,
             size = Size(w, h),
@@ -328,11 +354,39 @@ private class CardEnlargeBevelNode(
         )
 
         // ── 2) 卡片本体 (含其 elevation 阴影/背景/内容) ──
-        //    覆盖中心区域, 仅留下外围环带的 sweep 渐变可见
         drawContent()
 
-        // ── 3) 内缘高光线 (白色极细描边, 卡片边界处) ──
-        //    模拟玻璃/亚克力的边缘反光, 增强"浮起"分离感 (非阴影, 是亮线)
+        // ── 3) 渐变描边 (环带中央, 紫→蓝 左上→右下, 或动态 borderColor) ──
+        //    在内缘高光线与外层光晕之间绘制线性渐变描边,
+        //    形成参考图红色区域所示的"霓虹边框管".
+        if (hPx > 1f || vPx > 1f) {
+            val midOffset = Offset(hPx / 2f, vPx / 2f)
+            val midSize = Size(w - hPx, h - vPx)
+            val midCorner = (innerCorner + outerCorner) / 2f
+            val strokeWidth = minOf(hPx, vPx).coerceAtLeast(1.5f)
+
+            val borderBrush = if (borderColor != null) {
+                Brush.horizontalGradient(
+                    listOf(borderColor.copy(alpha = 0.9f), borderColor.copy(alpha = 0.6f))
+                )
+            } else {
+                Brush.linearGradient(
+                    colors = BEVEL_BORDER_COLORS.map { it.copy(alpha = BEVEL_GLOW_ALPHA) },
+                    start = Offset(0f, 0f),
+                    end = Offset(w, h)
+                )
+            }
+
+            drawRoundRect(
+                brush = borderBrush,
+                topLeft = midOffset,
+                size = midSize,
+                cornerRadius = CornerRadius(midCorner),
+                style = Stroke(width = strokeWidth)
+            )
+        }
+
+        // ── 4) 内缘高光线 (白色极细描边, 卡片边界处) ──
         drawRoundRect(
             color = Color.White.copy(alpha = BEVEL_HIGHLIGHT_ALPHA),
             topLeft = Offset(hPx, vPx),

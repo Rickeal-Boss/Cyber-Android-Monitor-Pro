@@ -76,12 +76,13 @@ fun MetricCard(
     title: String, value: String, modifier: Modifier = Modifier,
     valueColor: Color = NeonPurpleBright, subtitle: String = "",
     progress: Float = -1f, showProgress: Boolean = false,
-    chart: @Composable () -> Unit = NoChart
+    chart: @Composable () -> Unit = NoChart,
+    borderColor: Color? = null
 ) {
     Card(
         modifier = modifier
             .then(if (chart === NoChart) Modifier.fillMaxWidth() else Modifier)
-            .cardEnlargeBevel()
+            .cardEnlargeBevel(borderColor = borderColor)
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
