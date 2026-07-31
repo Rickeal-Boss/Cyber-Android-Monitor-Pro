@@ -5,9 +5,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Stroke
 
 // ═══════════════════════════════════════════════════════════════
 //  固定软件背景光晕 — 全页面统一浮光效果 (一次性渲染)
@@ -22,7 +25,8 @@ import androidx.compose.ui.graphics.Color
 //    一次 (drawBehind 绘制), 不随任何卡片、页面滚动或切 Tab 重绘 →
 //    显著降 GPU 负载, 且所有页面 (含概览页/共享组件) 自动共享同一背景样式。
 //
-//  绘制内容: 3 层径向渐变 (右下主环境光 + 左上柔和补光 + 右下角边缘高光),
+//  绘制内容: 3 层径向渐变 (右下主环境光 + 左上柔和补光 + 右下角边缘高光)
+//  + 1 层屏幕四周非均匀描边光晕 (柔光边框, 右下最强、左上渐隐),
 //  仅 GPU 绘制层操作, 零额外 Composable 开销, 零对象分配。
 //
 //  接入点: MainActivity.kt 的 SystemMonitorApp 根 Box 内, 作为首个子项
@@ -61,13 +65,21 @@ private const val AMBIENT2_CY = 0.12f
 private const val EDGE_CX = 0.92f
 private const val EDGE_CY = 0.93f
 
+/** 边缘描边光晕 — 屏幕四周柔光边框 (第 4 层, 非均匀) */
+private const val RIM_INSET_DP = 3f        // 描边距屏幕边缘内缩
+private const val RIM_CORNER_DP = 22f      // 描边圆角
+private const val RIM_CORE_WIDTH_DP = 2.5f // 核心亮线宽度
+private const val RIM_PEAK_ALPHA = 0.18f   // 右下峰值亮度 (非均匀强化)
+private const val RIM_BASE_ALPHA = 0.03f   // 其余边缘微弱底光 (保证整圈仍可见)
+
 /**
  * 固定软件背景光晕 — App 根层一次性渲染的全屏浮光背景。
  *
  * 直接作为根 Box 的首个子 Composable 使用; 绘制于 drawBehind 域,
  * 仅在根组合时渲染一次, 后续卡片重组/页面滚动/切 Tab 均不触发重绘。
  *
- * 性能: 每次布局仅 3 次 drawCircle (Brush.radialGradient), 零对象分配。
+ * 性能: 每次布局仅 3 次 drawCircle + 2 次 drawRoundRect, 且为静态绘制
+ * (无动画/无 InfiniteTransition) → 保持"只渲染一次"零持续重绘开销。
  */
 @Composable
 fun AppGlowBackground() {
@@ -130,6 +142,50 @@ fun AppGlowBackground() {
                     radius = edgeRadius,
                     center = edgeCenter
                 )
+
+                // ── Layer 4: 边缘描边光晕 (屏幕四周柔光边框, 非均匀) ──
+                // 非均匀扫光渐变: 整圈微弱底光 (RIM_BASE_ALPHA) + 右下(角度≈0.125)一处
+                // 峰值亮弧 (RIM_PEAK_ALPHA) → 右下最强、向左上渐隐, 强化"边缘"且非均匀,
+                // 似跑马灯聚光但静止、仍是柔光晕 (非硬线)。静态 → 保持"只渲染一次"零持续开销。
+                val rimInset = RIM_INSET_DP * density
+                val rimCorner = RIM_CORNER_DP * density
+                val rimCoreW = RIM_CORE_WIDTH_DP * density
+                val rimSize = Size(w - 2f * rimInset, h - 2f * rimInset)
+                val rimTopLeft = Offset(rimInset, rimInset)
+                val rimHalo = buildRimBrush(w, h, 0.5f)
+                val rimCore = buildRimBrush(w, h, 1.0f)
+                // 柔光晕 (宽, 低叠加) + 核心亮线 (窄) — 两层描边制造光晕扩散
+                drawRoundRect(
+                    brush = rimHalo,
+                    topLeft = rimTopLeft,
+                    size = rimSize,
+                    cornerRadius = CornerRadius(rimCorner),
+                    style = Stroke(width = rimCoreW * 3f)
+                )
+                drawRoundRect(
+                    brush = rimCore,
+                    topLeft = rimTopLeft,
+                    size = rimSize,
+                    cornerRadius = CornerRadius(rimCorner),
+                    style = Stroke(width = rimCoreW)
+                )
             }
+    )
+}
+
+/** 构建边缘描边扫光渐变 — 右下峰值的非均匀分布 (alphaScale 控制整体强度) */
+private fun buildRimBrush(w: Float, h: Float, alphaScale: Float): Brush {
+    val base = RIM_BASE_ALPHA * alphaScale
+    val peak = RIM_PEAK_ALPHA * alphaScale
+    return Brush.sweepGradient(
+        0.0f to GLOW_COLOR.copy(alpha = base),
+        0.05f to GLOW_COLOR.copy(alpha = base),
+        0.09f to GLOW_COLOR.copy(alpha = peak * 0.55f),
+        0.125f to GLOW_COLOR.copy(alpha = peak),
+        0.16f to GLOW_COLOR.copy(alpha = peak * 0.55f),
+        0.20f to GLOW_COLOR.copy(alpha = base),
+        0.65f to GLOW_COLOR.copy(alpha = base),
+        1.0f to GLOW_COLOR.copy(alpha = base),
+        center = Offset(w / 2f, h / 2f)
     )
 }
