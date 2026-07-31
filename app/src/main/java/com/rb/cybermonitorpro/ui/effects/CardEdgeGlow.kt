@@ -69,8 +69,8 @@ private const val EDGE_CY = 0.93f
 private const val RIM_INSET_DP = 3f        // 描边距屏幕边缘内缩
 private const val RIM_CORNER_DP = 22f      // 描边圆角
 private const val RIM_CORE_WIDTH_DP = 2.5f // 核心亮线宽度
-private const val RIM_PEAK_ALPHA = 0.18f   // 右下峰值亮度 (非均匀强化)
-private const val RIM_BASE_ALPHA = 0.03f   // 其余边缘微弱底光 (保证整圈仍可见)
+private const val RIM_PEAK_ALPHA = 0.28f   // 右下柔光斑峰值亮度 (已调亮)
+private const val RIM_BASE_ALPHA = 0.05f   // 其余边缘微弱底光 (已调亮, 保证整圈仍可见)
 
 /**
  * 固定软件背景光晕 — App 根层一次性渲染的全屏浮光背景。
@@ -144,9 +144,9 @@ fun AppGlowBackground() {
                 )
 
                 // ── Layer 4: 边缘描边光晕 (屏幕四周柔光边框, 非均匀) ──
-                // 非均匀扫光渐变: 整圈微弱底光 (RIM_BASE_ALPHA) + 右下(角度≈0.125)一处
-                // 峰值亮弧 (RIM_PEAK_ALPHA) → 右下最强、向左上渐隐, 强化"边缘"且非均匀,
-                // 似跑马灯聚光但静止、仍是柔光晕 (非硬线)。静态 → 保持"只渲染一次"零持续开销。
+                // 非均匀扫光渐变: 整圈微弱底光 (RIM_BASE_ALPHA) + 右下象限 2~3 处离散柔光斑
+                // (buildRimBrush: 强度递减, 似跑马灯节点) → 右下最强、向左上渐隐, 强化"边缘"
+                // 且非均匀, 静止、仍是柔光晕 (非硬线)。静态 → 保持"只渲染一次"零持续开销。
                 val rimInset = RIM_INSET_DP * density
                 val rimCorner = RIM_CORNER_DP * density
                 val rimCoreW = RIM_CORE_WIDTH_DP * density
@@ -173,19 +173,27 @@ fun AppGlowBackground() {
     )
 }
 
-/** 构建边缘描边扫光渐变 — 右下峰值的非均匀分布 (alphaScale 控制整体强度) */
+/** 构建边缘描边扫光渐变 — 右下象限 2~3 处离散柔光斑 (非均匀, 似跑马灯节点但静止柔光) */
 private fun buildRimBrush(w: Float, h: Float, alphaScale: Float): Brush {
-    val base = RIM_BASE_ALPHA * alphaScale
+    val base = GLOW_COLOR.copy(alpha = RIM_BASE_ALPHA * alphaScale)
     val peak = RIM_PEAK_ALPHA * alphaScale
-    return Brush.sweepGradient(
-        0.0f to GLOW_COLOR.copy(alpha = base),
-        0.05f to GLOW_COLOR.copy(alpha = base),
-        0.09f to GLOW_COLOR.copy(alpha = peak * 0.55f),
-        0.125f to GLOW_COLOR.copy(alpha = peak),
-        0.16f to GLOW_COLOR.copy(alpha = peak * 0.55f),
-        0.20f to GLOW_COLOR.copy(alpha = base),
-        0.65f to GLOW_COLOR.copy(alpha = base),
-        1.0f to GLOW_COLOR.copy(alpha = base),
-        center = Offset(w / 2f, h / 2f)
+    // 三处柔光斑: (中心角度, 强度系数) — 集中于右下象限, 强度递减 → 非均匀
+    val spots = listOf(
+        0.07f to 0.60f,
+        0.125f to 1.00f,
+        0.19f to 0.70f
     )
+    val stops = mutableListOf<Pair<Float, Color>>()
+    stops.add(0.0f to base)
+    for ((center, k) in spots) {
+        val c = GLOW_COLOR.copy(alpha = peak * k)
+        val half = GLOW_COLOR.copy(alpha = peak * k * 0.5f)
+        stops.add((center - 0.020f) to base)
+        stops.add((center - 0.010f) to half)
+        stops.add(center to c)
+        stops.add((center + 0.010f) to half)
+        stops.add((center + 0.020f) to base)
+    }
+    stops.add(1.0f to base)
+    return Brush.sweepGradient(*stops.toTypedArray(), center = Offset(w / 2f, h / 2f))
 }
