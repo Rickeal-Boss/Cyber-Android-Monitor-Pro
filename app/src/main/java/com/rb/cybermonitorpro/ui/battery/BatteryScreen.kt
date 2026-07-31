@@ -574,7 +574,7 @@ private fun DualCellToggleCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
-            .cardEnlargeBevel(horizontal = 4.dp)
+            .cardEnlargeBevel(horizontal = 0.dp)
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
@@ -636,7 +636,7 @@ private fun BatteryCurrentMultiplierCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
-            .cardEnlargeBevel(horizontal = 4.dp)
+            .cardEnlargeBevel(horizontal = 0.dp)
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
         shape = RoundedCornerShape(12.dp),
