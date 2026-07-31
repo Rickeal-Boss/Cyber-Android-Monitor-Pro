@@ -369,7 +369,7 @@ private class CardEnlargeBevelNode(
             val borderBrush = if (bc != null) {
                 Brush.horizontalGradient(
                     listOf(bc.copy(alpha = 1.0f), bc.copy(alpha = 0.72f))
-                )                )
+                )
             } else {
                 Brush.linearGradient(
                     colors = BEVEL_BORDER_COLORS.map { it.copy(alpha = BEVEL_GLOW_ALPHA) },
