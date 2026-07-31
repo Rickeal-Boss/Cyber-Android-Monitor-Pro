@@ -226,29 +226,29 @@ private val BEVEL_ENLARGE = 8.dp
 /** 卡片圆角 — 须与所有卡片 RoundedCornerShape(12.dp) 保持一致 */
 private val BEVEL_CARD_CORNER = 12.dp
 
-/** 霓虹光边框基础 alpha */
-private const val BEVEL_GLOW_ALPHA = 0.65f
+/** 霓虹光边框基础 alpha (增强: 更鲜明浓郁) */
+private const val BEVEL_GLOW_ALPHA = 0.92f
 
 /** 环带背景光晕 alpha (sweep 渐变底色, 降低以突出前景描边) */
-private const val BEVEL_GLOW_BG_ALPHA = 0.20f
+private const val BEVEL_GLOW_BG_ALPHA = 0.32f
 
 /** 内缘高光线 alpha (白色/浅色细线, 增强"玻璃边缘"浮起感) */
-private const val BEVEL_HIGHLIGHT_ALPHA = 0.12f
+private const val BEVEL_HIGHLIGHT_ALPHA = 0.16f
 
 /**
- * 环带渐变描边色组 — 左上(紫) → 右下(蓝) 线性渐变.
- * 契合赛博霓虹风格, 沿卡片四边形成连续的紫→蓝过渡.
+ * 环带渐变描边色组 — 左上(霓虹紫) → 右下(霓虹青蓝) 线性渐变.
+ * 高饱和赛博霓虹配色, 沿卡片四边形成连续的紫→蓝过渡.
  */
 private val BEVEL_BORDER_COLORS = listOf(
-    Color(0xFF9966DD),  // 霓虹紫 (左上)
-    Color(0xFF5599CC),  // 赛博青蓝 (右下)
+    Color(0xFFB368FF),  // 霓虹紫 (左上) — 高饱和亮紫
+    Color(0xFF33B5FF),  // 霓虹青蓝 (右下) — 高饱和亮蓝
 )
 
-/** 动态边框色 — 高温黄 */
-private val BORDER_WARN_YELLOW = Color(0xFFFFAA00)
+/** 动态边框色 — 高温黄 (增强: 更亮琥珀) */
+private val BORDER_WARN_YELLOW = Color(0xFFFFCC00)
 
-/** 动态边框色 — 危险红 */
-private val BORDER_DANGER_RED = Color(0xFFFF3344)
+/** 动态边框色 — 危险红 (增强: 更鲜艳) */
+private val BORDER_DANGER_RED = Color(0xFFFF2255)
 
 /**
  * 霓虹光边框渐变色组 (基于 GLOW_COLOR 0xFF5599CC 青蓝的变体).
@@ -368,8 +368,8 @@ private class CardEnlargeBevelNode(
             val bc = borderColor
             val borderBrush = if (bc != null) {
                 Brush.horizontalGradient(
-                    listOf(bc.copy(alpha = 0.9f), bc.copy(alpha = 0.6f))
-                )
+                    listOf(bc.copy(alpha = 1.0f), bc.copy(alpha = 0.72f))
+                )                )
             } else {
                 Brush.linearGradient(
                     colors = BEVEL_BORDER_COLORS.map { it.copy(alpha = BEVEL_GLOW_ALPHA) },
