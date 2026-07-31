@@ -76,8 +76,8 @@ fun MetricCard(
     title: String, value: String, modifier: Modifier = Modifier,
     valueColor: Color = NeonPurpleBright, subtitle: String = "",
     progress: Float = -1f, showProgress: Boolean = false,
-    chart: @Composable () -> Unit = NoChart,
-    borderColor: Color? = null
+    borderColor: Color? = null,
+    chart: @Composable () -> Unit = NoChart
 ) {
     Card(
         modifier = modifier
