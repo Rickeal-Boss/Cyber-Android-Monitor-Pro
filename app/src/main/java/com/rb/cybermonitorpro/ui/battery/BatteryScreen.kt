@@ -60,7 +60,6 @@ import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.components.CardGradient
 import com.rb.cybermonitorpro.ui.components.hdrHighlight
 import com.rb.cybermonitorpro.ui.effects.revealLight
-import com.rb.cybermonitorpro.ui.effects.cardEdgeGlow
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
@@ -574,7 +573,7 @@ private fun DualCellToggleCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth()
-            .cardEdgeGlow()
+
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
         shape = RoundedCornerShape(12.dp),

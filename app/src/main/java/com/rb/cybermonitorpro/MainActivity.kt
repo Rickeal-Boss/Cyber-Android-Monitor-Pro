@@ -66,6 +66,7 @@ import com.rb.cybermonitorpro.ui.effects.GlobalLightProvider
 import com.rb.cybermonitorpro.ui.effects.StaggeredPageProvider
 import com.rb.cybermonitorpro.ui.effects.acrylic
 import com.rb.cybermonitorpro.ui.effects.revealLight
+import com.rb.cybermonitorpro.ui.effects.AppGlowBackground
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -271,6 +272,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
+            // ★ 固定软件背景光晕 — 根层一次性渲染, 不随卡片/页面/滚动重绘 (性能优化)
+            AppGlowBackground()
             // ★ Windows 10 风格全局光照 — 包裹全部内容以捕获指针事件
             GlobalLightProvider {
             // ★ 主 Tab 页始终保持在 composition 中，保留所有滚动状态

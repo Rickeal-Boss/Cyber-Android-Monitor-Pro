@@ -22,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.rb.cybermonitorpro.ui.effects.cardEdgeGlow
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.theme.*
 
@@ -44,7 +43,7 @@ fun InfoCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth()
-            .cardEdgeGlow()
+
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 12.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlow),
         shape = RoundedCornerShape(12.dp),
@@ -80,7 +79,7 @@ fun MetricCard(
     Card(
         modifier = modifier
             .then(if (chart === NoChart) Modifier.fillMaxWidth() else Modifier)
-            .cardEdgeGlow()
+
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
         shape = RoundedCornerShape(12.dp),

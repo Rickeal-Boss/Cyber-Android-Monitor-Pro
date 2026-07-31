@@ -1,101 +1,134 @@
 package com.rb.cybermonitorpro.ui.effects
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 
 // ═══════════════════════════════════════════════════════════════
-//  卡片边缘静态光晕 — 全页面统一浮光效果
+//  固定软件背景光晕 — 全页面统一浮光效果 (一次性渲染)
 //
-//  视觉目标 (参考图): 柔和蓝紫渐变光晕从卡片底部/右侧边缘向外扩散,
-//  营造"卡片浮在光上"的悬浮感。细腻不抢眼, 与阴影交织体现层次。
+//  视觉目标 (参考图): 柔和蓝紫渐变光晕从界面右下边缘向外扩散,
+//  营造"卡片/内容浮在光上"的悬浮感。细腻不抢眼, 与阴影交织体现层次。
 //
-//  实现方式: drawBehind 绘制双层径向渐变 (底层大范围环境光 + 上层边缘高光),
-//  仅 GPU 绘制层操作, 不触发重组, 零额外 Composable 开销。
+//  实现方式 (v2 — 固定背景):
+//  - 旧版 (v1) 在每个卡片上挂 cardEdgeGlow() Modifier, 随卡片重组/滚动
+//    反复重绘, 且有 12 处接入点难以统一。
+//  - 新版改为 App 根层一次性渲染的全屏固定背景层: 只在根 Composable 渲染
+//    一次 (drawBehind 绘制), 不随任何卡片、页面滚动或切 Tab 重绘 →
+//    显著降 GPU 负载, 且所有页面 (含概览页/共享组件) 自动共享同一背景样式。
 //
-//  接入点: 所有公共卡片组件 (InfoCard / MetricCard / MemoryDistributionCard /
-//  QuickLinkCard / SectionCard 等) 的 Card modifier 链中, 位于 fillMaxWidth 之后、
-//  shadow/revealLight 之前 → 光晕作为最底层, 阴影叠加其上产生深度。
+//  绘制内容: 3 层径向渐变 (右下主环境光 + 左上柔和补光 + 右下角边缘高光),
+//  仅 GPU 绘制层操作, 零额外 Composable 开销, 零对象分配。
+//
+//  接入点: MainActivity.kt 的 SystemMonitorApp 根 Box 内, 作为首个子项
+//  (位于 Surface 不透明底色之上、GlobalLightProvider/内容之下)。
 // ═══════════════════════════════════════════════════════════════
 
 /** 光晕主色 — 柔和天蓝 (介于参考图淡蓝与项目 NeonCyan 之间, 去饱和以显细腻) */
 private val GLOW_COLOR = Color(0xFF5599CC)
 
-/** 底层环境光 — 大范围极淡径向渐变, 营造整体浮光氛围 */
-private const val AMBIENT_ALPHA_CENTER = 0.06f
-private const val AMBIENT_ALPHA_MID    = 0.025f
+/** 主环境光 alpha — 大范围极淡径向渐变, 营造整体浮光氛围 */
+private const val AMBIENT_ALPHA_CENTER = 0.07f
+private const val AMBIENT_ALPHA_MID    = 0.04f
 
-/** 上层边缘高光 — 较小范围稍亮, 集中于底部/右侧边缘 */
-private const val EDGE_ALPHA_CENTER = 0.10f
-private const val EDGE_ALPHA_MID    = 0.035f
+/** 边缘高光 alpha — 较小范围稍亮, 集中于底部/右侧边角 */
+private const val EDGE_ALPHA_CENTER = 0.11f
+private const val EDGE_ALPHA_MID    = 0.045f
 
-/** 环境光中心偏移 — 相对卡片的右下位置 (0~1, 越大越靠右/下) */
-private const val AMBIENT_CENTER_X_FRACTION = 0.82f
-private const val AMBIENT_CENTER_Y_FRACTION = 0.88f
+/** 主环境光半径系数 — 相对屏幕长边的倍数 (扩散范围, 越大越广) */
+private const val AMBIENT_RADIUS_SCALE = 1.30f
 
-/** 边缘高光中心偏移 — 更贴近右下角 */
-private const val EDGE_CENTER_X_FRACTION = 0.90f
-private const val EDGE_CENTER_Y_FRACTION = 0.92f
+/** 副环境光 (左上柔和补光) 半径系数 — 保证全屏浮光均匀 */
+private const val AMBIENT_SECONDARY_RADIUS_SCALE = 1.10f
 
-/** 环境光半径系数 — 相对卡片长边的倍数 (越大=越扩散) */
-private const val AMBIENT_RADIUS_SCALE = 0.80f
+/** 边缘高光半径系数 — 较紧凑, 集中于边角 */
+private const val EDGE_RADIUS_SCALE = 0.85f
 
-/** 边缘高光半径系数 — 更紧凑 */
-private const val EDGE_RADIUS_SCALE = 0.52f
+/** 主环境光中心 — 界面右下 (0~1, 越大越靠右/下) */
+private const val AMBIENT_CX = 0.85f
+private const val AMBIENT_CY = 0.90f
+
+/** 副环境光中心 — 界面左上 (柔和补光) */
+private const val AMBIENT2_CX = 0.15f
+private const val AMBIENT2_CY = 0.12f
+
+/** 边缘高光中心 — 更贴右下角 */
+private const val EDGE_CX = 0.92f
+private const val EDGE_CY = 0.93f
 
 /**
- * 卡片边缘静态光晕 — drawBehind 双层径向渐变。
+ * 固定软件背景光晕 — App 根层一次性渲染的全屏浮光背景。
  *
- * 无参数调用即可使用; 所有可调常量在本文件顶部集中管理。
- * 性能: 每次 drawBehind 仅 2 次 drawCircle (Brush.radialGradient), 零对象分配。
+ * 直接作为根 Box 的首个子 Composable 使用; 绘制于 drawBehind 域,
+ * 仅在根组合时渲染一次, 后续卡片重组/页面滚动/切 Tab 均不触发重绘。
+ *
+ * 性能: 每次布局仅 3 次 drawCircle (Brush.radialGradient), 零对象分配。
  */
-fun Modifier.cardEdgeGlow(): Modifier = composed {
-    drawBehind {
-        if (size.width <= 0f || size.height <= 0f) return@drawBehind
+@Composable
+fun AppGlowBackground() {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .drawBehind {
+                val w = size.width
+                val h = size.height
+                if (w <= 0f || h <= 0f) return@drawBehind
+                val dimen = maxOf(w, h)
 
-        val dimen = maxOf(size.width, size.height)
+                // ── Layer 1: 主环境光 (右下, 较强) ──
+                val ambientRadius = dimen * AMBIENT_RADIUS_SCALE
+                val ambientCenter = Offset(w * AMBIENT_CX, h * AMBIENT_CY)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            GLOW_COLOR.copy(alpha = AMBIENT_ALPHA_CENTER),
+                            GLOW_COLOR.copy(alpha = AMBIENT_ALPHA_MID),
+                            Color.Transparent
+                        ),
+                        center = ambientCenter,
+                        radius = ambientRadius
+                    ),
+                    radius = ambientRadius,
+                    center = ambientCenter
+                )
 
-        // ── Layer 1: 底层环境光 (大范围, 极淡) ──
-        val ambientRadius = dimen * AMBIENT_RADIUS_SCALE
-        val ambientCenter = Offset(
-            size.width * AMBIENT_CENTER_X_FRACTION,
-            size.height * AMBIENT_CENTER_Y_FRACTION
-        )
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    GLOW_COLOR.copy(alpha = AMBIENT_ALPHA_CENTER),
-                    GLOW_COLOR.copy(alpha = AMBIENT_ALPHA_MID),
-                    Color.Transparent
-                ),
-                center = ambientCenter,
-                radius = ambientRadius
-            ),
-            radius = ambientRadius,
-            center = ambientCenter
-        )
+                // ── Layer 2: 副环境光 (左上, 柔和补光, 保证全屏浮光) ──
+                val ambient2Radius = dimen * AMBIENT_SECONDARY_RADIUS_SCALE
+                val ambient2Center = Offset(w * AMBIENT2_CX, h * AMBIENT2_CY)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            GLOW_COLOR.copy(alpha = AMBIENT_ALPHA_CENTER * 0.6f),
+                            GLOW_COLOR.copy(alpha = AMBIENT_ALPHA_MID * 0.6f),
+                            Color.Transparent
+                        ),
+                        center = ambient2Center,
+                        radius = ambient2Radius
+                    ),
+                    radius = ambient2Radius,
+                    center = ambient2Center
+                )
 
-        // ── Layer 2: 上层边缘高光 (较小范围, 稍亮, 集中于边角) ──
-        val edgeRadius = dimen * EDGE_RADIUS_SCALE
-        val edgeCenter = Offset(
-            size.width * EDGE_CENTER_X_FRACTION,
-            size.height * EDGE_CENTER_Y_FRACTION
-        )
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    GLOW_COLOR.copy(alpha = EDGE_ALPHA_CENTER),
-                    GLOW_COLOR.copy(alpha = EDGE_ALPHA_MID),
-                    Color.Transparent
-                ),
-                center = edgeCenter,
-                radius = edgeRadius
-            ),
-            radius = edgeRadius,
-            center = edgeCenter
-        )
-    }
+                // ── Layer 3: 边缘高光 (右下角, 更亮更聚) ──
+                val edgeRadius = dimen * EDGE_RADIUS_SCALE
+                val edgeCenter = Offset(w * EDGE_CX, h * EDGE_CY)
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            GLOW_COLOR.copy(alpha = EDGE_ALPHA_CENTER),
+                            GLOW_COLOR.copy(alpha = EDGE_ALPHA_MID),
+                            Color.Transparent
+                        ),
+                        center = edgeCenter,
+                        radius = edgeRadius
+                    ),
+                    radius = edgeRadius,
+                    center = edgeCenter
+                )
+            }
+    )
 }

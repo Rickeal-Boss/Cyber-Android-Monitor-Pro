@@ -38,7 +38,6 @@ import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.NeonMagenta
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
-import com.rb.cybermonitorpro.ui.effects.cardEdgeGlow
 import org.koin.androidx.compose.koinViewModel
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.FormatUtils
@@ -322,7 +321,7 @@ private val SectionGradient = Brush.linearGradient(listOf(CyberCardStart, CyberC
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
     Card(
-        Modifier.fillMaxWidth().cardEdgeGlow(), shape = RoundedCornerShape(12.dp),
+        Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {

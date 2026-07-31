@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.FormatUtils
 import com.rb.cybermonitorpro.R
-import com.rb.cybermonitorpro.ui.effects.cardEdgeGlow
 import com.rb.cybermonitorpro.ui.theme.*
 
 /**
@@ -71,7 +70,7 @@ fun MemoryDistributionCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .cardEdgeGlow()
+
             .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),

@@ -34,7 +34,6 @@ import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
 import org.koin.androidx.compose.koinViewModel
-import com.rb.cybermonitorpro.ui.effects.cardEdgeGlow
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
 /**
@@ -90,7 +89,7 @@ private fun SensorItemCard(sensor: SensorItemInfo, onClick: () -> Unit, modifier
     Card(
         modifier
             .fillMaxWidth()
-            .cardEdgeGlow()
+
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
