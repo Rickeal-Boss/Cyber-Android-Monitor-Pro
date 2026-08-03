@@ -22,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.theme.*
 
@@ -45,7 +46,8 @@ fun InfoCard(
         modifier = modifier.fillMaxWidth()
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 12.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlow),
+            .shadow(elevation = 12.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlow)
+            .cardGradientBorder(12.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -74,6 +76,7 @@ fun MetricCard(
     title: String, value: String, modifier: Modifier = Modifier,
     valueColor: Color = NeonPurpleBright, subtitle: String = "",
     progress: Float = -1f, showProgress: Boolean = false,
+    borderColor: Color? = null,
     chart: @Composable () -> Unit = NoChart
 ) {
     Card(
@@ -81,7 +84,8 @@ fun MetricCard(
             .then(if (chart === NoChart) Modifier.fillMaxWidth() else Modifier)
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight)
+            .cardGradientBorder(12.dp, dynamicColor = borderColor),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

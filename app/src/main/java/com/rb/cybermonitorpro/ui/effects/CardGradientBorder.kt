@@ -1,0 +1,91 @@
+package com.rb.cybermonitorpro.ui.effects
+
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import com.rb.cybermonitorpro.ui.theme.DeepRedAlert
+import com.rb.cybermonitorpro.ui.theme.NeonPurple
+import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
+import com.rb.cybermonitorpro.ui.theme.TitaniumGold
+
+/**
+ * 卡片渐变描边光晕（静态，一次绘制，无动画开销）。
+ *
+ * 绘制区域为卡片最外缘向内的一条环带（containerColor = Color.Transparent 的隔断区）：
+ * - 靠外 1/2：紫 → 蓝对角渐变描边（左上 → 右下），圆角贴合卡片边框；
+ * - 靠内 1/2：静态阴影效果色（深暗描边，营造内凹层次）。
+ *
+ * 强度刻意压低（alpha 0.5），契合淡淡的软件背景光晕，不喧宾夺主。
+ *
+ * @param cornerDp     卡片圆角（与 Card shape 保持一致）
+ * @param bandWidth    环带总宽度（内外两半各占 1/2）
+ * @param dynamicColor 动态描边色；非空时替代紫→蓝渐变（如电池温度语义变色），null 用默认渐变
+ */
+fun Modifier.cardGradientBorder(
+    cornerDp: Dp = 12.dp,
+    bandWidth: Dp = 3.dp,
+    dynamicColor: Color? = null,
+): Modifier = this.drawWithContent {
+    drawContent()
+
+    val bandPx = bandWidth.toPx()
+    val halfPx = bandPx / 2f
+    val cornerPx = cornerDp.toPx()
+
+    // ── 靠外 1/2：描边光晕（默认紫→蓝对角渐变；dynamicColor 非空时为纯色） ──
+    val glowBrush: Brush = if (dynamicColor != null) {
+        SolidColor(dynamicColor)
+    } else {
+        Brush.linearGradient(
+            colors = listOf(
+                NeonPurple.copy(alpha = 0.5f),
+                NeonSteelBlue.copy(alpha = 0.5f)
+            ),
+            start = Offset.Zero,                    // 左上
+            end = Offset(size.width, size.height)   // 右下
+        )
+    }
+    // 描边中线内缩 halfPx/2，使外缘恰好贴卡片边缘（覆盖 0 .. halfPx）
+    drawRoundRect(
+        brush = glowBrush,
+        topLeft = Offset(halfPx / 2f, halfPx / 2f),
+        size = size.copy(width = size.width - halfPx, height = size.height - halfPx),
+        cornerRadius = CornerRadius(cornerPx - halfPx / 2f),
+        style = Stroke(width = halfPx)
+    )
+
+    // ── 靠内 1/2：静态阴影效果色（覆盖 halfPx .. bandPx），弧度递减贴合 ──
+    drawRoundRect(
+        color = BorderInnerShadow,
+        topLeft = Offset(halfPx + halfPx / 2f, halfPx + halfPx / 2f),
+        size = size.copy(
+            width = size.width - halfPx * 3f,
+            height = size.height - halfPx * 3f
+        ),
+        cornerRadius = CornerRadius((cornerPx - halfPx * 1.5f).coerceAtLeast(0f)),
+        style = Stroke(width = halfPx)
+    )
+}
+
+// 内半环静态阴影色：近黑的深紫黑，低透明度，只做层次不做存在
+private val BorderInnerShadow = Color(0xFF06030E).copy(alpha = 0.6f)
+
+/**
+ * 电池温度 → 描边语义色（仅限概览页与电池页的电池温度卡片使用）：
+ * - > 44.0℃：深红色边（过热告警）
+ * - > 40.0℃：钛金色边（高温提醒）
+ * - ≤ 40.0℃ / 无数据：null（与其他卡片一致的蓝紫渐变）
+ */
+fun batteryTempBorderColor(tempCelsius: Float?): Color? = when {
+    tempCelsius == null -> null
+    tempCelsius > 44.0f -> DeepRedAlert
+    tempCelsius > 40.0f -> TitaniumGold
+    else -> null
+}

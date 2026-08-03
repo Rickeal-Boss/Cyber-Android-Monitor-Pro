@@ -59,6 +59,8 @@ import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.components.CardGradient
 import com.rb.cybermonitorpro.ui.components.hdrHighlight
+import com.rb.cybermonitorpro.ui.effects.batteryTempBorderColor
+import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
@@ -410,7 +412,8 @@ fun BatteryScreen(
                     MetricCard(
                         title = stringResource(R.string.battery_temperature_title),
                         value = "%.1f°C".format(temp),
-                        valueColor = NeonPurpleBright
+                        valueColor = NeonPurpleBright,
+                        borderColor = batteryTempBorderColor(temp)
                     ) {
                         LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth())
                     }
@@ -575,7 +578,8 @@ private fun DualCellToggleCard(
         modifier = Modifier.fillMaxWidth()
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight)
+            .cardGradientBorder(12.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -635,7 +639,8 @@ private fun BatteryCurrentMultiplierCard(
     Card(
         modifier = Modifier.fillMaxWidth()
             .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight),
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight)
+            .cardGradientBorder(12.dp),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

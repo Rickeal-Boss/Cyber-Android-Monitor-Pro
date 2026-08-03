@@ -40,6 +40,8 @@ val ChartGlow           = Color(0x507C3AED)   // 辉光
 val SuccessNeon         = Color(0xFF34C759)   // 荧光绿 (设计稿)
 val WarningNeon         = Color(0xFFFFAB00)   // 琥珀霓虹
 val ErrorNeon           = Color(0xFFFF1744)   // 猩红霓虹
+val TitaniumGold        = Color(0xFFC9A86A)   // 钛金 (电池温度 >40℃ 描边)
+val DeepRedAlert        = Color(0xFF9B1C1C)   // 深红 (电池温度 >44℃ 描边)
 
 // ── 文字色 ──
 val TextPrimary         = Color(0xFFE2E8F0)   // 主文字
