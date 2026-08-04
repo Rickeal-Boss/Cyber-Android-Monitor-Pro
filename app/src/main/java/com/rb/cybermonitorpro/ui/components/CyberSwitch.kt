@@ -28,7 +28,6 @@ import com.rb.cybermonitorpro.ui.theme.*
 // ═══════════════════════════════════════════════════════════════
 //  常量 — 4 维度参数（与 GlowBackButton.drawFrostedGlassV3 同款约定）
 // ═══════════════════════════════════════════════════════════════
-private const val LIGHT_ANGLE_DEG = 135f
 private const val THUMB_HIGHLIGHT_CX = 0.30f
 private const val THUMB_HIGHLIGHT_CY = 0.25f
 private const val THUMB_SPECULAR_CX = 0.35f
@@ -38,7 +37,7 @@ private val SWITCH_WIDTH = 52.dp
 private val SWITCH_HEIGHT = 32.dp
 private val THUMB_SIZE = 26.dp
 private val TRACK_CORNER = 16.dp
-private val TRACK_PADDING = 3.dp          // thumb 与 track 内壁的间隙
+private val TRACK_PADDING = 3.dp          // thumb 与 track 内壁的间隙（左右对称）
 
 // L4 底部暗线色 — 与 CardGradientBorder.BorderInnerShadow 同值，但该域 private 无法跨文件
 private val BorderShadow = Color(0xFF06030E).copy(alpha = 0.75f)
@@ -62,8 +61,20 @@ fun CyberSwitch(
 ) {
     val ctx = LocalContext.current
 
-    // ── 状态切换动画：thumb 平移（绘制层，不重组） ──
-    val targetOffset = if (checked) SWITCH_WIDTH - THUMB_SIZE - TRACK_PADDING * 2
+    // ── 静态 Track 渐变：不随状态变化，remember 避免每帧重建 ──
+    val trackGradient = remember {
+        Brush.verticalGradient(
+            colorStops = arrayOf(
+                0.0f  to NeonPurpleDeep.copy(alpha = 0.55f),
+                0.15f to NeonPurpleDeep.copy(alpha = 0.85f),
+                0.5f  to CyberBackground.copy(alpha = 0.90f),
+                1.0f  to NeonPurpleDeep.copy(alpha = 0.70f)
+            )
+        )
+    }
+
+    // ── 状态切换动画：thumb 平移（graphicsLayer 绘制层，不触发 layout） ──
+    val targetOffset = if (checked) SWITCH_WIDTH - THUMB_SIZE - TRACK_PADDING
                        else TRACK_PADDING
     val offsetX by animateDpAsState(
         targetValue = targetOffset,
@@ -89,6 +100,7 @@ fun CyberSwitch(
     Box(
         modifier = modifier
             .size(SWITCH_WIDTH, SWITCH_HEIGHT)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.38f }   // 禁用态视觉降级
             .revealLight(radius = 100.dp, intensity = 0.18f)   // 悬停光照响应
             .toggleable(
                 value = checked,
@@ -97,8 +109,8 @@ fun CyberSwitch(
                     HapticUtils.lightTap(ctx)
                 },
                 enabled = enabled,
-                interactionSource = interaction,
-                indication = null
+                interactionSource = interaction
+                // indication 省略 → LocalIndication 默认 ripple，按压有反馈
             ),
         contentAlignment = Alignment.CenterStart
     ) {
@@ -106,13 +118,12 @@ fun CyberSwitch(
         Canvas(
             Modifier.fillMaxSize().clip(RoundedCornerShape(TRACK_CORNER))
         ) {
-            drawTrack(trackActiveAlpha)
+            drawTrack(trackGradient, trackActiveAlpha)
         }
-        // ── Thumb 层（凸起实体） ──
+        // ── Thumb 层（凸起实体）— graphicsLayer 平移，绘制层不触发 layout ──
         Box(
             Modifier
-                .offset(x = offsetX)
-                .padding(0.dp)   // offset 已含 padding 逻辑
+                .graphicsLayer { translationX = offsetX.toPx() }
                 .size(THUMB_SIZE)
                 .shadow(
                     elevation = 2.dp, shape = CircleShape,
@@ -131,22 +142,13 @@ fun CyberSwitch(
 // ═══════════════════════════════════════════════════════════════
 //  Track 绘制 — 维度 1（4-stop 内凹渐变）+ 维度 4（上下沿双线）
 // ═══════════════════════════════════════════════════════════════
-private fun DrawScope.drawTrack(activeAlpha: Float) {
+private fun DrawScope.drawTrack(gradient: Brush, activeAlpha: Float) {
     val w = size.width; val h = size.height
     val r = TRACK_CORNER.toPx()
 
-    // 基底 4-stop 线性渐变（上亮下暗，内凹槽）
-    drawRoundRect(
-        brush = Brush.verticalGradient(
-            colorStops = arrayOf(
-                0.0f  to NeonPurpleDeep.copy(alpha = 0.55f),
-                0.15f to NeonPurpleDeep.copy(alpha = 0.85f),
-                0.5f  to CyberBackground.copy(alpha = 0.90f),
-                1.0f  to NeonPurpleDeep.copy(alpha = 0.70f)
-            )
-        ),
-        cornerRadius = CornerRadius(r)
-    )
+    // 基底 4-stop 线性渐变（上亮下暗，内凹槽）— brush 由调用方 remember 缓存
+    drawRoundRect(brush = gradient, cornerRadius = CornerRadius(r))
+
     // 激活态叠加紫色填充
     if (activeAlpha > 0.01f) {
         drawRoundRect(
@@ -173,6 +175,7 @@ private fun DrawScope.drawTrack(activeAlpha: Float) {
 private fun DrawScope.drawThumb(baseColor: Color, activeAlpha: Float) {
     val w = size.width; val h = size.height
     val cx = w * THUMB_HIGHLIGHT_CX; val cy = h * THUMB_HIGHLIGHT_CY
+    val rimRadius = size.minDimension / 2f - 0.5.dp.toPx()   // rim 内缩半描边宽，防溢出
 
     // L1 主体径向渐变（左上亮右下暗，135° 受光）
     drawCircle(
@@ -203,9 +206,10 @@ private fun DrawScope.drawThumb(baseColor: Color, activeAlpha: Float) {
         size = Size(w * 0.76f, h * 0.76f)
     )
 
-    // L4 Rim Light（外侧青色描边，凸出信号）
+    // L4 Rim Light（外侧青色描边，凸出信号）— 半径内缩 0.5dp 防溢出
     drawCircle(
         color = NeonCyan.copy(alpha = 0.40f * (0.5f + activeAlpha * 0.5f)),
+        radius = rimRadius,
         style = Stroke(width = 1.dp.toPx())
     )
 
