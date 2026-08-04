@@ -114,7 +114,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = koinViewModel()) {
         // ═══ App 信息 ═══
         Card(
             Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -152,7 +152,7 @@ private fun LanguageSettingsCard() {
 
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = NeonPurple.copy(alpha = 0.08f)
         ),
@@ -282,7 +282,7 @@ private fun ModuleIntervalCard(cfg: ModuleIntervalConfig, viewModel: SettingsVie
 
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = NeonPurple.copy(alpha = 0.08f)
         ),
@@ -359,7 +359,7 @@ private fun HapticSettingsCard() {
 
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(
             containerColor = NeonPurple.copy(alpha = 0.08f)
         ),

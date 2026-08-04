@@ -66,7 +66,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         var cardIdx = 0
         val wifiConnectedLabel = stringResource(R.string.network_wifi_connected)
@@ -208,7 +208,7 @@ private fun hasCellInfo(info: MobileNetworkInfo): Boolean {
 private fun CellDetailCard(info: MobileNetworkInfo, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {

@@ -36,7 +36,6 @@ import com.rb.cybermonitorpro.data.model.OemPowerMode
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.FormatUtils
-import com.rb.cybermonitorpro.ui.components.hdrHighlight
 import com.rb.cybermonitorpro.ui.oem.OemViewModel
 import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
@@ -55,7 +54,7 @@ fun DeviceScreen(
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         Text(stringResource(R.string.device_title), fontSize = 18.sp, fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface)
@@ -605,11 +604,11 @@ private val SectionGradient = Brush.linearGradient(listOf(CyberCardStart, CyberC
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(12.dp), shape = RoundedCornerShape(12.dp),
+        Modifier.fillMaxWidth().cardGradientBorder(20.dp, hdrHighlight = true), shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Box(Modifier.fillMaxWidth().background(SectionGradient).hdrHighlight(12.dp)) {
+        Box(Modifier.fillMaxWidth().background(SectionGradient)) {
             Column(Modifier.padding(16.dp)) {
                 Text(title, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = NeonPurple)
                 Column(Modifier.padding(top = 8.dp)) { content() }

@@ -73,7 +73,7 @@ fun GpuScreen(
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         val subtitle = FormatUtils.joinNonBlank(" · ",
             frequency,

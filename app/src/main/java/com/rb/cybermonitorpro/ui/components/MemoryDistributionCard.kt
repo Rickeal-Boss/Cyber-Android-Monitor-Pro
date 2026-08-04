@@ -72,20 +72,19 @@ fun MemoryDistributionCard(
         modifier = modifier
             .fillMaxWidth()
 
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight)
-            .cardGradientBorder(12.dp),
-        shape = RoundedCornerShape(12.dp),
+            .shadow(elevation = 12.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlow)
+            .cardGradientBorder(20.dp, hdrHighlight = true),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(20.dp))
                 .background(CardGradient)
-                .hdrHighlight(12.dp)
         ) {
-            Column(Modifier.padding(14.dp)) {
+            Column(Modifier.padding(18.dp)) {
                 // 标题
                 Text(
                     stringResource(R.string.memory_dist_title),
@@ -93,7 +92,7 @@ fun MemoryDistributionCard(
                     color = TextSecondary,
                     letterSpacing = 0.5.sp
                 )
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
 
                 // 总量概览
                 Text(
@@ -104,7 +103,7 @@ fun MemoryDistributionCard(
                     fontFamily = FontFamily.Monospace,
                     letterSpacing = 1.5.sp
                 )
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
 
                 // === 水平层叠条形图 ===
                 val totalFloat = totalKB.toFloat()
@@ -112,8 +111,8 @@ fun MemoryDistributionCard(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .height(14.dp)
-                            .clip(RoundedCornerShape(7.dp))
+                            .height(16.dp)
+                            .clip(RoundedCornerShape(8.dp))
                     ) {
                         categories.forEach { cat ->
                             val fraction = (cat.valueKB.toFloat() / totalFloat).coerceIn(0f, 1f)
@@ -127,7 +126,7 @@ fun MemoryDistributionCard(
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(14.dp))
 
                 // === 图例 (5 行) ===
                 categories.forEach { cat ->
@@ -135,7 +134,7 @@ fun MemoryDistributionCard(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 2.dp),
+                            .padding(vertical = 3.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // 颜色圆点

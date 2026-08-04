@@ -59,7 +59,7 @@ private fun SensorListContent(
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         var cardIdx = 0
         Text(
@@ -91,7 +91,7 @@ private fun SensorItemCard(sensor: SensorItemInfo, onClick: () -> Unit, modifier
             .fillMaxWidth()
 
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {

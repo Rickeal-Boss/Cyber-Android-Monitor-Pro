@@ -144,7 +144,7 @@ fun DashboardScreen(
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         // ── 设备信息卡片（开机时长 + 深度待机）──
         InfoCard(
@@ -222,16 +222,16 @@ private fun QuickLinkCard(
             .revealLight(radius = 140.dp, intensity = 0.18f)
 
             .fillMaxWidth().height(56.dp)
-            .cardGradientBorder(12.dp),
-        shape = RoundedCornerShape(12.dp),
+            .cardGradientBorder(20.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(
-            Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp))
+            Modifier.fillMaxSize().clip(RoundedCornerShape(20.dp))
                 .background(Brush.horizontalGradient(listOf(CyberCardStart, CyberCardEnd)))
         ) {
-            Row(Modifier.fillMaxSize().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxSize().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier.size(32.dp).background(CyberMuted, RoundedCornerShape(8.dp)),
                     contentAlignment = Alignment.Center
@@ -291,7 +291,7 @@ private fun ReorderableCardGrid(
     val itemCount = getItems().size
     val rowCount = (itemCount + 1) / 2
     // 避免 maxOf(本构建链曾因 kotlin.math.maxOf 解析失败 CI #568): 手写非负守卫
-    val rowSpacing = if (rowCount > 1) (rowCount - 1) * 16 else 0
+    val rowSpacing = if (rowCount > 1) (rowCount - 1) * 18 else 0
     val gridMaxHeight = (rowCount * 400 + rowSpacing).dp
 
     if (enabled) {
@@ -306,8 +306,8 @@ private fun ReorderableCardGrid(
             state = gridState,
             userScrollEnabled = false,
             modifier = Modifier.fillMaxWidth().heightIn(max = gridMaxHeight),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             items(getItems(), key = keyOf) { item ->
                 ReorderableItem(reorderState, key = keyOf(item)) {
@@ -328,8 +328,8 @@ private fun ReorderableCardGrid(
             state = rememberLazyGridState(),
             userScrollEnabled = false,
             modifier = Modifier.fillMaxWidth().heightIn(max = gridMaxHeight),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             items(getItems(), key = keyOf) { item -> itemContent(item, Modifier) }
         }

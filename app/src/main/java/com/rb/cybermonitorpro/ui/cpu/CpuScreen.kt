@@ -89,7 +89,7 @@ fun CpuScreen(
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         InfoCard(
             modifier = Modifier.staggeredSwipe(cardIdx++),
@@ -238,7 +238,7 @@ fun CpuScreen(
         } else {
             // Per core view
             coreGroups.values.sortedByDescending { it.first().maxFreqKHz }.forEachIndexed { groupIdx, group ->
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
                     Column(Modifier.fillMaxWidth().padding(16.dp)) {
@@ -258,7 +258,7 @@ fun CpuScreen(
 
 @Composable
 private fun ClusterCard(name: String, subtitle: String, frequency: String, freqData: List<Float>, modifier: Modifier = Modifier) {
-    Card(modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+    Card(modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {

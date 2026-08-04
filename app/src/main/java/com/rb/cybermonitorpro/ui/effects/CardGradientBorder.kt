@@ -22,16 +22,20 @@ import com.rb.cybermonitorpro.ui.theme.TitaniumGold
  * - 靠外 1/2：紫 → 蓝对角渐变描边（左上 → 右下），圆角贴合卡片边框；
  * - 靠内 1/2：静态阴影效果色（深暗描边，营造内凹层次）。
  *
- * 强度刻意压低（alpha 0.5），契合淡淡的软件背景光晕，不喧宾夺主。
+ * 强度经调校（外环 alpha 0.65/0.55），契合淡淡的软件背景光晕，不喧宾夺主。
  *
  * @param cornerDp     卡片圆角（与 Card shape 保持一致）
  * @param bandWidth    环带总宽度（内外两半各占 1/2）
  * @param dynamicColor 动态描边色；非空时替代紫→蓝渐变（如电池温度语义变色），null 用默认渐变
+ * @param hdrHighlight 是否在同一次 draw 中合并绘制 HDR 白色细高光（替代独立的 hdrHighlight
+ *                     Modifier，每卡少一层 drawWithContent）。位置与旧实现像素级一致
+ *                     （内层 Box 填满 Card，坐标系重合），z-order 保持旧序：高光在最底层
  */
 fun Modifier.cardGradientBorder(
-    cornerDp: Dp = 12.dp,
-    bandWidth: Dp = 3.dp,
+    cornerDp: Dp = 20.dp,
+    bandWidth: Dp = 4.dp,
     dynamicColor: Color? = null,
+    hdrHighlight: Boolean = false,
 ): Modifier = this.drawWithContent {
     drawContent()
 
@@ -39,14 +43,25 @@ fun Modifier.cardGradientBorder(
     val halfPx = bandPx / 2f
     val cornerPx = cornerDp.toPx()
 
+    // ── HDR 细高亮反光（合并绘制，z-order 最底层，参数与旧 hdrHighlight 一致：0.22α / 1.0dp） ──
+    if (hdrHighlight) {
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.22f),
+            topLeft = Offset(0.5f, 0.5f),
+            size = size.copy(width = size.width - 1f, height = size.height - 1f),
+            cornerRadius = CornerRadius(cornerPx),
+            style = Stroke(width = 1.dp.toPx())
+        )
+    }
+
     // ── 靠外 1/2：描边光晕（默认紫→蓝对角渐变；dynamicColor 非空时为纯色） ──
     val glowBrush: Brush = if (dynamicColor != null) {
         SolidColor(dynamicColor)
     } else {
         Brush.linearGradient(
             colors = listOf(
-                NeonPurple.copy(alpha = 0.5f),
-                NeonSteelBlue.copy(alpha = 0.5f)
+                NeonPurple.copy(alpha = 0.65f),
+                NeonSteelBlue.copy(alpha = 0.55f)
             ),
             start = Offset.Zero,                    // 左上
             end = Offset(size.width, size.height)   // 右下
@@ -75,7 +90,7 @@ fun Modifier.cardGradientBorder(
 }
 
 // 内半环静态阴影色：近黑的深紫黑，低透明度，只做层次不做存在
-private val BorderInnerShadow = Color(0xFF06030E).copy(alpha = 0.6f)
+private val BorderInnerShadow = Color(0xFF06030E).copy(alpha = 0.75f)
 
 /**
  * 电池温度 → 描边语义色（仅限概览页与电池页的电池温度卡片使用）：

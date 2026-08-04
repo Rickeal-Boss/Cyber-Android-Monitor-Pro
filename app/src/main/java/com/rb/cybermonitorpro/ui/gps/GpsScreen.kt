@@ -46,7 +46,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         var cardIdx = 0
         // ── 状态卡片 ──
@@ -145,7 +145,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
 private fun SatelliteCard(sat: GpsSatelliteInfo, modifier: Modifier = Modifier) {
     Card(
         modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {

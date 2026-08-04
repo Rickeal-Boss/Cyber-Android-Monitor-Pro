@@ -58,7 +58,6 @@ import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.components.CardGradient
-import com.rb.cybermonitorpro.ui.components.hdrHighlight
 import com.rb.cybermonitorpro.ui.effects.batteryTempBorderColor
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.revealLight
@@ -459,7 +458,7 @@ fun BatteryScreen(
     // 内层 LazyColumn 用 userScrollEnabled=false + heightIn(max) 上限，规避 infinity-max-height 崩溃。
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         // ── 状态概览 (固定头部, 不参与重排) ──
         InfoCard(
@@ -471,14 +470,14 @@ fun BatteryScreen(
 
         // ── 可重排卡片区 (内层 LazyColumn, items 列表 == getVisibleItems()，索引与 onMove 对齐) ──
         val itemCount = visibleCards.size
-        // 安全上限：按 item 数估算 (每卡 400dp 上限 + 12dp 间距)，仅作为有限高度约束防崩溃，
+        // 安全上限：按 item 数估算 (每卡 400dp 上限 + 18dp 间距)，仅作为有限高度约束防崩溃，
         // 实际高度由内容决定 (heightIn 为 max 约束，不会拉伸/留白)
-        val listMaxHeight = (itemCount * 400 + (itemCount - 1) * 12).dp
+        val listMaxHeight = (itemCount * 400 + (itemCount - 1) * 18).dp
         LazyColumn(
             state = listState,
             userScrollEnabled = false,
             modifier = Modifier.fillMaxWidth().heightIn(max = listMaxHeight),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             items(visibleCards, key = { it }, contentType = { it }) { id ->
                 // 按可视化顺序（含拖拽重排后的顺序）取交错索引
@@ -578,18 +577,17 @@ private fun DualCellToggleCard(
         modifier = Modifier.fillMaxWidth()
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight)
-            .cardGradientBorder(12.dp),
-        shape = RoundedCornerShape(12.dp),
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlowLight)
+            .cardGradientBorder(20.dp, hdrHighlight = true),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(20.dp))
                 .background(CardGradient)
-                .hdrHighlight(12.dp)
         ) {
             Row(
                 Modifier.fillMaxWidth().padding(14.dp),
@@ -639,14 +637,14 @@ private fun BatteryCurrentMultiplierCard(
     Card(
         modifier = Modifier.fillMaxWidth()
             .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight)
-            .cardGradientBorder(12.dp),
-        shape = RoundedCornerShape(12.dp),
+            .shadow(elevation = 10.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlowLight)
+            .cardGradientBorder(20.dp, hdrHighlight = true),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CardGradient).hdrHighlight(12.dp)
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardGradient)
         ) {
             Column(Modifier.fillMaxWidth().padding(14.dp)) {
                 Row(

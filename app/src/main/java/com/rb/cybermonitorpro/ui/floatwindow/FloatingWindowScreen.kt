@@ -120,7 +120,7 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
 
         // 总开关
         Card(
-            Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+            Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
@@ -192,7 +192,7 @@ private fun RefreshIntervalCard() {
 
     Card(
         Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {

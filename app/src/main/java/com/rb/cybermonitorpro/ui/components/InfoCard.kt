@@ -10,12 +10,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -46,16 +43,16 @@ fun InfoCard(
         modifier = modifier.fillMaxWidth()
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 12.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlow)
-            .cardGradientBorder(12.dp),
-        shape = RoundedCornerShape(12.dp),
+            .shadow(elevation = 14.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlowStrong)
+            .cardGradientBorder(20.dp, hdrHighlight = true),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CardGradient).hdrHighlight(12.dp)) {
-            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardGradient)) {
+            Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(
-                    Modifier.size(40.dp).clip(RoundedCornerShape(10.dp))
+                    Modifier.size(40.dp).clip(RoundedCornerShape(14.dp))
                         .background(CyberMuted),
                     contentAlignment = Alignment.Center
                 ) {
@@ -84,26 +81,26 @@ fun MetricCard(
             .then(if (chart === NoChart) Modifier.fillMaxWidth() else Modifier)
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(12.dp), ambientColor = PurpleGlowLight)
-            .cardGradientBorder(12.dp, dynamicColor = borderColor),
-        shape = RoundedCornerShape(12.dp),
+            .shadow(elevation = 12.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlow)
+            .cardGradientBorder(20.dp, dynamicColor = borderColor, hdrHighlight = true),
+        shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(CardGradient).hdrHighlight(12.dp)) {
-            Column(Modifier.padding(14.dp)) {
+        Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardGradient)) {
+            Column(Modifier.padding(18.dp)) {
                 Text(title, fontSize = 11.sp, color = TextSecondary, letterSpacing = 0.5.sp)
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(6.dp))
                 Text(
                     value, fontSize = 22.sp, fontWeight = FontWeight.Bold,
                     color = valueColor, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp,
                     maxLines = 4, overflow = TextOverflow.Ellipsis, softWrap = true
                 )
                 if (showProgress && progress >= 0f) {
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
                     LinearProgressIndicator(
                         progress = { progress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(2.5.dp)),
                         color = valueColor, trackColor = CyberMuted
                     )
                 }
@@ -120,16 +117,5 @@ fun MetricCard(
     }
 }
 
-// ── HDR 细高亮反光边框 (共享: 所有卡片统一使用) ──
-internal fun Modifier.hdrHighlight(cornerDp: androidx.compose.ui.unit.Dp): Modifier =
-    this.drawWithContent {
-        drawContent()
-        val cornerPx = cornerDp.toPx()
-        drawRoundRect(
-            color = Color.White.copy(alpha = 0.18f),
-            topLeft = androidx.compose.ui.geometry.Offset(0.5f, 0.5f),
-            size = size.copy(width = size.width - 1f, height = size.height - 1f),
-            cornerRadius = CornerRadius(cornerPx),
-            style = Stroke(width = 0.8f.dp.toPx())
-        )
-    }
+// ── HDR 细高亮反光已合并进 cardGradientBorder(hdrHighlight = true) ──
+//   每卡少一层 drawWithContent; 绘制位置/z-order 与旧实现像素级一致
