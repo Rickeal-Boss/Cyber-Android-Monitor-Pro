@@ -1,46 +1,51 @@
 package com.rb.cybermonitorpro.ui.effects
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.pager.PagerState
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.abs
 
 /**
- * 页面滑动交错变换 v3 — 多卡片左右平移甩尾(tail-whip) + 逐卡片独立弹簧
+ * 页面滑动交错变换 v4 — 父层单弹簧 + 卡片相位映射
  *
- * 相比 v2 的关键变化 (丝滑度):
- *   v2: StaggeredPageProvider 算一次 spring → 解包成 Float 提供给子卡片
- *       → 整个页面每帧全量重组 (DeviceScreen 27 卡片的所有 Text/Row 每帧重算) → 卡顿
- *   v3: 仅提供 pagerState + page 给子卡片, 每张卡片在 staggeredSwipe 内部跑自己的
- *       animateFloatAsState → 动画只更新各自的 graphicsLayer 绘制层, 不触发卡片
- *       content 重组 → 滑动丝滑
+ * 演进历史:
+ *   v2: Provider 算一次 spring → 解包成 Float 下发 → 整页每帧全量重组 → 卡顿
+ *   v3: 每张卡片各自跑 animateFloatAsState → 不重组但 DeviceScreen 27 卡 = 27 个并发弹簧
+ *   v4: Provider 只跑 1 个 Animatable, 经 CompositionLocal<State<Float>> 下传;
+ *       卡片只在 graphicsLayer 里读值做 cascade 相位映射, 绘制层失效, 不重组。
+ *
+ * 视觉等价性:
+ *   v3 所有卡片的 smoothed 目标值与弹簧参数本就相同 (rawOffset 一致),
+ *   合并为 1 份共享后公式仍是 eff = smoothed * cascade(cardIndex),
+ *   动画曲线 / 鞭梢幅度 / 缩放 / 透明度逐帧一致。
  *
  * 核心机制:
  *   rawOffset = page - (currentPage + currentPageOffsetFraction)  // 每页自身居中偏移
- *   eff = spring(rawOffset) * cascade(cardIndex)                  // 逐卡片弹簧 + 级联
+ *   eff = spring(rawOffset) * cascade(cardIndex)                  // 单弹簧 + 级联
  *   translationX = width * eff * HORIZONTAL_PARALLAX              // ★ 水平甩尾主导
  *   cascade = (1 + cardIndex*STAGGER_STEP).coerceAtMost(MAX_CASCADE)  // 越靠下摆幅越大=鞭梢
  */
 
-/** 页面 PagerState — 由 StaggeredPageProvider 提供 */
-val LocalPagerState: ProvidableCompositionLocal<PagerState> =
-    compositionLocalOf { error("LocalPagerState not provided — wrap content with StaggeredPageProvider") }
-
-/** 当前页索引 — 由 StaggeredPageProvider 提供, 用于计算每页自身偏移 */
-val LocalPageIndex: ProvidableCompositionLocal<Int> =
-    compositionLocalOf { 0 }
+/** 页面级平滑偏移 State — 由 StaggeredPageProvider 提供, 卡片在 graphicsLayer 中读取 */
+val LocalStaggeredPageProgress: ProvidableCompositionLocal<State<Float>> =
+    compositionLocalOf { error("LocalStaggeredPageProgress not provided — wrap content with StaggeredPageProvider") }
 
 // ═══════════════════════════════════════════════════════════════
-//  可调参数 — 甩尾(tail-whip)动效: 多卡片左右平移 + 横向级联弯曲
+//  可调参数 — 与 v3 完全一致, 保证视觉无变化
 // ═══════════════════════════════════════════════════════════════
 
 /** 级联步进 — 每递增一张卡片增加的交错系数 (越大=越靠下的卡片摆幅越大=鞭梢) */
@@ -72,37 +77,24 @@ private const val SPRING_STIFFNESS = 520f
 /**
  * 卡片级联滑动 Modifier — 甩尾(tail-whip)风格
  *
- * 每张卡片独立运行弹簧动画:
+ * 只读取父层共享的弹簧状态做相位映射, 自身不运行任何动画:
  *   - 顶部卡片领动, 越靠下的卡片 [cascade] 越大 → 左右平移摆幅越大(鞭梢)
- *   - 多张卡片以不同水平位移率跟随 → 页面横向弯曲成"甩尾"形状
  *   - 动画仅更新 graphicsLayer 绘制层, 不重组卡片 content → 丝滑
  */
 @Stable
 fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
-    val pagerState = LocalPagerState.current
-    val page = LocalPageIndex.current
+    val progress = LocalStaggeredPageProgress.current
 
-    // 本页自身相对于屏幕中心的原始偏移 (pager 的 snapshot state, 自动观察)
-    val rawOffset = page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)
-
-    // ★ 逐卡片独立弹簧 — 只驱动本卡片的 graphicsLayer, 不触发 content 重组
-    val smoothed by animateFloatAsState(
-        targetValue = rawOffset,
-        animationSpec = spring(
-            dampingRatio = SPRING_DAMPING,
-            stiffness = SPRING_STIFFNESS
-        ),
-        label = "cardStagger"
-    )
-
-    // 级联因子: 序号越大(越靠下)摆幅越大 → 鞭梢效应 (tip of the whip)
-    val stagger = cardIndex.toFloat() * STAGGER_STEP
-    val cascade = (1f + stagger).coerceAtMost(MAX_CASCADE)
+    // 级联因子只与 cardIndex 有关: 序号越大(越靠下)摆幅越大 → 鞭梢效应 (tip of the whip)
+    val cascade = remember(cardIndex) {
+        (1f + cardIndex * STAGGER_STEP).coerceAtMost(MAX_CASCADE)
+    }
 
     this.graphicsLayer {
-        // ★ 不做 early return — smoothed=0 时所有变换自动为 identity, 无突变/跳变
-
-        val eff = smoothed * cascade // 每张卡片的实际有效偏移
+        // 在绘制阶段读状态 — 只失效 draw 层, 不触发组合
+        // ★ 不做 early return — smoothed=0 时所有变换自动为 identity, 无突变/跳变;
+        //   early return 会跳过赋值导致残留旧值, 回中时冻结在微小偏移上
+        val eff = progress.value * cascade // 每张卡片的实际有效偏移
 
         // ── ★ 主运动: 水平甩尾 (多卡片左右平移, 越靠下摆幅越大 → 横向鞭尾弯曲) ──
         translationX = size.width * eff * HORIZONTAL_PARALLAX
@@ -125,8 +117,10 @@ fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
 /**
  * 页面级联变换 Provider — 在 [HorizontalPager] 内容 lambda 内按页调用
  *
- * 仅提供 [pagerState] 与 [page] 给子卡片, 由每张卡片的 [staggeredSwipe]
- * 自行计算偏移并运行独立弹簧 (避免整页重组, 保证丝滑)。
+ * 每页只运行 1 个 Animatable 弹簧:
+ *   - snapshotFlow 在协程里收集 pager offset, Provider 组合层不订阅 → 滑动期间零重组
+ *   - 初始值用 snapshot{} 非观察读取当前偏移, 与 v3 animateFloatAsState 初始行为一致, 无跳变
+ *   - 卡片经 [LocalStaggeredPageProgress] 读取共享 State, 各自做 cascade 相位映射
  */
 @Composable
 fun StaggeredPageProvider(
@@ -134,9 +128,28 @@ fun StaggeredPageProvider(
     page: Int,
     content: @Composable () -> Unit
 ) {
+    // ★ snapshot{} 隔离读取 — 组合期不订阅 pagerState, 否则 Provider 会随滑动每帧重组
+    val animatable = remember(page) {
+        Animatable(snapshot { page - (pagerState.currentPage + pagerState.currentPageOffsetFraction) })
+    }
+
+    LaunchedEffect(pagerState, page) {
+        // 协程内订阅 pager offset, 每次目标变化重启弹簧 (与 animateFloatAsState 重定向语义一致)
+        snapshotFlow {
+            page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)
+        }.collectLatest { target ->
+            animatable.animateTo(
+                targetValue = target,
+                animationSpec = spring(
+                    dampingRatio = SPRING_DAMPING,
+                    stiffness = SPRING_STIFFNESS
+                )
+            )
+        }
+    }
+
     CompositionLocalProvider(
-        LocalPagerState provides pagerState,
-        LocalPageIndex provides page
+        LocalStaggeredPageProgress provides animatable.asState()
     ) {
         content()
     }
