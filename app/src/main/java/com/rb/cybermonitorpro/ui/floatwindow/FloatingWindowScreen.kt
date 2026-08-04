@@ -148,6 +148,7 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
                             ctx.stopService(Intent(ctx, FloatingWindowService::class.java))
                         }
                     },
+                )
             }
         }
 

@@ -388,6 +388,7 @@ private fun HapticSettingsCard() {
                         HapticUtils.refreshSettings(settings)
                         if (v) HapticUtils.standardTap(ctx)
                     },
+                )
             }
 
             if (enabled) {

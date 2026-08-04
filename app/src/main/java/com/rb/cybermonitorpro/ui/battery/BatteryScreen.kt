@@ -606,7 +606,8 @@ private fun DualCellToggleCard(
                 }
                 CyberSwitch(
                     checked = checked,
-                    onCheckedChange = onCheckedChange,
+                    onCheckedChange = onCheckedChange
+                )
             }
         }
     }
