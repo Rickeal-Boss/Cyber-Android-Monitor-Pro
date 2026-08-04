@@ -3,6 +3,7 @@ package com.rb.cybermonitorpro.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
@@ -96,6 +97,7 @@ fun CyberSwitch(
     )
 
     val interaction = remember { MutableInteractionSource() }
+    val rippleIndication = LocalIndication.current   // M3 默认 ripple，按压有反馈
 
     Box(
         modifier = modifier
@@ -109,8 +111,8 @@ fun CyberSwitch(
                     HapticUtils.lightTap(ctx)
                 },
                 enabled = enabled,
-                interactionSource = interaction
-                // indication 省略 → LocalIndication 默认 ripple，按压有反馈
+                interactionSource = interaction,
+                indication = rippleIndication
             ),
         contentAlignment = Alignment.CenterStart
     ) {
