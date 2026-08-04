@@ -25,8 +25,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.TextButton
@@ -58,6 +56,7 @@ import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.components.CardGradient
+import com.rb.cybermonitorpro.ui.components.CyberSwitch
 import com.rb.cybermonitorpro.ui.effects.batteryTempBorderColor
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.revealLight
@@ -605,16 +604,9 @@ private fun DualCellToggleCard(
                         )
                     }
                 }
-                Switch(
+                CyberSwitch(
                     checked = checked,
                     onCheckedChange = onCheckedChange,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = TextPrimary,
-                        checkedTrackColor = NeonPurpleBright,
-                        uncheckedThumbColor = NeonSteelBlue,
-                        uncheckedTrackColor = NeonSteelBlue.copy(alpha = 0.2f),
-                    )
-                )
             }
         }
     }

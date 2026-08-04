@@ -21,8 +21,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -42,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.LocaleManager
+import com.rb.cybermonitorpro.ui.components.CyberSwitch
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
@@ -381,7 +380,7 @@ private fun HapticSettingsCard() {
                     Text(stringResource(R.string.settings_haptic_switch), fontSize = 14.sp, color = TextPrimary)
                     Text(if (enabled) stringResource(R.string.settings_haptic_on) else stringResource(R.string.settings_haptic_off), fontSize = 11.sp, color = TextSecondary)
                 }
-                Switch(
+                CyberSwitch(
                     checked = enabled,
                     onCheckedChange = { v ->
                         enabled = v
@@ -389,13 +388,6 @@ private fun HapticSettingsCard() {
                         HapticUtils.refreshSettings(settings)
                         if (v) HapticUtils.standardTap(ctx)
                     },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = TextPrimary,
-                        checkedTrackColor = NeonPurpleBright,
-                        uncheckedThumbColor = NeonSteelBlue,
-                        uncheckedTrackColor = NeonSteelBlue.copy(alpha = 0.2f),
-                    )
-                )
             }
 
             if (enabled) {

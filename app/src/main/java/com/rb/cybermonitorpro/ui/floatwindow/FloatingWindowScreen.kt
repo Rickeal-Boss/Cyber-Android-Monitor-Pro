@@ -28,8 +28,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
+import com.rb.cybermonitorpro.ui.components.CyberSwitch
 import com.rb.cybermonitorpro.service.FloatingWindowConfig
 import com.rb.cybermonitorpro.service.FloatingWindowService
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
@@ -129,7 +128,7 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
                 Text(stringResource(R.string.float_enable), fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f))
-                Switch(
+                CyberSwitch(
                     checked = enabled,
                     onCheckedChange = { v ->
                         if (v) {
@@ -149,8 +148,6 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
                             ctx.stopService(Intent(ctx, FloatingWindowService::class.java))
                         }
                     },
-                    colors = SwitchDefaults.colors(checkedTrackColor = NeonPurple)
-                )
             }
         }
 
