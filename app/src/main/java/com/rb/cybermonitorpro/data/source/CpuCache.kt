@@ -54,6 +54,16 @@ object CpuCache {
 
     // ═══════════════ 预缓存数据库 ═══════════════
 
+    // lookup 策略4 别名表：提升为常量，避免每次调用重建 map
+    //   Qualcomm 芯片同一平台可能有多个 codename（如 SM8635 → "sun" 或 "pineapple"）
+    //   OPPO/Xiaomi 等 OEM 可能返回非标准 codename
+    private val CODENAME_ALIASES = mapOf(
+        "sun" to "sm8635"   // Snapdragon 8s Gen 3
+    )
+
+    // 天玑家族兜底模式：提升为常量，避免每次 lookup 重新编译正则
+    private val DIMENSITY_PATTERN = Regex("mt(67|68|69)\\d{2}")
+
     val KNOWN_CHIPS: Map<String, KnownChip> = mapOf(
 
         // ═══ Snapdragon 865 (SM8250) — kona ═══
@@ -518,13 +528,8 @@ object CpuCache {
             }?.let { return it }
         }
 
-        // ★ 策略4: 已知 codename 别名映射
-        //   Qualcomm 芯片同一平台可能有多个 codename（如 SM8635 → "sun" 或 "pineapple"）
-        //   OPPO/Xiaomi 等 OEM 可能返回非标准 codename
-        val codenameAliases = mapOf(
-            "sun" to "sm8635"   // Snapdragon 8s Gen 3 
-        )
-        codenameAliases[raw]?.let { aliasKey ->
+        // ★ 策略4: 已知 codename 别名映射（常量表见文件顶部 CODENAME_ALIASES）
+        CODENAME_ALIASES[raw]?.let { aliasKey ->
             KNOWN_CHIPS[aliasKey]?.let { return it }
         }
 
@@ -533,8 +538,7 @@ object CpuCache {
         //   此处仅兜底未逐型号录入的中低端天玑（如 mt6768/mt6833/mt6873/mt6885...），
         //   保证任意 MediaTek 天玑平台都能被识别为 MediaTek 天玑，而非"识别覆没"。
         //   注意：高通/三星/麒麟等既有匹配逻辑完全不受影响，仅新增此兜底分支。
-        val dimensityPattern = Regex("mt(67|68|69)\\d{2}")
-        dimensityPattern.find(raw)?.let { match ->
+        DIMENSITY_PATTERN.find(raw)?.let { match ->
             val num = match.value.removePrefix("mt")
             return KnownChip(
                 platformId = raw,
