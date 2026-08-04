@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
+import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.theme.*
 
@@ -44,7 +45,8 @@ fun InfoCard(
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 14.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlowStrong)
-            .cardGradientBorder(20.dp, hdrHighlight = true),
+            .cardGradientBorder(20.dp, hdrHighlight = true)
+            .cardRipple(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -82,7 +84,8 @@ fun MetricCard(
 
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 12.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlow)
-            .cardGradientBorder(20.dp, dynamicColor = borderColor, hdrHighlight = true),
+            .cardGradientBorder(20.dp, dynamicColor = borderColor, hdrHighlight = true)
+            .cardRipple(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

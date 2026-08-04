@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
+import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.CyberCardStart
@@ -321,7 +322,7 @@ private val SectionGradient = Brush.linearGradient(listOf(CyberCardStart, CyberC
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(20.dp, hdrHighlight = true), shape = RoundedCornerShape(20.dp),
+        Modifier.fillMaxWidth().cardGradientBorder(20.dp, hdrHighlight = true).cardRipple(), shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {

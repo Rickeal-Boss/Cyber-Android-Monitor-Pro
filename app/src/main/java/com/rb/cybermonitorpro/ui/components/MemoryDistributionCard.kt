@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.FormatUtils
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
+import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.theme.*
 
 /**
@@ -73,7 +74,8 @@ fun MemoryDistributionCard(
             .fillMaxWidth()
 
             .shadow(elevation = 12.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlow)
-            .cardGradientBorder(20.dp, hdrHighlight = true),
+            .cardGradientBorder(20.dp, hdrHighlight = true)
+            .cardRipple(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
