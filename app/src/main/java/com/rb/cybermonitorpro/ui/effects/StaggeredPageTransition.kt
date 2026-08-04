@@ -11,7 +11,6 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.snapshot
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
@@ -128,12 +127,14 @@ fun StaggeredPageProvider(
     page: Int,
     content: @Composable () -> Unit
 ) {
-    // ★ snapshot{} 隔离读取 — 组合期不订阅 pagerState, 否则 Provider 会随滑动每帧重组
-    val animatable = remember(page) {
-        Animatable(snapshot { page - (pagerState.currentPage + pagerState.currentPageOffsetFraction) })
-    }
+    // 初始 0f, 首帧后由 LaunchedEffect snapTo 当前偏移 — 组合期不读 pagerState,
+    // 否则 Provider 会随滑动每帧重组 (快照读取 API 在 compose 中不可用, 用协程内读取替代)
+    val animatable = remember(page) { Animatable(0f) }
 
     LaunchedEffect(pagerState, page) {
+        // ★ 先 snapTo 当前偏移: 与 v3 animateFloatAsState 初始行为一致, 首次进入无跳变
+        //   协程内读 pager state 不订阅组合, Provider 组合层零重组
+        animatable.snapTo(page - (pagerState.currentPage + pagerState.currentPageOffsetFraction))
         // 协程内订阅 pager offset, 每次目标变化重启弹簧 (与 animateFloatAsState 重定向语义一致)
         snapshotFlow {
             page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)
