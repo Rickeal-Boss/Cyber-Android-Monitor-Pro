@@ -56,7 +56,7 @@ fun Modifier.cardRipple(
                 val right = size.width - insetPx
                 val bottom = size.height - insetPx
                 if (right > left && bottom > top) {
-                    val clipPath = Path().apply {
+                    val path = Path().apply {
                         addRoundRect(
                             RoundRect(
                                 left = left,
@@ -67,7 +67,7 @@ fun Modifier.cardRipple(
                             )
                         )
                     }
-                    clipPath(clipPath) {
+                    clipPath(path) {
                         drawContent()
                     }
                 } else {
