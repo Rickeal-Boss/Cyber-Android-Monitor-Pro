@@ -19,141 +19,141 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.abs
 
 /**
- * Ò³Ãæ»¬¶¯½»´í±ä»» v5 ¡ª ¸¸²ãµ¥µ¯»É + ¿¨Æ¬ÏàÎ»Ó³Éä + ËÙ¶È½ÓÁ¦
+ * é¡µé¢æ»‘åŠ¨äº¤é”™å˜æ¢ v5 â€” çˆ¶å±‚å•å¼¹ç°§ + å¡ç‰‡ç›¸ä½æ˜ å°„ + é€Ÿåº¦æ¥åŠ›
  *
- * Ñİ½øÀúÊ·:
- *   v2: Provider ËãÒ»´Î spring ¡ú ½â°ü³É Float ÏÂ·¢ ¡ú ÕûÒ³Ã¿Ö¡È«Á¿ÖØ×é ¡ú ¿¨¶Ù
- *   v3: Ã¿ÕÅ¿¨Æ¬¸÷×ÔÅÜ animateFloatAsState ¡ú ²»ÖØ×éµ« DeviceScreen 27 ¿¨ = 27 ¸ö²¢·¢µ¯»É
- *   v4: Provider Ö»ÅÜ 1 ¸ö Animatable, ¾­ CompositionLocal<State<Float>> ÏÂ´«;
- *       ¿¨Æ¬Ö»ÔÚ graphicsLayer Àï¶ÁÖµ×ö cascade ÏàÎ»Ó³Éä, »æÖÆ²ãÊ§Ğ§, ²»ÖØ×é¡£
- *   v5 (2026-08-06): ĞŞ¸´"ËÉÊÖºó¿¨Æ¬ÈÔ³¤Ê±¼äÆ¯ÒÆ"µÄ³ÙÖÍ ¡ª
- *       ¢Ù ËÙ¶È½ÓÁ¦: collectLatest Ã¿Ö¡È¡Ïû animateTo, ¶ø Animatable.endAnimation()
- *          »á velocityVector.reset() °ÑËÙ¶ÈÇåÁã (androidx Animatable.kt), ÓÚÊÇµ¯»É
- *          Ã¿Ö¡¶¼´Ó v=0 ÖØÆô, µÈĞ§Ê±¼ä³£Êı±»À­³¤µ½ ~636ms¡£¸ÄÎªÔÚ animateTo µÄ block
- *          »Øµ÷ÀïÖğÖ¡»º´æµ±Ç°ËÙ¶È, ÏÂÒ»´Î animateTo ÒÔ initialVelocity ´«»Ø ¡ª¡ª ÕâÕıÊÇ
- *          Animatable KDoc Ö¸¶¨µÄ¶¯Á¿Ğø½Ó×ö·¨¡£
- *       ¢Ú Ë«µ¯»ÉÃÅ¿Ø: °´ pagerState.isScrollInProgress Çø·Ö"¸úÊÖÆÚ"Óë"ÊÕÎ²ÆÚ",
- *          ¸úÊÖÆÚ¸ß¸Õ¶ÈÁÙ½ç×èÄáÓ²¸úËæ, ÊÕÎ²ÆÚµÍ¸Õ¶ÈÇ·×èÄá(0.92)×öÇáÎ¢µ¯ĞÔÊÕÁ²¡£
+ * æ¼”è¿›å†å²:
+ *   v2: Provider ç®—ä¸€æ¬¡ spring â†’ è§£åŒ…æˆ Float ä¸‹å‘ â†’ æ•´é¡µæ¯å¸§å…¨é‡é‡ç»„ â†’ å¡é¡¿
+ *   v3: æ¯å¼ å¡ç‰‡å„è‡ªè·‘ animateFloatAsState â†’ ä¸é‡ç»„ä½† DeviceScreen 27 å¡ = 27 ä¸ªå¹¶å‘å¼¹ç°§
+ *   v4: Provider åªè·‘ 1 ä¸ª Animatable, ç» CompositionLocal<State<Float>> ä¸‹ä¼ ;
+ *       å¡ç‰‡åªåœ¨ graphicsLayer é‡Œè¯»å€¼åš cascade ç›¸ä½æ˜ å°„, ç»˜åˆ¶å±‚å¤±æ•ˆ, ä¸é‡ç»„ã€‚
+ *   v5 (2026-08-06): ä¿®å¤"æ¾æ‰‹åå¡ç‰‡ä»é•¿æ—¶é—´æ¼‚ç§»"çš„è¿Ÿæ» â€”
+ *       â‘  é€Ÿåº¦æ¥åŠ›: collectLatest æ¯å¸§å–æ¶ˆ animateTo, è€Œ Animatable.endAnimation()
+ *          ä¼š velocityVector.reset() æŠŠé€Ÿåº¦æ¸…é›¶ (androidx Animatable.kt), äºæ˜¯å¼¹ç°§
+ *          æ¯å¸§éƒ½ä» v=0 é‡å¯, ç­‰æ•ˆæ—¶é—´å¸¸æ•°è¢«æ‹‰é•¿åˆ° ~636msã€‚æ”¹ä¸ºåœ¨ animateTo çš„ block
+ *          å›è°ƒé‡Œé€å¸§ç¼“å­˜å½“å‰é€Ÿåº¦, ä¸‹ä¸€æ¬¡ animateTo ä»¥ initialVelocity ä¼ å› â€”â€” è¿™æ­£æ˜¯
+ *          Animatable KDoc æŒ‡å®šçš„åŠ¨é‡ç»­æ¥åšæ³•ã€‚
+ *       â‘¡ åŒå¼¹ç°§é—¨æ§: æŒ‰ pagerState.isScrollInProgress åŒºåˆ†"è·Ÿæ‰‹æœŸ"ä¸"æ”¶å°¾æœŸ",
+ *          è·Ÿæ‰‹æœŸé«˜åˆšåº¦ä¸´ç•Œé˜»å°¼ç¡¬è·Ÿéš, æ”¶å°¾æœŸä½åˆšåº¦æ¬ é˜»å°¼(0.92)åšè½»å¾®å¼¹æ€§æ”¶æ•›ã€‚
  *
- * ÊÓ¾õµÈ¼ÛĞÔ:
- *   v3 ËùÓĞ¿¨Æ¬µÄ smoothed Ä¿±êÖµÓëµ¯»É²ÎÊı±¾¾ÍÏàÍ¬ (rawOffset Ò»ÖÂ),
- *   ºÏ²¢Îª 1 ·İ¹²Ïíºó¹«Ê½ÈÔÊÇ eff = smoothed * cascade(cardIndex),
- *   ¶¯»­ÇúÏß / ±ŞÉÒ·ù¶È / Ëõ·Å / Í¸Ã÷¶ÈÖğÖ¡Ò»ÖÂ¡£
+ * è§†è§‰ç­‰ä»·æ€§:
+ *   v3 æ‰€æœ‰å¡ç‰‡çš„ smoothed ç›®æ ‡å€¼ä¸å¼¹ç°§å‚æ•°æœ¬å°±ç›¸åŒ (rawOffset ä¸€è‡´),
+ *   åˆå¹¶ä¸º 1 ä»½å…±äº«åå…¬å¼ä»æ˜¯ eff = smoothed * cascade(cardIndex),
+ *   åŠ¨ç”»æ›²çº¿ / é­æ¢¢å¹…åº¦ / ç¼©æ”¾ / é€æ˜åº¦é€å¸§ä¸€è‡´ã€‚
  *
- * ºËĞÄ»úÖÆ:
- *   rawOffset = page - (currentPage + currentPageOffsetFraction)  // Ã¿Ò³×ÔÉí¾ÓÖĞÆ«ÒÆ
- *   eff = spring(rawOffset) * cascade(cardIndex)                  // µ¥µ¯»É + ¼¶Áª
- *   translationX = width * eff * HORIZONTAL_PARALLAX              // ¡ï Ë®Æ½Ë¦Î²Ö÷µ¼
- *   cascade = (1 + cardIndex*STAGGER_STEP).coerceAtMost(MAX_CASCADE)  // Ô½¿¿ÏÂ°Ú·ùÔ½´ó=±ŞÉÒ
+ * æ ¸å¿ƒæœºåˆ¶:
+ *   rawOffset = page - (currentPage + currentPageOffsetFraction)  // æ¯é¡µè‡ªèº«å±…ä¸­åç§»
+ *   eff = spring(rawOffset) * cascade(cardIndex)                  // å•å¼¹ç°§ + çº§è”
+ *   translationX = width * eff * HORIZONTAL_PARALLAX              // â˜… æ°´å¹³ç”©å°¾ä¸»å¯¼
+ *   cascade = (1 + cardIndex*STAGGER_STEP).coerceAtMost(MAX_CASCADE)  // è¶Šé ä¸‹æ‘†å¹…è¶Šå¤§=é­æ¢¢
  */
 
-/** Ò³Ãæ¼¶Æ½»¬Æ«ÒÆ State ¡ª ÓÉ StaggeredPageProvider Ìá¹©, ¿¨Æ¬ÔÚ graphicsLayer ÖĞ¶ÁÈ¡ */
+/** é¡µé¢çº§å¹³æ»‘åç§» State â€” ç”± StaggeredPageProvider æä¾›, å¡ç‰‡åœ¨ graphicsLayer ä¸­è¯»å– */
 val LocalStaggeredPageProgress: ProvidableCompositionLocal<State<Float>> =
-    compositionLocalOf { error("LocalStaggeredPageProgress not provided ¡ª wrap content with StaggeredPageProvider") }
+    compositionLocalOf { error("LocalStaggeredPageProgress not provided â€” wrap content with StaggeredPageProvider") }
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
-//  ¿Éµ÷²ÎÊı ¡ª Óë v3 ÍêÈ«Ò»ÖÂ, ±£Ö¤ÊÓ¾õÎŞ±ä»¯
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+//  å¯è°ƒå‚æ•° â€” ä¸ v3 å®Œå…¨ä¸€è‡´, ä¿è¯è§†è§‰æ— å˜åŒ–
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-/** ¼¶Áª²½½ø ¡ª Ã¿µİÔöÒ»ÕÅ¿¨Æ¬Ôö¼ÓµÄ½»´íÏµÊı (Ô½´ó=Ô½¿¿ÏÂµÄ¿¨Æ¬°Ú·ùÔ½´ó=±ŞÉÒ) */
+/** çº§è”æ­¥è¿› â€” æ¯é€’å¢ä¸€å¼ å¡ç‰‡å¢åŠ çš„äº¤é”™ç³»æ•° (è¶Šå¤§=è¶Šé ä¸‹çš„å¡ç‰‡æ‘†å¹…è¶Šå¤§=é­æ¢¢) */
 private const val STAGGER_STEP = 0.13f
 
-/** cascade ÉÏÏŞ ¡ª ·ÀÖ¹µ×²¿(±ŞÉÒ)¿¨Æ¬Î»ÒÆ¹ı´ó·É³öÆÁÄ» (DeviceScreen 27 ¿¨Ê±ÓÈĞè) */
+/** cascade ä¸Šé™ â€” é˜²æ­¢åº•éƒ¨(é­æ¢¢)å¡ç‰‡ä½ç§»è¿‡å¤§é£å‡ºå±å¹• (DeviceScreen 27 å¡æ—¶å°¤éœ€) */
 private const val MAX_CASCADE = 3.0f
 
-/** ¡ï Ë®Æ½Ë¦Î²Ö÷µ¼Ç¿¶È ¡ª ¿¨Æ¬×óÓÒÆ½ÒÆÎ»ÒÆ±¶ÂÊ (Ïà¶ÔÆÁ¿í), ÕâÊÇ¶¯Ğ§µÄÖ÷ÔË¶¯Öá */
+/** â˜… æ°´å¹³ç”©å°¾ä¸»å¯¼å¼ºåº¦ â€” å¡ç‰‡å·¦å³å¹³ç§»ä½ç§»å€ç‡ (ç›¸å¯¹å±å®½), è¿™æ˜¯åŠ¨æ•ˆçš„ä¸»è¿åŠ¨è½´ */
 private const val HORIZONTAL_PARALLAX = 0.20f
 
-/** ¼«Èõ´¹Ö±ÓàÁ¿ ¡ª ±£³Ö½á¹¹¶Ô³Æ, ¼¸ºõ²»¿É¼û (0=´¿Ë®Æ½Ë¦Î²) */
+/** æå¼±å‚ç›´ä½™é‡ â€” ä¿æŒç»“æ„å¯¹ç§°, å‡ ä¹ä¸å¯è§ (0=çº¯æ°´å¹³ç”©å°¾) */
 private const val VERTICAL_WAVE = 0.0f
 
-/** Ëõ·ÅË¥¼õ»ùÊı ¡ª ¹ı³ÌÖĞ¿¨Æ¬ËõĞ¡·ù¶È (¸¨Öú¾°Éî) */
+/** ç¼©æ”¾è¡°å‡åŸºæ•° â€” è¿‡ç¨‹ä¸­å¡ç‰‡ç¼©å°å¹…åº¦ (è¾…åŠ©æ™¯æ·±) */
 private const val SCALE_DECAY = 0.05f
 
-/** Í¸Ã÷¶ÈË¥¼õ»ùÊı ¡ª ¹ı³ÌÖĞ¿¨Æ¬µ­³ö·ù¶È (¸¨Öú¾°Éî) */
+/** é€æ˜åº¦è¡°å‡åŸºæ•° â€” è¿‡ç¨‹ä¸­å¡ç‰‡æ·¡å‡ºå¹…åº¦ (è¾…åŠ©æ™¯æ·±) */
 private const val ALPHA_DECAY = 0.15f
 
-// ©¤©¤ µ¯»É²ÎÊı v5: °´ isScrollInProgress ·Ö¡¸¸úÊÖÆÚ / ÊÕÎ²ÆÚ¡¹Á½Ì× ©¤©¤
+// â”€â”€ å¼¹ç°§å‚æ•° v5: æŒ‰ isScrollInProgress åˆ†ã€Œè·Ÿæ‰‹æœŸ / æ”¶å°¾æœŸã€ä¸¤å¥— â”€â”€
 //
-// ÎÈÌ¬¸úËæÎó²î(ÁÙ½ç×èÄá¸ú×ÙÔÈËÙÄ¿±ê) = 2v/¦Ø, ¦Ø = ¡Ìstiffness (Compose spring µ¥Î»ÖÊÁ¿)¡£
-// ÒÔ¡¸250ms »®¹ıÒ»Ò³¡¹¼´ v¡Ö4 page/s ¹ÀËã:
-//   k=420  ¡ú ¦Ø=20.5 ¡ú ÖÍºó 0.39 page ¡û v4 ²ÎÊı, ÍÏÄà´øË®µÄÖ÷ÒòÖ®Ò»
-//   k=1000 ¡ú ¦Ø=31.6 ¡ú ÖÍºó 0.25 page ¡û ÈÔ±£Áô±ŞÉÒÊÖ¸Ğ, µ«Ã÷ÏÔÊÕ½ô
-// ÊÕÎ²ÆÚÊÕÁ²Ê±¼ä ¡Ö 3/(¦Æ¦Ø): k=600, ¦Æ=0.92 ¡ú ¦Ø=24.5 ¡ú Ô¼ 133ms ÍêÈ«¾²Ö¹¡£
+// ç¨³æ€è·Ÿéšè¯¯å·®(ä¸´ç•Œé˜»å°¼è·Ÿè¸ªåŒ€é€Ÿç›®æ ‡) = 2v/Ï‰, Ï‰ = âˆšstiffness (Compose spring å•ä½è´¨é‡)ã€‚
+// ä»¥ã€Œ250ms åˆ’è¿‡ä¸€é¡µã€å³ vâ‰ˆ4 page/s ä¼°ç®—:
+//   k=420  â†’ Ï‰=20.5 â†’ æ»å 0.39 page â† v4 å‚æ•°, æ‹–æ³¥å¸¦æ°´çš„ä¸»å› ä¹‹ä¸€
+//   k=1000 â†’ Ï‰=31.6 â†’ æ»å 0.25 page â† ä»ä¿ç•™é­æ¢¢æ‰‹æ„Ÿ, ä½†æ˜æ˜¾æ”¶ç´§
+// æ”¶å°¾æœŸæ”¶æ•›æ—¶é—´ â‰ˆ 3/(Î¶Ï‰): k=600, Î¶=0.92 â†’ Ï‰=24.5 â†’ çº¦ 133ms å®Œå…¨é™æ­¢ã€‚
 
-/** ¸úÊÖÆÚ×èÄá±È ¡ª ÊÖÖ¸/¹ßĞÔ»¬¶¯½øĞĞÖĞ, 1.0 ÁÙ½ç×èÄá, ¾ø²»¹ı³å */
+/** è·Ÿæ‰‹æœŸé˜»å°¼æ¯” â€” æ‰‹æŒ‡/æƒ¯æ€§æ»‘åŠ¨è¿›è¡Œä¸­, 1.0 ä¸´ç•Œé˜»å°¼, ç»ä¸è¿‡å†² */
 private const val SCROLL_DAMPING = 1.0f
 
-/** ¸úÊÖÆÚ¸Õ¶È ¡ª 1000 Ó²¸úËæ (v4 µÄ 420 ÖÍºó ~0.39 Ò³, ÊÇ"³ÙÖÍ"¹Û¸ĞµÄÀ´Ô´) */
+/** è·Ÿæ‰‹æœŸåˆšåº¦ â€” 1000 ç¡¬è·Ÿéš (v4 çš„ 420 æ»å ~0.39 é¡µ, æ˜¯"è¿Ÿæ»"è§‚æ„Ÿçš„æ¥æº) */
 private const val SCROLL_STIFFNESS = 1000f
 
 /**
- * ÊÕÎ²ÆÚ×èÄá±È ¡ª 0.92 ÇáÎ¢Ç·×èÄá, ¹ı³åÁ¿ exp(-pi*z/sqrt(1-z*z)) Ô¼ 0.06%,
- * ÈâÑÛ¼¸ºõ²»¿É¼ûµ«ÊÕÁ²¸ü¿ì; ÇÒ graphicsLayer ²àÒÑÓĞ coerceIn(-1,1) Óë maxDx Ë«ÖØÏŞ·ù¶µµ×¡£
+ * æ”¶å°¾æœŸé˜»å°¼æ¯” â€” 0.92 è½»å¾®æ¬ é˜»å°¼, è¿‡å†²é‡ exp(-pi*z/sqrt(1-z*z)) çº¦ 0.06%,
+ * è‚‰çœ¼å‡ ä¹ä¸å¯è§ä½†æ”¶æ•›æ›´å¿«; ä¸” graphicsLayer ä¾§å·²æœ‰ coerceIn(-1,1) ä¸ maxDx åŒé‡é™å¹…å…œåº•ã€‚
  */
 private const val SETTLE_DAMPING = 0.92f
 
-/** ÊÕÎ²ÆÚ¸Õ¶È ¡ª 600, Ô¼ 133ms ÄÚÊÕÁ²¾²Ö¹ (v4 ÒòËÙ¶È¹éÁãÊµ²âÆ¯ÒÆ´ï ~630ms) */
+/** æ”¶å°¾æœŸåˆšåº¦ â€” 600, çº¦ 133ms å†…æ”¶æ•›é™æ­¢ (v4 å› é€Ÿåº¦å½’é›¶å®æµ‹æ¼‚ç§»è¾¾ ~630ms) */
 private const val SETTLE_STIFFNESS = 600f
 
 /**
- * ¡ï SpringSpec Ìáµ½¶¥²ã¸´ÓÃ ¡ª¡ª »¬¶¯ÆÚÃ¿Ö¡¶¼ÒªĞÂÆğÒ»´Î animateTo,
- *   ÈôÔÚ lambda ÀïÏÖ new spring() Ôò 120fps ÏÂÃ¿Ãë¶à 120 ´Î·ÖÅä¡£
+ * â˜… SpringSpec æåˆ°é¡¶å±‚å¤ç”¨ â€”â€” æ»‘åŠ¨æœŸæ¯å¸§éƒ½è¦æ–°èµ·ä¸€æ¬¡ animateTo,
+ *   è‹¥åœ¨ lambda é‡Œç° new spring() åˆ™ 120fps ä¸‹æ¯ç§’å¤š 120 æ¬¡åˆ†é…ã€‚
  */
 private val SPEC_FOLLOW = spring<Float>(dampingRatio = SCROLL_DAMPING, stiffness = SCROLL_STIFFNESS)
 private val SPEC_SETTLE = spring<Float>(dampingRatio = SETTLE_DAMPING, stiffness = SETTLE_STIFFNESS)
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 /**
- * ¿¨Æ¬¼¶Áª»¬¶¯ Modifier ¡ª Ë¦Î²(tail-whip)·ç¸ñ
+ * å¡ç‰‡çº§è”æ»‘åŠ¨ Modifier â€” ç”©å°¾(tail-whip)é£æ ¼
  *
- * Ö»¶ÁÈ¡¸¸²ã¹²ÏíµÄµ¯»É×´Ì¬×öÏàÎ»Ó³Éä, ×ÔÉí²»ÔËĞĞÈÎºÎ¶¯»­:
- *   - ¶¥²¿¿¨Æ¬Áì¶¯, Ô½¿¿ÏÂµÄ¿¨Æ¬ [cascade] Ô½´ó ¡ú ×óÓÒÆ½ÒÆ°Ú·ùÔ½´ó(±ŞÉÒ)
- *   - ¶¯»­½ö¸üĞÂ graphicsLayer »æÖÆ²ã, ²»ÖØ×é¿¨Æ¬ content ¡ú Ë¿»¬
+ * åªè¯»å–çˆ¶å±‚å…±äº«çš„å¼¹ç°§çŠ¶æ€åšç›¸ä½æ˜ å°„, è‡ªèº«ä¸è¿è¡Œä»»ä½•åŠ¨ç”»:
+ *   - é¡¶éƒ¨å¡ç‰‡é¢†åŠ¨, è¶Šé ä¸‹çš„å¡ç‰‡ [cascade] è¶Šå¤§ â†’ å·¦å³å¹³ç§»æ‘†å¹…è¶Šå¤§(é­æ¢¢)
+ *   - åŠ¨ç”»ä»…æ›´æ–° graphicsLayer ç»˜åˆ¶å±‚, ä¸é‡ç»„å¡ç‰‡ content â†’ ä¸æ»‘
  */
 @Stable
 fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
     val progress = LocalStaggeredPageProgress.current
 
-    // ¼¶ÁªÒò×ÓÖ»Óë cardIndex ÓĞ¹Ø: ĞòºÅÔ½´ó(Ô½¿¿ÏÂ)°Ú·ùÔ½´ó ¡ú ±ŞÉÒĞ§Ó¦ (tip of the whip)
+    // çº§è”å› å­åªä¸ cardIndex æœ‰å…³: åºå·è¶Šå¤§(è¶Šé ä¸‹)æ‘†å¹…è¶Šå¤§ â†’ é­æ¢¢æ•ˆåº” (tip of the whip)
     val cascade = remember(cardIndex) {
         (1f + cardIndex * STAGGER_STEP).coerceAtMost(MAX_CASCADE)
     }
 
     this.graphicsLayer {
-        // ÔÚ»æÖÆ½×¶Î¶Á×´Ì¬ ¡ª Ö»Ê§Ğ§ draw ²ã, ²»´¥·¢×éºÏ
-        // ¡ï ²»×ö early return ¡ª smoothed=0 Ê±ËùÓĞ±ä»»×Ô¶¯Îª identity, ÎŞÍ»±ä/Ìø±ä;
-        //   early return »áÌø¹ı¸³Öµµ¼ÖÂ²ĞÁô¾ÉÖµ, »ØÖĞÊ±¶³½áÔÚÎ¢Ğ¡Æ«ÒÆÉÏ
-        // ¡ï eff ÏÈÏŞ·ùÔÙ³Ë¼¶Áª ¡ª Ô­ rawOffset ±ßÔµ¿É´ï ~2, cascade¡Ü3 ¡ú eff¡Ö6 ·É³öÆÁ; ÏŞµ½ [-1,1] ºó×îÉî¿¨ eff¡Ü3
+        // åœ¨ç»˜åˆ¶é˜¶æ®µè¯»çŠ¶æ€ â€” åªå¤±æ•ˆ draw å±‚, ä¸è§¦å‘ç»„åˆ
+        // â˜… ä¸åš early return â€” smoothed=0 æ—¶æ‰€æœ‰å˜æ¢è‡ªåŠ¨ä¸º identity, æ— çªå˜/è·³å˜;
+        //   early return ä¼šè·³è¿‡èµ‹å€¼å¯¼è‡´æ®‹ç•™æ—§å€¼, å›ä¸­æ—¶å†»ç»“åœ¨å¾®å°åç§»ä¸Š
+        // â˜… eff å…ˆé™å¹…å†ä¹˜çº§è” â€” åŸ rawOffset è¾¹ç¼˜å¯è¾¾ ~2, cascadeâ‰¤3 â†’ effâ‰ˆ6 é£å‡ºå±; é™åˆ° [-1,1] åæœ€æ·±å¡ effâ‰¤3
         val eff = progress.value.coerceIn(-1f, 1f) * cascade
 
-        // ©¤©¤ ¡ï Ö÷ÔË¶¯: Ë®Æ½Ë¦Î² ¡ª clamp µ½°ëÆÁ, ¿¨Æ¬Ê¼ÖÕ"ÔÚÊÖÉÏ" ©¤©¤
+        // â”€â”€ â˜… ä¸»è¿åŠ¨: æ°´å¹³ç”©å°¾ â€” clamp åˆ°åŠå±, å¡ç‰‡å§‹ç»ˆ"åœ¨æ‰‹ä¸Š" â”€â”€
         val maxDx = size.width * 0.5f
         translationX = (size.width * eff * HORIZONTAL_PARALLAX).coerceIn(-maxDx, maxDx)
 
-        // ©¤©¤ ¼«Èõ´¹Ö±ÓàÁ¿ (VERTICAL_WAVE=0, translationY ºã 0, ÎŞĞè clamp) ©¤©¤
+        // â”€â”€ æå¼±å‚ç›´ä½™é‡ (VERTICAL_WAVE=0, translationY æ’ 0, æ— éœ€ clamp) â”€â”€
         translationY = size.height * eff * VERTICAL_WAVE
 
-        // ©¤©¤ Ëõ·Å: ¹ı¶ÉÖĞÇáÎ¢ËõĞ¡ (¾°Éî²ã´Î¸Ğ) ©¤©¤
+        // â”€â”€ ç¼©æ”¾: è¿‡æ¸¡ä¸­è½»å¾®ç¼©å° (æ™¯æ·±å±‚æ¬¡æ„Ÿ) â”€â”€
         val s = (1f - abs(eff) * SCALE_DECAY).coerceIn(0.82f, 1f)
         scaleX = s
         scaleY = s
 
-        // ©¤©¤ Í¸Ã÷¶È: ¹ı¶ÉÖĞÇáÎ¢µ­³ö ©¤©¤
+        // â”€â”€ é€æ˜åº¦: è¿‡æ¸¡ä¸­è½»å¾®æ·¡å‡º â”€â”€
         alpha = (1f - abs(eff) * ALPHA_DECAY).coerceIn(0f, 1f)
     }
 }
 
-// ¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T¨T
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 /**
- * Ò³Ãæ¼¶Áª±ä»» Provider ¡ª ÔÚ [HorizontalPager] ÄÚÈİ lambda ÄÚ°´Ò³µ÷ÓÃ
+ * é¡µé¢çº§è”å˜æ¢ Provider â€” åœ¨ [HorizontalPager] å†…å®¹ lambda å†…æŒ‰é¡µè°ƒç”¨
  *
- * Ã¿Ò³Ö»ÔËĞĞ 1 ¸ö Animatable µ¯»É:
- *   - snapshotFlow ÔÚĞ­³ÌÀïÊÕ¼¯ pager offset, Provider ×éºÏ²ã²»¶©ÔÄ ¡ú »¬¶¯ÆÚ¼äÁãÖØ×é
- *   - ³õÊ¼ÖµÓÃ snapshot{} ·Ç¹Û²ì¶ÁÈ¡µ±Ç°Æ«ÒÆ, Óë v3 animateFloatAsState ³õÊ¼ĞĞÎªÒ»ÖÂ, ÎŞÌø±ä
- *   - ¿¨Æ¬¾­ [LocalStaggeredPageProgress] ¶ÁÈ¡¹²Ïí State, ¸÷×Ô×ö cascade ÏàÎ»Ó³Éä
+ * æ¯é¡µåªè¿è¡Œ 1 ä¸ª Animatable å¼¹ç°§:
+ *   - snapshotFlow åœ¨åç¨‹é‡Œæ”¶é›† pager offset, Provider ç»„åˆå±‚ä¸è®¢é˜… â†’ æ»‘åŠ¨æœŸé—´é›¶é‡ç»„
+ *   - åˆå§‹å€¼ç”¨ snapshot{} éè§‚å¯Ÿè¯»å–å½“å‰åç§», ä¸ v3 animateFloatAsState åˆå§‹è¡Œä¸ºä¸€è‡´, æ— è·³å˜
+ *   - å¡ç‰‡ç» [LocalStaggeredPageProgress] è¯»å–å…±äº« State, å„è‡ªåš cascade ç›¸ä½æ˜ å°„
  */
 @Composable
 fun StaggeredPageProvider(
@@ -161,27 +161,27 @@ fun StaggeredPageProvider(
     page: Int,
     content: @Composable () -> Unit
 ) {
-    // ³õÊ¼ 0f, Ê×Ö¡ºóÓÉ LaunchedEffect snapTo µ±Ç°Æ«ÒÆ ¡ª ×éºÏÆÚ²»¶Á pagerState,
-    // ·ñÔò Provider »áËæ»¬¶¯Ã¿Ö¡ÖØ×é (¿ìÕÕ¶ÁÈ¡ API ÔÚ compose ÖĞ²»¿ÉÓÃ, ÓÃĞ­³ÌÄÚ¶ÁÈ¡Ìæ´ú)
+    // åˆå§‹ 0f, é¦–å¸§åç”± LaunchedEffect snapTo å½“å‰åç§» â€” ç»„åˆæœŸä¸è¯» pagerState,
+    // å¦åˆ™ Provider ä¼šéšæ»‘åŠ¨æ¯å¸§é‡ç»„ (å¿«ç…§è¯»å– API åœ¨ compose ä¸­ä¸å¯ç”¨, ç”¨åç¨‹å†…è¯»å–æ›¿ä»£)
     val animatable = remember(page) { Animatable(0f) }
 
     LaunchedEffect(pagerState, page) {
-        // ¡ï ÏÈ snapTo µ±Ç°Æ«ÒÆ: Óë v3 animateFloatAsState ³õÊ¼ĞĞÎªÒ»ÖÂ, Ê×´Î½øÈëÎŞÌø±ä
-        //   Ğ­³ÌÄÚ¶Á pager state ²»¶©ÔÄ×éºÏ, Provider ×éºÏ²ãÁãÖØ×é
+        // â˜… å…ˆ snapTo å½“å‰åç§»: ä¸ v3 animateFloatAsState åˆå§‹è¡Œä¸ºä¸€è‡´, é¦–æ¬¡è¿›å…¥æ— è·³å˜
+        //   åç¨‹å†…è¯» pager state ä¸è®¢é˜…ç»„åˆ, Provider ç»„åˆå±‚é›¶é‡ç»„
         animatable.snapTo(page - (pagerState.currentPage + pagerState.currentPageOffsetFraction))
 
-        // ¡ï v5 ËÙ¶È½ÓÁ¦»º´æ (2026-08-06)
-        //   collectLatest Ã¿À´Ò»¸öĞÂÄ¿±ê¾Í cancel ÉÏÒ»¸ö animateTo; Animatable ÔÚ
-        //   CancellationException ·ÖÖ§Í¬Ñù»á×ß endAnimation() ¡ú velocityVector.reset(),
-        //   ËùÒÔÏÂÒ»´Î animateTo µÄÄ¬ÈÏ initialVelocity(=velocity) ºãÎª 0 ¡ª¡ª µ¯»É±»·´¸´
-        //   "ÆşËÀÔÚÆğ²½½×¶Î", Õâ²ÅÊÇËÉÊÖºó³¤Ê±¼äÆ¯ÒÆµÄÕæÕıÀ´Ô´¡£
-        //   ×¢: ²»ÄÜ¸ÄÓÃ collect Ë³ĞòÏû·ÑÀ´"±£ÁôËÙ¶È" ¡ª¡ª collect »áµÈ animateTo ÅÜÍê²Å´¦Àí
-        //   ÏÂÒ»¸ö emission, ÍÏ×§ÆÚ¼äÄ¿±êÃ¿ 8ms ±äÒ»´Î, »áÍË»¯³ÉÌ¨½×Ê½Ìø¶¯, ±ÈÏÖ×´¸üÔã¡£
-        //   ÕıÈ·×ö·¨(Animatable KDoc): ÊÖ¶¯°ÑÉÏÒ»¶ÎµÄÄ©ËÙ¶È×÷Îª initialVelocity ´«»Ø¡£
+        // â˜… v5 é€Ÿåº¦æ¥åŠ›ç¼“å­˜ (2026-08-06)
+        //   collectLatest æ¯æ¥ä¸€ä¸ªæ–°ç›®æ ‡å°± cancel ä¸Šä¸€ä¸ª animateTo; Animatable åœ¨
+        //   CancellationException åˆ†æ”¯åŒæ ·ä¼šèµ° endAnimation() â†’ velocityVector.reset(),
+        //   æ‰€ä»¥ä¸‹ä¸€æ¬¡ animateTo çš„é»˜è®¤ initialVelocity(=velocity) æ’ä¸º 0 â€”â€” å¼¹ç°§è¢«åå¤
+        //   "ææ­»åœ¨èµ·æ­¥é˜¶æ®µ", è¿™æ‰æ˜¯æ¾æ‰‹åé•¿æ—¶é—´æ¼‚ç§»çš„çœŸæ­£æ¥æºã€‚
+        //   æ³¨: ä¸èƒ½æ”¹ç”¨ collect é¡ºåºæ¶ˆè´¹æ¥"ä¿ç•™é€Ÿåº¦" â€”â€” collect ä¼šç­‰ animateTo è·‘å®Œæ‰å¤„ç†
+        //   ä¸‹ä¸€ä¸ª emission, æ‹–æ‹½æœŸé—´ç›®æ ‡æ¯ 8ms å˜ä¸€æ¬¡, ä¼šé€€åŒ–æˆå°é˜¶å¼è·³åŠ¨, æ¯”ç°çŠ¶æ›´ç³Ÿã€‚
+        //   æ­£ç¡®åšæ³•(Animatable KDoc): æ‰‹åŠ¨æŠŠä¸Šä¸€æ®µçš„æœ«é€Ÿåº¦ä½œä¸º initialVelocity ä¼ å›ã€‚
         var carriedVelocity = 0f
 
-        // Ä¿±êÖµ + ÊÇ·ñ´¦ÓÚ»¬¶¯ÖĞ (º¬ÊÖÖ¸ÍÏ×§ÓëËÉÊÖºóµÄ fling/snap) Ò»ÆğÊÕ¼¯,
-        // snapshotFlow ×Ô´øÏàÁÚÈ¥ÖØ, ÈÎÒ»·ÖÁ¿±ä»¯²Å·¢Éä¡£
+        // ç›®æ ‡å€¼ + æ˜¯å¦å¤„äºæ»‘åŠ¨ä¸­ (å«æ‰‹æŒ‡æ‹–æ‹½ä¸æ¾æ‰‹åçš„ fling/snap) ä¸€èµ·æ”¶é›†,
+        // snapshotFlow è‡ªå¸¦ç›¸é‚»å»é‡, ä»»ä¸€åˆ†é‡å˜åŒ–æ‰å‘å°„ã€‚
         snapshotFlow {
             (page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)) to
                 pagerState.isScrollInProgress
@@ -191,11 +191,11 @@ fun StaggeredPageProvider(
                 animationSpec = if (scrolling) SPEC_FOLLOW else SPEC_SETTLE,
                 initialVelocity = carriedVelocity
             ) {
-                // ÖğÖ¡»Øµ÷: ±ØĞëÔÚÕâÀï×¥ËÙ¶È¡£animateTo ±»È¡ÏûÊ±Å× CancellationException,
-                // µ÷ÓÃµãÖ®ºóµÄ´úÂë²»»áÖ´ĞĞ, ÇÒ´ËÊ± velocity ÒÑ±» endAnimation() ÇåÁã¡£
+                // é€å¸§å›è°ƒ: å¿…é¡»åœ¨è¿™é‡ŒæŠ“é€Ÿåº¦ã€‚animateTo è¢«å–æ¶ˆæ—¶æŠ› CancellationException,
+                // è°ƒç”¨ç‚¹ä¹‹åçš„ä»£ç ä¸ä¼šæ‰§è¡Œ, ä¸”æ­¤æ—¶ velocity å·²è¢« endAnimation() æ¸…é›¶ã€‚
                 carriedVelocity = velocity
             }
-            // Õı³£ÅÜÍê(µ¯»ÉÊÕÁ²)Ê±ËÙ¶È±¾¾ÍÇ÷ÓÚ 0, ÏÔÊ½¹éÁã±ÜÃâ²ĞÁô¶¯Á¿ÎÛÈ¾ÏÂÒ»¶Î
+            // æ­£å¸¸è·‘å®Œ(å¼¹ç°§æ”¶æ•›)æ—¶é€Ÿåº¦æœ¬å°±è¶‹äº 0, æ˜¾å¼å½’é›¶é¿å…æ®‹ç•™åŠ¨é‡æ±¡æŸ“ä¸‹ä¸€æ®µ
             carriedVelocity = 0f
         }
     }
