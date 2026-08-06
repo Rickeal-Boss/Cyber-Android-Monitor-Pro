@@ -45,6 +45,7 @@ class DeviceDetailDataSource(private val context: Context) {
             //  Qualcomm Snapdragon — 8 Gen 旗舰系列
             // ═══════════════════════════════════════════
             "SM8850-5-AC" to "3nm TSMC N3P",     // Snapdragon 8 Elite Gen 5 (2026)
+            "SM8850-AC" to "3nm TSMC N3P",      // 同上 — Qualcomm 官方 P/N 无 "-5-" 中缀，保留双 key 兼容不同读取路径
             "SM8750" to "3nm TSMC N3E",     // Snapdragon 8 Elite (Gen 4, 2024)
             "SM8650" to "4nm TSMC N4P",     // Snapdragon 8 Gen 3 (2023)
             "SM8635" to "4nm TSMC N4P",     // Snapdragon 8s Gen 3 (2024)
@@ -98,8 +99,8 @@ class DeviceDetailDataSource(private val context: Context) {
             // Qualcomm Snapdragon — 6 Gen 系列
             "SM6650" to "4nm TSMC N4P",      // Snapdragon 6 Gen 4 (2025)
             "SM6475" to "4nm Samsung",      // Snapdragon 6 Gen 3 (2024)
-            "SM6450" to "4nm TSMC N4",      // Snapdragon 6 Gen 1 (2022)
-            "SM6375" to "6nm TSMC N6",      // Snapdragon 6 Gen 1 / 695 (2022)
+            "SM6450" to "4nm Samsung 4LPE", // Snapdragon 6 Gen 1 (2022) — 三星代工
+            "SM6375" to "6nm TSMC N6",      // Snapdragon 695 (2022)
             "SM6365" to "6nm",              // Snapdragon 6s Gen 3 (2024)
             "SM6225" to "6nm TSMC N6",      // Snapdragon 680/685 (2021)
             "SM6115" to "11nm",             // Snapdragon 662/460 (2020)
@@ -120,11 +121,11 @@ class DeviceDetailDataSource(private val context: Context) {
             "MT6983" to "4nm TSMC N4P",     // Dimensity 9200 (2022) — 硅片号 (ro.soc.model 实际返回)
             "MT6896" to "4nm TSMC N4P",     // Dimensity 8200 (2022) — 硅片号
             "MT6886" to "4nm TSMC N4P",     // Dimensity 7200 (2023) — 硅片号
-            "MT6989" to "4nm TSMC N4P",     // Dimensity 9000+ (2022)
+            "MT6989" to "4nm TSMC N4P",     // Dimensity 9300+ (2024)
             "MT6985" to "4nm TSMC N4",      // Dimensity 9000 (2022)
-            "MT6897" to "4nm TSMC N4",      // Dimensity 8300 (2023)
-            "MT6893" to "6nm TSMC N6",      // Dimensity 8100 (2022)
-            "MT6893" to "6nm TSMC N6",      // Dimensity 1200 (2021)
+            "MT6897" to "4nm TSMC N4P",     // Dimensity 8300 (2023)
+            "MT6893" to "6nm TSMC N6",      // Dimensity 1200/1300 (2021)
+            "MT6895" to "5nm TSMC N5",      // Dimensity 8100 (2022) — 之前误标为 MT6893
             "MT6889" to "6nm TSMC N6",      // Dimensity 1100 (2021)
             "MT6885" to "7nm TSMC N7",      // Dimensity 1000+ (2020)
             "MT6880" to "7nm TSMC N7",      // Dimensity 1000 (2019)
@@ -181,9 +182,10 @@ class DeviceDetailDataSource(private val context: Context) {
             // ═══════════════════════════════════════════
             //  Google Tensor
             // ═══════════════════════════════════════════
-            "gsp" to "5nm Samsung",         // Tensor G5 (2025)
+            "gsp" to "3nm TSMC N3E",        // Tensor G5 (2025) — 台积电代工，弃三星
             "gs201" to "5nm Samsung",       // Tensor G4 (2024) / G2 (2022)
-            "gs101" to "5nm Samsung",       // Tensor G3 (2023) / G1 (2021)
+            "gs101" to "5nm Samsung",       // Tensor G1 (2021)
+            "zuma" to "4nm Samsung",        // Tensor G3 (2023) — 代号 zuma
 
             // ═══════════════════════════════════════════
             //  UNISOC (紫光展锐)
@@ -208,9 +210,9 @@ class DeviceDetailDataSource(private val context: Context) {
             "lahaina" to "4nm Samsung",         // SM8450 — Snapdragon 8 Gen 1
             "taro" to "4nm TSMC N4",            // SM8475 — Snapdragon 8+ Gen 1
             "cape" to "4nm TSMC N4",            // SM8475 — Snapdragon 8+ Gen 1 (alternate)
-            "kailua" to "4nm TSMC N4P",         // SM
+            "kalama" to "4nm TSMC N4P",         // SM8550 — Snapdragon 8 Gen 2 (修正拼写 kailua→kalama)
             "pineapple" to "4nm TSMC N4P",      // SM
-            "sun" to "4nm TSMC N4P",            // SM
+            "sun" to "3nm TSMC N3E",         // SM8750 — Snapdragon 8 Elite (修正制程 N4P→N3E)
             "shima" to "5nm Samsung",           // SM8350 — Snapdragon 888
             "lito" to "7nm TSMC N7",            // SM7250 — Snapdragon 765G
             // Qualcomm — 中端 codename 
@@ -654,9 +656,16 @@ class DeviceDetailDataSource(private val context: Context) {
         } catch (_: Throwable) { 0 }
     }
 
+    // ★ 修复(P2): cpuinfo 读一次复用 — 原 readCpuPart + collectCpuTopology 各读一次
+    private var cachedCpuinfo: String? = null
+    private fun readProcCpuinfo(): String {
+        cachedCpuinfo?.let { return it }
+        return try { File("/proc/cpuinfo").readText().also { cachedCpuinfo = it } } catch (_: Throwable) { "" }
+    }
+
     private fun readCpuPartFromProcCpuinfo(): String {
         return try {
-            val cpuInfo = File("/proc/cpuinfo").readText()
+            val cpuInfo = readProcCpuinfo()
             // 取第一个 CPU part 行
             val partMatch = Regex("""CPU part\s*:\s*(\S+)""", RegexOption.IGNORE_CASE)
                 .find(cpuInfo)
@@ -670,7 +679,7 @@ class DeviceDetailDataSource(private val context: Context) {
     private fun collectCpuTopology(info: DeviceDetailInfo) {
         try {
             // /proc/cpuinfo 中提取
-            val cpuInfo = try { File("/proc/cpuinfo").readText() } catch (_: Throwable) { "" }
+            val cpuInfo = readProcCpuinfo()
             val implMatch = Regex("""CPU implementer\s*:\s*(\S+)""", RegexOption.IGNORE_CASE).find(cpuInfo)
             val partMatch = Regex("""CPU part\s*:\s*(\S+)""", RegexOption.IGNORE_CASE).find(cpuInfo)
 
@@ -917,8 +926,11 @@ class DeviceDetailDataSource(private val context: Context) {
 
             // 策略4: 读取 UFS 版本
             if (info.storageType.contains("UFS", ignoreCase = true) && !info.storageType.contains("3.") && !info.storageType.contains("2.")) {
-                val ufsVer = SysFsReader.readFile("/sys/devices/platform/soc/*.ufs/versions")
-                    .ifEmpty { SysFsReader.readFile("/sys/class/scsi_device/*/device/versions") }
+                // ★ 修复(F2): 通配符路径不展开 glob，改用 listFiles 枚举真实路径 (参考策略3)
+                val ufsVer = File("/sys/devices/platform/soc").listFiles()
+                    ?.firstOrNull { it.name.contains("ufs", ignoreCase = true) }
+                    ?.let { SysFsReader.readFile("${it.absolutePath}/versions") }
+                    .orEmpty()
                 if (ufsVer.contains("3.1")) info.storageType = "UFS 3.1"
                 else if (ufsVer.contains("3.0")) info.storageType = "UFS 3.0"
                 else if (ufsVer.contains("4.0")) info.storageType = "UFS 4.0"
@@ -965,7 +977,7 @@ class DeviceDetailDataSource(private val context: Context) {
                     val hasTypeC = SysFsReader.readProp("ro.hardware.usb.typec")
                     hasTypeC == "1" || hasTypeC == "true" ||
                         pm.hasSystemFeature("android.hardware.usb.accessory")
-                } catch (_: Throwable) { true }  // 大多数现代设备是 Type-C
+                } catch (_: Throwable) { false } // ★ 修复(F1): 异常时不假设 Type-C (原 true 致误显)
 
                 // USB 版本: 仅基于实际属性读取
                 when {
@@ -1547,8 +1559,8 @@ class DeviceDetailDataSource(private val context: Context) {
             }
 
             info.bootloaderUnlocked = try {
-                val unlocked = Runtime.getRuntime().exec(arrayOf("getprop", "ro.boot.flash.locked"))
-                    .inputStream.bufferedReader().readText().trim()
+                // ★ 修复(N1): 改走 ShellCommandDataSource.exec (8s 超时 + destroyForcibly)，原 Runtime.exec 无超时致挂起
+                val unlocked = ShellCommandDataSource.exec("getprop", "ro.boot.flash.locked").trim()
                 unlocked == "0"
             } catch (_: Throwable) {
                 SysFsReader.readProp("ro.boot.verifiedbootstate") == "orange"
@@ -1566,12 +1578,9 @@ class DeviceDetailDataSource(private val context: Context) {
      * 比 SystemProperties 反射更可靠: 绕过 Android 9+ non-SDK interface 限制
      * 和 OEM hidden API 黑名单. getprop 是 /system/bin/getprop, 普通进程可执行.
      */
-    private fun runGetProp(key: String): String = try {
-        val proc = Runtime.getRuntime().exec(arrayOf("getprop", key))
-        val result = proc.inputStream.bufferedReader().readText().trim()
-        proc.destroy()
-        result.ifBlank { "" }
-    } catch (_: Throwable) { "" }
+    // ★ 修复(N1): 改走 ShellCommandDataSource.exec (8s 超时 + destroyForcibly)，原 Runtime.exec 无超时致挂起
+    private fun runGetProp(key: String): String =
+        try { ShellCommandDataSource.exec("getprop", key).trim() } catch (_: Throwable) { "" }
 
     private fun collectIdentifiers(info: DeviceDetailInfo) {
         try {
@@ -1703,9 +1712,8 @@ class DeviceDetailDataSource(private val context: Context) {
                 // 方式3: 通过 exec 获取 (Android 5+)
                 if (info.opensslVersion.isEmpty()) {
                     try {
-                        val proc = Runtime.getRuntime().exec(arrayOf("/system/bin/sh", "-c", "openssl version 2>/dev/null"))
-                        val output = proc.inputStream.bufferedReader().readText().trim()
-                        proc.waitForWithTimeout()
+                        // ★ 修复(N2): 改走 ShellCommandDataSource.exec (8s 超时 + destroyForcibly)，原 readText 先于 waitFor 致卡死
+                        val output = ShellCommandDataSource.exec("/system/bin/sh", "-c", "openssl version 2>/dev/null").trim()
                         if (output.isNotEmpty()) {
                             info.opensslVersion = output.removePrefix("OpenSSL").trim()
                                 .let { if (it.isNotEmpty()) "OpenSSL $it" else output }

@@ -58,7 +58,7 @@ object CpuCache {
     //   Qualcomm 芯片同一平台可能有多个 codename（如 SM8635 → "sun" 或 "pineapple"）
     //   OPPO/Xiaomi 等 OEM 可能返回非标准 codename
     private val CODENAME_ALIASES = mapOf(
-        "sun" to "sm8635"   // Snapdragon 8s Gen 3
+        "sun" to "sm8750"   // Snapdragon 8 Elite (之前误标为 sm8635)
     )
 
     // 天玑家族兜底模式：提升为常量，避免每次 lookup 重新编译正则
@@ -472,9 +472,33 @@ object CpuCache {
             modem = "5G R16 (MediaTek M80)",
         ),
 
-        // ═══ Dimensity 8100 (MT6893) ═══
+        // ═══ Dimensity 1200 (MT6893) — 修正: 原误标为 Dimensity 8100 ═══
         "mt6893" to KnownChip(
             platformId = "mt6893",
+            chipName = "Dimensity 1200",
+            cpuModel = "Cortex-A78 + A55",
+            processNode = "6nm TSMC N6",
+            releaseDate = "2021-01",
+            clusters = listOf(
+                ClusterSpec("Cortex-A78", 1, 3.00f),
+                ClusterSpec("Cortex-A78", 3, 2.60f),
+                ClusterSpec("Cortex-A55", 4, 2.00f),
+            ),
+            l1iPerBig = "64 KB", l1dPerBig = "64 KB", l2PerBig = "512 KB",
+            l1iPerSmall = "32 KB", l1dPerSmall = "32 KB", l2PerSmall = "128 KB",
+            l3Shared = "8 MB",
+            gpuModel = "Mali-G77 MC9",
+            gpuClockMhz = 850,
+            gpuAlus = 576,
+            gpuFp32Tflops = 0.98f,
+            isp = "Imagiq 590",
+            npu = "APU 3.0",
+            modem = "5G R16 (MediaTek M80)",
+        ),
+
+        // ═══ Dimensity 8100 (MT6895) — 新增: 之前误挂在 MT6893 ═══
+        "mt6895" to KnownChip(
+            platformId = "mt6895",
             chipName = "Dimensity 8100",
             cpuModel = "Cortex-A78 + A55",
             processNode = "5nm TSMC N5",

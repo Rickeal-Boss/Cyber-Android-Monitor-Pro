@@ -166,7 +166,7 @@ class DeviceRepository(context: Context) {
     }
 
     fun loadStaticData() {
-        scope.launch(Dispatchers.Default) {
+        scope.launch(Dispatchers.IO) { // ★ 修复(N3): 阻塞 I/O 跑 IO 线程池 (原 Default 占 CPU 线程)
             runCatching { systemLiveData.postValue(systemDataSource.getSystemInfo()); healthTracker.mark(HealthTracker.SourceHealth.Health.OK, "system") }
                 .onFailure { e -> Log.w(TAG, "系统信息采集失败", e); healthTracker.mark(HealthTracker.SourceHealth.Health.ERROR, "system") }
             runCatching { auxCollector.storageLiveData.postValue(StorageDataSource().getStorageInfo()) }
