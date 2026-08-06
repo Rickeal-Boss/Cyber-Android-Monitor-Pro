@@ -65,11 +65,11 @@ private const val SCALE_DECAY = 0.05f
 /** 透明度衰减基数 — 过程中卡片淡出幅度 (辅助景深) */
 private const val ALPHA_DECAY = 0.15f
 
-/** 弹簧阻尼比 — 0.9 近临界阻尼 → 手指抬起/Pager吸附时不过冲回弹, 消除"断触"感 */
-private const val SPRING_DAMPING = 0.9f
+/** 弹簧阻尼比 — 1.0 临界阻尼, 彻底消除过冲 (原 0.9 仍欠阻尼, 边缘甩动会飞出) */
+private const val SPRING_DAMPING = 1.0f
 
-/** 弹簧刚度 — 520 紧跟手指, Pager 吸附瞬间不滞后脱节 */
-private const val SPRING_STIFFNESS = 520f
+/** 弹簧刚度 — 420 边缘吸附更柔 (原 520 过刚, 硬怼 clamp 目标; 嫌"肉"可调回 480, 阻尼别动) */
+private const val SPRING_STIFFNESS = 420f
 
 // ═══════════════════════════════════════════════════════════════
 
@@ -93,12 +93,14 @@ fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
         // 在绘制阶段读状态 — 只失效 draw 层, 不触发组合
         // ★ 不做 early return — smoothed=0 时所有变换自动为 identity, 无突变/跳变;
         //   early return 会跳过赋值导致残留旧值, 回中时冻结在微小偏移上
-        val eff = progress.value * cascade // 每张卡片的实际有效偏移
+        // ★ eff 先限幅再乘级联 — 原 rawOffset 边缘可达 ~2, cascade≤3 → eff≈6 飞出屏; 限到 [-1,1] 后最深卡 eff≤3
+        val eff = progress.value.coerceIn(-1f, 1f) * cascade
 
-        // ── ★ 主运动: 水平甩尾 (多卡片左右平移, 越靠下摆幅越大 → 横向鞭尾弯曲) ──
-        translationX = size.width * eff * HORIZONTAL_PARALLAX
+        // ── ★ 主运动: 水平甩尾 — clamp 到半屏, 卡片始终"在手上" ──
+        val maxDx = size.width * 0.5f
+        translationX = (size.width * eff * HORIZONTAL_PARALLAX).coerceIn(-maxDx, maxDx)
 
-        // ── 极弱垂直余量 (几乎为 0, 保留结构对称) ──
+        // ── 极弱垂直余量 (VERTICAL_WAVE=0, translationY 恒 0, 无需 clamp) ──
         translationY = size.height * eff * VERTICAL_WAVE
 
         // ── 缩放: 过渡中轻微缩小 (景深层次感) ──

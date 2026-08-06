@@ -26,8 +26,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 
-/** 全局光照淡出时长 (ms) — IDLE 时强度缓慢渐隐, 实现平滑淡出而非瞬隐 */
-private const val GLOBAL_LIGHT_FADE_OUT_MS = 1200
+/** 全局光照淡出时长 (ms) — IDLE 时强度渐隐 (原 1200 过长, 指针停下仍红绘 ~2-3s; 收窄到 800 快速回落) */
+private const val GLOBAL_LIGHT_FADE_OUT_MS = 800
 
 /**
  * Windows 10 Fluent Design 鈥? Reveal Light 鍏夌収鏁堟灉 Modifier
@@ -77,7 +77,8 @@ fun Modifier.revealLight(
         animationSpec = if (lightState.mode == GlobalLightState.Mode.IDLE) {
             tween(durationMillis = GLOBAL_LIGHT_FADE_OUT_MS, easing = FastOutSlowInEasing)
         } else {
-            spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)
+            // ★ 原 LowBouncy — 指针快速移动时强度值过冲抖动, 拉长红绘窗口; 改 NoBouncy 视觉差异极小
+            spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
         },
         label = "lightIntensity"
     )
@@ -90,14 +91,24 @@ fun Modifier.revealLight(
 
     val radiusPx = with(density) { radius.toPx() }
 
+    // ★ 新增：per-element 缓存 RuntimeShader 实例（每元素生命周期内只编译一次）
+    //   不能用模块级单例 — 1) RuntimeShader 是 API 33+ 类，顶层 val 会致 API<33 类加载崩溃
+    //   2) 单例跨元素共享 uniform 有串色风险（display list 回放时 uniform 被覆盖）
+    val shader = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            try { RuntimeShader(SHADER_REVEAL_LIGHT) } catch (_: Exception) { null }
+        } else null
+    }
+
     return this
         .onGloballyPositioned { coordinates ->
             elementWindowPos = coordinates.positionInWindow()
             elementSize = Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat())
         }
         .then(
-            if (useAGSL && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                revealLightAGSL(animatedPos, elementWindowPos, elementSize, radiusPx, effectiveIntensity, lightColor, isActive)
+            // ★ 改为判空 shader 实例，而非每次 new
+            if (useAGSL && shader != null) {
+                revealLightAGSL(shader, animatedPos, elementWindowPos, elementSize, radiusPx, effectiveIntensity, lightColor, isActive)
             } else {
                 revealLightCanvas(animatedPos, elementWindowPos, elementSize, radiusPx, effectiveIntensity, lightColor, isActive)
             }
@@ -183,7 +194,9 @@ private val SHADER_REVEAL_LIGHT = """
 /**
  * AGSL RuntimeShader GPU 鍔犻�熻矾寰? (API 33+)
  */
+// ★ 签名新增 shader: RuntimeShader 参数（调用方 remember 传入，不再内部 new）
 private fun Modifier.revealLightAGSL(
+    shader: RuntimeShader,
     animatedPos: Offset,
     elementWindowPos: Offset,
     elementSize: Size,
@@ -196,6 +209,7 @@ private fun Modifier.revealLightAGSL(
 
     if (!isActive || intensity < 0.001f) return@drawWithContent
 
+    // ★ 保留 try/catch 防御 — 万一 AGSL 驱动优化掉未用 uniform，setFloatUniform 抛异常时静默降级
     try {
         val localCenter = Offset(
             x = animatedPos.x - elementWindowPos.x,
@@ -208,7 +222,8 @@ private fun Modifier.revealLightAGSL(
             return@drawWithContent
         }
 
-        val shader = RuntimeShader(SHADER_REVEAL_LIGHT).apply {
+        // ★ 复用传入实例，每帧只更新 uniform，零分配
+        shader.apply {
             setFloatUniform("uLightCenter", localCenter.x, localCenter.y)
             setFloatUniform("uRadius", radiusPx)
             setFloatUniform("uColor", lightColor.red, lightColor.green, lightColor.blue)
@@ -217,6 +232,6 @@ private fun Modifier.revealLightAGSL(
         }
         drawRect(brush = ShaderBrush(shader))
     } catch (_: Exception) {
-        // AGSL 涓嶅彲鐢ㄦ椂闈欓粯闄嶇骇
+        // AGSL 不可用时静默降级
     }
 }

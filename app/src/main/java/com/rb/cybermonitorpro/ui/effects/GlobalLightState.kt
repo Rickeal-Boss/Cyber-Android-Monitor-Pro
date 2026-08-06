@@ -111,8 +111,8 @@ fun rememberAnimatedLightPosition(state: GlobalLightState): Offset {
             convertFromVector = { Offset(it.v1, it.v2) }
         ),
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
+            dampingRatio = Spring.DampingRatioNoBouncy,   // 原 MediumBouncy — 消除回弹，光效不拖尾
+            stiffness = Spring.StiffnessMedium             // 原 StiffnessMediumLow — 提刚度，更快收敛
         ),
         label = "lightPosition"
     )
