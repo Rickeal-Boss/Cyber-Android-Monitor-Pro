@@ -19,13 +19,21 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.abs
 
 /**
- * 页面滑动交错变换 v4 — 父层单弹簧 + 卡片相位映射
+ * 页面滑动交错变换 v5 — 父层单弹簧 + 卡片相位映射 + 速度接力
  *
  * 演进历史:
  *   v2: Provider 算一次 spring → 解包成 Float 下发 → 整页每帧全量重组 → 卡顿
  *   v3: 每张卡片各自跑 animateFloatAsState → 不重组但 DeviceScreen 27 卡 = 27 个并发弹簧
  *   v4: Provider 只跑 1 个 Animatable, 经 CompositionLocal<State<Float>> 下传;
  *       卡片只在 graphicsLayer 里读值做 cascade 相位映射, 绘制层失效, 不重组。
+ *   v5 (2026-08-06): 修复"松手后卡片仍长时间漂移"的迟滞 —
+ *       ① 速度接力: collectLatest 每帧取消 animateTo, 而 Animatable.endAnimation()
+ *          会 velocityVector.reset() 把速度清零 (androidx Animatable.kt), 于是弹簧
+ *          每帧都从 v=0 重启, 等效时间常数被拉长到 ~636ms。改为在 animateTo 的 block
+ *          回调里逐帧缓存当前速度, 下一次 animateTo 以 initialVelocity 传回 —— 这正是
+ *          Animatable KDoc 指定的动量续接做法。
+ *       ② 双弹簧门控: 按 pagerState.isScrollInProgress 区分"跟手期"与"收尾期",
+ *          跟手期高刚度临界阻尼硬跟随, 收尾期低刚度欠阻尼(0.92)做轻微弹性收敛。
  *
  * 视觉等价性:
  *   v3 所有卡片的 smoothed 目标值与弹簧参数本就相同 (rawOffset 一致),
@@ -65,11 +73,35 @@ private const val SCALE_DECAY = 0.05f
 /** 透明度衰减基数 — 过程中卡片淡出幅度 (辅助景深) */
 private const val ALPHA_DECAY = 0.15f
 
-/** 弹簧阻尼比 — 1.0 临界阻尼, 彻底消除过冲 (原 0.9 仍欠阻尼, 边缘甩动会飞出) */
-private const val SPRING_DAMPING = 1.0f
+// ── 弹簧参数 v5: 按 isScrollInProgress 分「跟手期 / 收尾期」两套 ──
+//
+// 稳态跟随误差(临界阻尼跟踪匀速目标) = 2v/ω, ω = √stiffness (Compose spring 单位质量)。
+// 以「250ms 划过一页」即 v≈4 page/s 估算:
+//   k=420  → ω=20.5 → 滞后 0.39 page ← v4 参数, 拖泥带水的主因之一
+//   k=1000 → ω=31.6 → 滞后 0.25 page ← 仍保留鞭梢手感, 但明显收紧
+// 收尾期收敛时间 ≈ 3/(ζω): k=600, ζ=0.92 → ω=24.5 → 约 133ms 完全静止。
 
-/** 弹簧刚度 — 420 边缘吸附更柔 (原 520 过刚, 硬怼 clamp 目标; 嫌"肉"可调回 480, 阻尼别动) */
-private const val SPRING_STIFFNESS = 420f
+/** 跟手期阻尼比 — 手指/惯性滑动进行中, 1.0 临界阻尼, 绝不过冲 */
+private const val SCROLL_DAMPING = 1.0f
+
+/** 跟手期刚度 — 1000 硬跟随 (v4 的 420 滞后 ~0.39 页, 是"迟滞"观感的来源) */
+private const val SCROLL_STIFFNESS = 1000f
+
+/**
+ * 收尾期阻尼比 — 0.92 轻微欠阻尼, 过冲量 exp(-pi*z/sqrt(1-z*z)) 约 0.06%,
+ * 肉眼几乎不可见但收敛更快; 且 graphicsLayer 侧已有 coerceIn(-1,1) 与 maxDx 双重限幅兜底。
+ */
+private const val SETTLE_DAMPING = 0.92f
+
+/** 收尾期刚度 — 600, 约 133ms 内收敛静止 (v4 因速度归零实测漂移达 ~630ms) */
+private const val SETTLE_STIFFNESS = 600f
+
+/**
+ * ★ SpringSpec 提到顶层复用 —— 滑动期每帧都要新起一次 animateTo,
+ *   若在 lambda 里现 new spring() 则 120fps 下每秒多 120 次分配。
+ */
+private val SPEC_FOLLOW = spring<Float>(dampingRatio = SCROLL_DAMPING, stiffness = SCROLL_STIFFNESS)
+private val SPEC_SETTLE = spring<Float>(dampingRatio = SETTLE_DAMPING, stiffness = SETTLE_STIFFNESS)
 
 // ═══════════════════════════════════════════════════════════════
 
@@ -137,17 +169,34 @@ fun StaggeredPageProvider(
         // ★ 先 snapTo 当前偏移: 与 v3 animateFloatAsState 初始行为一致, 首次进入无跳变
         //   协程内读 pager state 不订阅组合, Provider 组合层零重组
         animatable.snapTo(page - (pagerState.currentPage + pagerState.currentPageOffsetFraction))
-        // 协程内订阅 pager offset, 每次目标变化重启弹簧 (与 animateFloatAsState 重定向语义一致)
+
+        // ★ v5 速度接力缓存 (2026-08-06)
+        //   collectLatest 每来一个新目标就 cancel 上一个 animateTo; Animatable 在
+        //   CancellationException 分支同样会走 endAnimation() → velocityVector.reset(),
+        //   所以下一次 animateTo 的默认 initialVelocity(=velocity) 恒为 0 —— 弹簧被反复
+        //   "掐死在起步阶段", 这才是松手后长时间漂移的真正来源。
+        //   注: 不能改用 collect 顺序消费来"保留速度" —— collect 会等 animateTo 跑完才处理
+        //   下一个 emission, 拖拽期间目标每 8ms 变一次, 会退化成台阶式跳动, 比现状更糟。
+        //   正确做法(Animatable KDoc): 手动把上一段的末速度作为 initialVelocity 传回。
+        var carriedVelocity = 0f
+
+        // 目标值 + 是否处于滑动中 (含手指拖拽与松手后的 fling/snap) 一起收集,
+        // snapshotFlow 自带相邻去重, 任一分量变化才发射。
         snapshotFlow {
-            page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)
-        }.collectLatest { target ->
+            (page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)) to
+                pagerState.isScrollInProgress
+        }.collectLatest { (target, scrolling) ->
             animatable.animateTo(
                 targetValue = target,
-                animationSpec = spring(
-                    dampingRatio = SPRING_DAMPING,
-                    stiffness = SPRING_STIFFNESS
-                )
-            )
+                animationSpec = if (scrolling) SPEC_FOLLOW else SPEC_SETTLE,
+                initialVelocity = carriedVelocity
+            ) {
+                // 逐帧回调: 必须在这里抓速度。animateTo 被取消时抛 CancellationException,
+                // 调用点之后的代码不会执行, 且此时 velocity 已被 endAnimation() 清零。
+                carriedVelocity = velocity
+            }
+            // 正常跑完(弹簧收敛)时速度本就趋于 0, 显式归零避免残留动量污染下一段
+            carriedVelocity = 0f
         }
     }
 
