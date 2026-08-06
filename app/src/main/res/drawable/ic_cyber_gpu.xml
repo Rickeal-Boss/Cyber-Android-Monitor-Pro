@@ -1,0 +1,58 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+
+    <!-- GPU 主体 (宽切角方框) -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M2.5,7 L5,4.5 L19,4.5 L21.5,7 L21.5,17 L19,19.5 L5,19.5 L2.5,17 Z" />
+
+    <!-- 显示区域 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M6,8 L18,8 L18,16 L6,16 Z" />
+
+    <!-- 扫描线 1 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M8,11 L16,11" />
+
+    <!-- 扫描线 2 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M8,13.5 L16,13.5" />
+
+    <!-- 左上角散热标记 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M4.5,7 L4.5,9.5" />
+
+    <!-- 右下角散热标记 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M19.5,14.5 L19.5,17" />
+
+</vector>

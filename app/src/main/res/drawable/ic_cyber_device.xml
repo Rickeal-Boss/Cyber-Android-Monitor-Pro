@@ -1,0 +1,58 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+
+    <!-- 设备外框 (切角手机) -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M7,2 L17,2 L18,3 L18,21 L17,22 L7,22 L6,21 L6,3 Z" />
+
+    <!-- 屏幕区域 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M8.5,5 L15.5,5 L15.5,17 L8.5,17 Z" />
+
+    <!-- 屏幕内电路横线 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,8 L14,8" />
+
+    <!-- 屏幕内电路斜线 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M14,8 L14,12" />
+
+    <!-- 屏幕内电路横线 2 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,12 L14,12" />
+
+    <!-- Home 指示条 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,19 L14,19" />
+
+</vector>

@@ -31,12 +31,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -131,18 +131,19 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private data class TopTabItem(val title: String, val icon: ImageVector)
+private data class TopTabItem(val title: String, val iconRes: Int)
 
+/** 赛博风格线条矢量图标 — 与 Tab 含义一一对应 */
 private val topTabIcons = listOf(
-    Icons.Filled.Home,
-    Icons.Filled.PlayArrow,
-    Icons.Filled.Info,
-    Icons.Filled.Star,
-    Icons.Filled.Favorite,
-    Icons.Filled.Share,
-    Icons.Filled.PlayArrow,
-    Icons.Filled.Info,
-    Icons.Filled.Search
+    R.drawable.ic_cyber_dashboard,
+    R.drawable.ic_cyber_cpu,
+    R.drawable.ic_cyber_gpu,
+    R.drawable.ic_cyber_memory,
+    R.drawable.ic_cyber_battery,
+    R.drawable.ic_cyber_network,
+    R.drawable.ic_cyber_gps,
+    R.drawable.ic_cyber_sensors,
+    R.drawable.ic_cyber_device,
 )
 
 /** Tab 标题国际化 — 在 Composable 内调用 stringResource 获取当前语言标题 */
@@ -473,7 +474,7 @@ private fun MainTabs(
                                 fontWeight = if (pagerState.currentPage == i) FontWeight.Bold else FontWeight.Normal,
                                 maxLines = 1)
                         },
-                        icon = { Icon(tab.icon, null, Modifier.size(16.dp)) },
+                        icon = { Icon(painterResource(tab.iconRes), null, Modifier.size(16.dp)) },
                         selectedContentColor = NeonPurple,
                         unselectedContentColor = NeonSteelBlue.copy(alpha = 0.7f)
                     )
