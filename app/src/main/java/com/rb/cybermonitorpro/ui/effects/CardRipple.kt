@@ -49,6 +49,7 @@ fun Modifier.cardRipple(
         val density = LocalDensity.current
         this
             .drawWithContent {
+                val scope = this
                 val insetPx = with(density) { inset.toPx() }
                 val cornerPx = with(density) { 20.dp.toPx() }
                 val insetCorner = (cornerPx - insetPx).coerceAtLeast(0f)
@@ -69,7 +70,7 @@ fun Modifier.cardRipple(
                         )
                     }
                     clipPath(path) {
-                        drawContent()
+                        scope.drawContent()
                     }
                 } else {
                     // 裁剪区域无效（尺寸太小）：无裁剪，波纹铺满
