@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -33,6 +35,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
@@ -617,10 +620,36 @@ private fun DualCellToggleCard(
 private val CURRENT_MULTIPLIER_TIERS = listOf(1.0, 10.0, 100.0, 1000.0)
 
 /**
+ * ★ 倍率值 → 最近挡位索引 (2026-08-06)。
+ * 用「最近」而非「精确相等」，兼容旧版本 0.1 步进遗留的非挡位值（如 2.5×），
+ * 避免 indexOfFirst 返回 -1 后一律落到索引 0 造成滑块位置失真。
+ */
+private fun multiplierToTierIndex(value: Double): Int {
+    var best = 0
+    for (i in CURRENT_MULTIPLIER_TIERS.indices) {
+        if (kotlin.math.abs(CURRENT_MULTIPLIER_TIERS[i] - value) <
+            kotlin.math.abs(CURRENT_MULTIPLIER_TIERS[best] - value)
+        ) best = i
+    }
+    return best
+}
+
+/**
+ * ★ 滑块浮点索引 → 最近整数挡位索引 (2026-08-06)。
+ * 用 (raw + 0.5f).toInt() 实现四舍五入：raw 恒 >= 0，截断即等价 round-half-up，
+ * 避免引入 kotlin.math.roundToInt 顶层导入（本项目历史上顶层 math 导入曾致 release 编译失败）。
+ */
+private fun snapTierIndex(raw: Float): Int =
+    (raw + 0.5f).toInt().coerceIn(0, CURRENT_MULTIPLIER_TIERS.size - 1)
+
+/**
  * 电池电流校准倍率卡片 (PlusPlusBattery 思路: 用户校准则准)。
  * 默认 1.0× = 不修正；ColorOS 等 OEM ROM 的 oplus_chg / property 读数常因单位或增益偏差
  * 偏大/偏小，由用户在此按真实值校正。范围由 AppSettings 钳制 [1.0, 1000.0]。
  * ★ Slider 改固定挡位吸附（1.0×/10.0×/100.0×/1000.0×），预设按钮同 4 挡；Reset 归位 1.0×。
+ * ★ 2026-08-06 交互对齐设置页 ModuleIntervalCard：
+ *   原方案 steps=2 硬吸附 + onValueChange 每帧回写 AppSettings（无自由滑动手感、拖拽期高频写 SP）；
+ *   现方案 steps=0 自由滑动 → 本地 state 跟手 → onValueChangeFinished 松手才 snap + 一次性写入。
  */
 @Composable
 private fun BatteryCurrentMultiplierCard(
@@ -630,6 +659,13 @@ private fun BatteryCurrentMultiplierCard(
     subtitle: String,
     resetLabel: String
 ) {
+    // ★ 本地滑块索引（浮点，自由滑动）。key = multiplier：预设/重置按钮改值时自动重新对齐滑块位置；
+    //   拖拽期间不写 AppSettings，multiplier 不变 → remember 不重建 → 手感连续无回弹。
+    var sliderIndex by remember(multiplier) { mutableFloatStateOf(multiplierToTierIndex(multiplier).toFloat()) }
+    var isDragging by remember { mutableStateOf(false) }
+    // 拖拽中头部显示「待确认挡位」实时预览，松手后回到实际生效值（兼容旧版遗留非挡位值）
+    val displayMultiplier = if (isDragging) CURRENT_MULTIPLIER_TIERS[snapTierIndex(sliderIndex)] else multiplier
+
     Card(
         modifier = Modifier.fillMaxWidth()
             .revealLight(radius = 160.dp, intensity = 0.22f)
@@ -660,19 +696,29 @@ private fun BatteryCurrentMultiplierCard(
                         }
                     }
                     Text(
-                        "×${"%.1f".format(multiplier)}",
+                        "×${"%.1f".format(displayMultiplier)}",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = NeonPurpleBright
                     )
                 }
                 Spacer(Modifier.height(8.dp))
-                // ★ Slider 改固定挡位索引吸附：valueRange=0..3 映射 4 挡，滑块只能停在挡位上
+                // ★ 自由滑动（steps=0）：valueRange=0..3 映射 4 挡，松手时 snap 到最近挡位
                 Slider(
-                    value = CURRENT_MULTIPLIER_TIERS.indexOfFirst { it == multiplier }.coerceAtLeast(0).toFloat(),
-                    onValueChange = { onMultiplierChange(CURRENT_MULTIPLIER_TIERS[it.toInt().coerceIn(0, CURRENT_MULTIPLIER_TIERS.size - 1)]) },
+                    value = sliderIndex,
+                    onValueChange = {
+                        isDragging = true
+                        sliderIndex = it
+                    },
+                    onValueChangeFinished = {
+                        // ★ 松手时 snap + 一次性写入 AppSettings（拖拽全程零 SP 写入）
+                        val idx = snapTierIndex(sliderIndex)
+                        sliderIndex = idx.toFloat()
+                        isDragging = false
+                        onMultiplierChange(CURRENT_MULTIPLIER_TIERS[idx])
+                    },
                     valueRange = 0f..(CURRENT_MULTIPLIER_TIERS.size - 1).toFloat(),
-                    steps = CURRENT_MULTIPLIER_TIERS.size - 2,
+                    steps = 0,
                     modifier = Modifier.fillMaxWidth(),
                     colors = SliderDefaults.colors(
                         thumbColor = NeonPurpleBright,
@@ -680,19 +726,37 @@ private fun BatteryCurrentMultiplierCard(
                         inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
                     )
                 )
+                // ★ 2026-08-06 字号缩小：14sp (M3 TextButton 默认 labelLarge) → 12sp。
+                //   同时预设按钮改 weight(1f) 均分剩余宽度 —— M3 Button 内部 Row 带
+                //   defaultMinSize(ButtonDefaults.MinWidth = 58.dp)，4 个预设(含 "1000.0×")
+                //   + Reset("Reset 1.0×" 英文更长) 在 300dp 可用行宽下会溢出被裁剪；
+                //   weight 给出固定宽约束 (hasFixedWidth) 后内部 min-width 自动失效，
+                //   布局层面杜绝溢出，极窄屏最坏只是 maxLines=1 省略号。
                 Row(
                     Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CURRENT_MULTIPLIER_TIERS.forEach { preset ->
-                        TextButton(onClick = { onMultiplierChange(preset) }) {
-                            Text("${"%.1f".format(preset)}×", color = if (multiplier == preset) NeonPurpleBright else TextSecondary)
+                        TextButton(
+                            onClick = { onMultiplierChange(preset) },
+                            modifier = Modifier.weight(1f).defaultMinSize(minWidth = 1.dp, minHeight = 32.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                "${"%.1f".format(preset)}×",
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                color = if (displayMultiplier == preset) NeonPurpleBright else TextSecondary
+                            )
                         }
                     }
-                    Spacer(Modifier.weight(1f))
-                    TextButton(onClick = { onMultiplierChange(1.0) }) {
-                        Text(resetLabel, color = NeonPurpleBright)
+                    TextButton(
+                        onClick = { onMultiplierChange(1.0) },
+                        modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 32.dp),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                    ) {
+                        Text(resetLabel, fontSize = 12.sp, maxLines = 1, color = NeonPurpleBright)
                     }
                 }
             }
