@@ -70,11 +70,11 @@ class AppSettings private constructor(context: Context) {
     // ── 电池电流校准倍率 (PlusPlusBattery 思路: 用户校准则准) ──
     // 默认 1.0 = 不修正。ColorOS 等 OEM ROM 的 oplus_chg sysfs / BATTERY_PROPERTY_CURRENT_NOW
     // 读数常因单位或增益偏差而偏大/偏小，由用户在设置中校准 (如读数偏大 2× 则填 0.5)。
-    // 钳制 [0.1, 10.0] 防止误配导致瓦特/内阻等派生指标失真。
+    // ★ 钳制 [1.0, 1000.0] 固定挡位 (1.0/10.0/100.0/1000.0) — 原 [0.1,10.0] 0.1步进改 4 挡 (2026-08-06)
     var batteryCurrentMultiplier: Double
-        get() = prefs.getFloat("battery_current_multiplier", 1.0f).toDouble().coerceIn(0.1, 10.0)
+        get() = prefs.getFloat("battery_current_multiplier", 1.0f).toDouble().coerceIn(1.0, 1000.0)
         set(value) = prefs.edit {
-            putFloat("battery_current_multiplier", value.toFloat().coerceIn(0.1f, 10.0f))
+            putFloat("battery_current_multiplier", value.toFloat().coerceIn(1.0f, 1000.0f))
         }
 
     // ── 概览页卡片排序 (逗号分隔的卡片 ID) ──

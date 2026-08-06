@@ -613,11 +613,14 @@ private fun DualCellToggleCard(
     }
 }
 
+/** 电池电流校准固定挡位 — 原 0.1 步进滑块改 4 挡 (2026-08-06) */
+private val CURRENT_MULTIPLIER_TIERS = listOf(1.0, 10.0, 100.0, 1000.0)
+
 /**
  * 电池电流校准倍率卡片 (PlusPlusBattery 思路: 用户校准则准)。
  * 默认 1.0× = 不修正；ColorOS 等 OEM ROM 的 oplus_chg / property 读数常因单位或增益偏差
- * 偏大/偏小，由用户在此按真实值校正。范围由 AppSettings 钳制 [0.1, 10.0]。
- * Slider 步进 0.1×；预设 0.5×/1.0×/2.0× 覆盖常见校正场景；Reset 归位 1.0×。
+ * 偏大/偏小，由用户在此按真实值校正。范围由 AppSettings 钳制 [1.0, 1000.0]。
+ * ★ Slider 改固定挡位吸附（1.0×/10.0×/100.0×/1000.0×），预设按钮同 4 挡；Reset 归位 1.0×。
  */
 @Composable
 private fun BatteryCurrentMultiplierCard(
@@ -664,11 +667,12 @@ private fun BatteryCurrentMultiplierCard(
                     )
                 }
                 Spacer(Modifier.height(8.dp))
+                // ★ Slider 改固定挡位索引吸附：valueRange=0..3 映射 4 挡，滑块只能停在挡位上
                 Slider(
-                    value = multiplier.toFloat(),
-                    onValueChange = { onMultiplierChange(it.toDouble()) },
-                    valueRange = 0.1f..10.0f,
-                    steps = 99,
+                    value = CURRENT_MULTIPLIER_TIERS.indexOfFirst { it == multiplier }.coerceAtLeast(0).toFloat(),
+                    onValueChange = { onMultiplierChange(CURRENT_MULTIPLIER_TIERS[it.toInt().coerceIn(0, CURRENT_MULTIPLIER_TIERS.size - 1)]) },
+                    valueRange = 0f..(CURRENT_MULTIPLIER_TIERS.size - 1).toFloat(),
+                    steps = CURRENT_MULTIPLIER_TIERS.size - 2,
                     modifier = Modifier.fillMaxWidth(),
                     colors = SliderDefaults.colors(
                         thumbColor = NeonPurpleBright,
@@ -681,9 +685,9 @@ private fun BatteryCurrentMultiplierCard(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    listOf(0.5, 1.0, 2.0).forEach { preset ->
+                    CURRENT_MULTIPLIER_TIERS.forEach { preset ->
                         TextButton(onClick = { onMultiplierChange(preset) }) {
-                            Text("${"%.1f".format(preset)}×", color = TextSecondary)
+                            Text("${"%.1f".format(preset)}×", color = if (multiplier == preset) NeonPurpleBright else TextSecondary)
                         }
                     }
                     Spacer(Modifier.weight(1f))
