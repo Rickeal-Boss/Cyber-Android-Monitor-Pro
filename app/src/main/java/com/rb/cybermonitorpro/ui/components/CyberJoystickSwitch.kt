@@ -3,6 +3,7 @@ package com.rb.cybermonitorpro.ui.components
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -28,6 +30,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rb.cybermonitorpro.HapticUtils
 import com.rb.cybermonitorpro.ui.theme.*
+import kotlinx.coroutines.launch          // ★ 修复 2026-08-06: scope.launch 需显式 import, cb8b186 漏配导致编译失败
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -84,16 +87,24 @@ fun CyberJoystickSwitch(
     val context = LocalContext.current
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
+    val scope = rememberCoroutineScope()
 
-    // ▸ 进度 0→1 — State<Float>, 不在 composition body 读 .value
-    val progress = animateFloatAsState(
-        targetValue = if (checked) 1f else 0f,
-        animationSpec = spring(
+    // ▸ 进度引擎: Animatable — 点击经 LaunchedEffect 弹簧; 拖拽经 snapTo 接管
+    //   (drag 松手后 animateTo 从拖拽位置回弹, 无视觉跳变)
+    val springSpec = remember {
+        spring<Float>(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessLow,
-        ),
-        label = "joystick_switch",
-    )
+        )
+    }
+    val progress = remember { Animatable(if (checked) 1f else 0f) }
+    LaunchedEffect(checked) {
+        progress.animateTo(if (checked) 1f else 0f, springSpec)
+    }
+
+    // ▸ pointerInput 闭包捕获的 checked/onCheckedChange 会陈旧 — 用 updatedState
+    val currentChecked by rememberUpdatedState(checked)
+    val currentOnCheckedChange by rememberUpdatedState(onCheckedChange)
 
     // ▸ 按压缩放 — 瞬时反馈
     val pressScale = animateFloatAsState(
@@ -117,7 +128,7 @@ fun CyberJoystickSwitch(
     val arcPx = with(density) { arcHeight.toPx() }
     val thumbDiameter = with(density) { (thumbR * 2f).toDp() }
 
-    // ══ 外层: 48dp 触控热区 + clickable ══
+    // ══ 外层: 48dp 触控热区 + clickable(点击) + pointerInput(拖拽) ══
     Box(
         modifier = modifier
             .defaultMinSize(minWidth = trackWidth, minHeight = 48.dp)
@@ -127,9 +138,42 @@ fun CyberJoystickSwitch(
                 role = Role.Switch,
                 onClick = {
                     try { HapticUtils.standardTap(context) } catch (_: Exception) {}
-                    onCheckedChange(!checked)
+                    currentOnCheckedChange(!currentChecked)
                 },
-            ),
+            )
+            // ▸ 水平拖拽: thumb 跟随手指, 松手过半即切换, 未过半弹回原位
+            .pointerInput(thumbStartX, thumbEndX) {
+                var dragBase = 0f
+                var accumulatedPx = 0f
+                val rangePx = (thumbEndX - thumbStartX).coerceAtLeast(1f)
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        dragBase = progress.value
+                        accumulatedPx = 0f
+                        scope.launch { progress.stop() }   // 停弹簧, drag 接管
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        accumulatedPx += dragAmount
+                        val p = (dragBase + accumulatedPx / rangePx).coerceIn(0f, 1f)
+                        scope.launch { progress.snapTo(p) }
+                    },
+                    onDragEnd = {
+                        val p = progress.value
+                        val newChecked = p > 0.5f
+                        if (newChecked != currentChecked) {
+                            try { HapticUtils.standardTap(context) } catch (_: Exception) {}
+                            currentOnCheckedChange(newChecked)  // LaunchedEffect 从拖拽位置弹到目标
+                        } else {
+                            // 未过半: 从拖拽位置弹回原态
+                            scope.launch { progress.animateTo(if (currentChecked) 1f else 0f, springSpec) }
+                        }
+                    },
+                    onDragCancel = {
+                        scope.launch { progress.animateTo(if (currentChecked) 1f else 0f, springSpec) }
+                    },
+                )
+            },
         contentAlignment = Alignment.Center,
     ) {
         // ══ 内层: 52×32 内容区 (轨道 + 拖尾 + 拇指) ══

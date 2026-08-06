@@ -75,7 +75,7 @@ fun MemoryDistributionCard(
 
             .shadow(elevation = 12.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlow)
             .cardGradientBorder(20.dp, hdrHighlight = true)
-            .cardRipple(),
+            .cardRipple(inset = 4.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
