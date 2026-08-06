@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.SensorItemInfo
 import com.rb.cybermonitorpro.data.model.SensorTypeMeta
+import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
@@ -89,6 +90,7 @@ private fun SensorItemCard(sensor: SensorItemInfo, onClick: () -> Unit, modifier
     Card(
         modifier
             .fillMaxWidth()
+            .cardGradientBorder(20.dp, hdrHighlight = true)
 
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(20.dp),

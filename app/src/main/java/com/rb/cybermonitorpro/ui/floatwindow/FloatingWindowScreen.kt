@@ -49,7 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
-import com.rb.cybermonitorpro.ui.components.CyberSwitch
+import com.rb.cybermonitorpro.ui.components.CyberJoystickSwitch
 import com.rb.cybermonitorpro.service.FloatingWindowConfig
 import com.rb.cybermonitorpro.service.FloatingWindowService
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
@@ -128,7 +128,7 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
                 Text(stringResource(R.string.float_enable), fontSize = 16.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f))
-                CyberSwitch(
+                CyberJoystickSwitch(
                     checked = enabled,
                     onCheckedChange = { v ->
                         if (v) {

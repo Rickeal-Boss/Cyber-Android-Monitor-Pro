@@ -56,7 +56,7 @@ import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.components.CardGradient
-import com.rb.cybermonitorpro.ui.components.CyberSwitch
+import com.rb.cybermonitorpro.ui.components.CyberJoystickSwitch
 import com.rb.cybermonitorpro.ui.effects.batteryTempBorderColor
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.revealLight
@@ -604,7 +604,7 @@ private fun DualCellToggleCard(
                         )
                     }
                 }
-                CyberSwitch(
+                CyberJoystickSwitch(
                     checked = checked,
                     onCheckedChange = onCheckedChange
                 )

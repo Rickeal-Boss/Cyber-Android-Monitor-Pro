@@ -36,6 +36,7 @@ import com.rb.cybermonitorpro.data.model.SensorItemInfo
 import com.rb.cybermonitorpro.data.model.SensorLiveData
 import com.rb.cybermonitorpro.data.model.SensorTypeMeta
 import com.rb.cybermonitorpro.ui.components.LightCircleBackButton
+import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
 
@@ -181,7 +182,7 @@ private fun SensorValueCard(
     val unit = meta?.unit?.takeIf { it.isNotEmpty() } ?: ""
 
     Card(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -441,7 +442,7 @@ private fun SensorChartCard(
     }
 
     Card(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -542,7 +543,7 @@ private fun SensorChartCard(
 @Composable
 private fun SensorInfoCard(sensor: SensorItemInfo, meta: SensorTypeMeta?) {
     Card(
-        Modifier.fillMaxWidth(),
+        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
