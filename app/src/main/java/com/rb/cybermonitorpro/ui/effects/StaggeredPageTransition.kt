@@ -34,6 +34,11 @@ import kotlin.math.abs
  *          Animatable KDoc 指定的动量续接做法。
  *       ② 双弹簧门控: 按 pagerState.isScrollInProgress 区分"跟手期"与"收尾期",
  *          跟手期高刚度临界阻尼硬跟随, 收尾期低刚度欠阻尼(0.92)做轻微弹性收敛。
+ *   v5.1/R1 (2026-08-07): 根因重定位 —— 跟手期 animateTo 即使临界阻尼仍存在稳态
+ *       跟踪误差 (~0.25-0.39 page), 这正是帧差分中"平台反弹/单帧突跳"的来源。
+ *       改为滑动期用 snapTo 硬跟手 (零滞后), 同时用 target 一阶差分估算速度;
+ *       收尾期仍用 animateTo 弹簧收敛, 并把估算速度作为 initialVelocity 传入,
+ *       保留惯性手感。
  *
  * 视觉等价性:
  *   v3 所有卡片的 smoothed 目标值与弹簧参数本就相同 (rawOffset 一致),
@@ -111,9 +116,14 @@ private val SPEC_SETTLE = spring<Float>(dampingRatio = SETTLE_DAMPING, stiffness
  * 只读取父层共享的弹簧状态做相位映射, 自身不运行任何动画:
  *   - 顶部卡片领动, 越靠下的卡片 [cascade] 越大 → 左右平移摆幅越大(鞭梢)
  *   - 动画仅更新 graphicsLayer 绘制层, 不重组卡片 content → 丝滑
+ *
+ * ★ R3 (2026-08-07): 移除 `composed { }` 包装, 改为 @Composable 扩展函数。
+ *   `composed` 会在 modifier 链中注入额外 composition 边界, 每个使用点都产生开销;
+ *   与 RevealLight (2026-06-21) 的优化一致, 状态读取直接发生在调用方 composition 上下文。
  */
 @Stable
-fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
+@Composable
+fun Modifier.staggeredSwipe(cardIndex: Int): Modifier {
     val progress = LocalStaggeredPageProgress.current
 
     // 级联因子只与 cardIndex 有关: 序号越大(越靠下)摆幅越大 → 鞭梢效应 (tip of the whip)
@@ -121,7 +131,7 @@ fun Modifier.staggeredSwipe(cardIndex: Int): Modifier = composed {
         (1f + cardIndex * STAGGER_STEP).coerceAtMost(MAX_CASCADE)
     }
 
-    this.graphicsLayer {
+    return this.graphicsLayer {
         // 在绘制阶段读状态 — 只失效 draw 层, 不触发组合
         // ★ 不做 early return — smoothed=0 时所有变换自动为 identity, 无突变/跳变;
         //   early return 会跳过赋值导致残留旧值, 回中时冻结在微小偏移上
@@ -178,7 +188,14 @@ fun StaggeredPageProvider(
         //   注: 不能改用 collect 顺序消费来"保留速度" —— collect 会等 animateTo 跑完才处理
         //   下一个 emission, 拖拽期间目标每 8ms 变一次, 会退化成台阶式跳动, 比现状更糟。
         //   正确做法(Animatable KDoc): 手动把上一段的末速度作为 initialVelocity 传回。
+        //
+        // ★ R1 (2026-08-07): 根因重定位 —— 跟手期 animateTo 即使临界阻尼仍存在稳态
+        //   跟踪误差 (~0.25-0.39 page), 造成帧差分中的"平台反弹/单帧突跳"。
+        //   分治策略: 滑动期用 snapTo 硬跟手 (零滞后), 同时用 target 一阶差分估算速度;
+        //   收尾期用 animateTo 弹簧收敛, initialVelocity 传入估算速度保留惯性。
         var carriedVelocity = 0f
+        var lastTarget = animatable.value
+        var lastSampleTime = System.nanoTime()
 
         // 目标值 + 是否处于滑动中 (含手指拖拽与松手后的 fling/snap) 一起收集,
         // snapshotFlow 自带相邻去重, 任一分量变化才发射。
@@ -186,17 +203,31 @@ fun StaggeredPageProvider(
             (page - (pagerState.currentPage + pagerState.currentPageOffsetFraction)) to
                 pagerState.isScrollInProgress
         }.collectLatest { (target, scrolling) ->
-            animatable.animateTo(
-                targetValue = target,
-                animationSpec = if (scrolling) SPEC_FOLLOW else SPEC_SETTLE,
-                initialVelocity = carriedVelocity
-            ) {
-                // 逐帧回调: 必须在这里抓速度。animateTo 被取消时抛 CancellationException,
-                // 调用点之后的代码不会执行, 且此时 velocity 已被 endAnimation() 清零。
-                carriedVelocity = velocity
+            if (scrolling) {
+                // 滑动期: snapTo 直接对齐 pager offset, 完全消除 animateTo 的稳态滞后。
+                // 用 target 一阶差分估算当前速度, 供收尾期 animateTo 的 initialVelocity 使用。
+                val now = System.nanoTime()
+                val dt = (now - lastSampleTime).toFloat() / 1_000_000_000f
+                if (dt in 0.001f..0.1f) {
+                    carriedVelocity = (target - lastTarget) / dt
+                }
+                lastTarget = target
+                lastSampleTime = now
+                animatable.snapTo(target)
+            } else {
+                // 收尾期: 弹簧收敛, 使用滑动期估算的末速度作为初始速度。
+                animatable.animateTo(
+                    targetValue = target,
+                    animationSpec = SPEC_SETTLE,
+                    initialVelocity = carriedVelocity
+                ) {
+                    carriedVelocity = velocity
+                }
+                // 正常跑完(弹簧收敛)时速度本就趋于 0, 显式归零避免残留动量污染下一段
+                carriedVelocity = 0f
+                lastTarget = target
+                lastSampleTime = System.nanoTime()
             }
-            // 正常跑完(弹簧收敛)时速度本就趋于 0, 显式归零避免残留动量污染下一段
-            carriedVelocity = 0f
         }
     }
 

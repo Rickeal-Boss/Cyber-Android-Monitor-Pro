@@ -105,8 +105,15 @@ fun Modifier.revealLight(
 
     return this
         .onGloballyPositioned { coordinates ->
-            elementWindowPos = coordinates.positionInWindow()
-            elementSize = Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat())
+            // ★ R4 (2026-08-07): 仅在位置/尺寸真正变化时才写 State,
+            //   避免滑动期间 onGloballyPositioned 每帧回调都触发 RevealLight 重组。
+            //   注意: window 坐标仍不可或缺, 因为需要将全局光照坐标映射到元素本地空间。
+            val newPos = coordinates.positionInWindow()
+            val newSize = Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat())
+            if (newPos != elementWindowPos || newSize != elementSize) {
+                elementWindowPos = newPos
+                elementSize = newSize
+            }
         }
         .then(
             // ★ 改为判空 shader 实例，而非每次 new

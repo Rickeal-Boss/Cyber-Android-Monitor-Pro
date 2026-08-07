@@ -67,26 +67,11 @@ fun GlowBackButton(
     val ctx = LocalContext.current
 
     // 微妙呼吸: 描边透明度缓慢起伏 (idle 状态下的"活着"提示)
-    val infiniteTransition = rememberInfiniteTransition(label = "breath")
-    val breathAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.25f,
-        targetValue = 0.55f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2200, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breathAlpha"
-    )
-    // 描边微微扩张/收缩
-    val breathScale by infiniteTransition.animateFloat(
-        initialValue = 1.0f,
-        targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2800, easing = EaseInOutCubic),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "breathScale"
-    )
+    // ★ R5 (2026-08-07): 移除 rememberInfiniteTransition 持续动画, 改为静态常量,
+    //   避免 GPU 每帧重绘。视觉静态态下 alpha 固定为 0.40f, 与呼吸中值等价。
+    //   注: GlowBackButton 当前在全项目内未被调用, 此改动仅为清理历史坑。
+    val breathAlpha = 0.40f
+    val breathScale = 1.0f
 
     // 按压缩小 (弹性反馈)
     val pressScale by animateFloatAsState(
