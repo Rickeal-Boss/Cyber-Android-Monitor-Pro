@@ -152,6 +152,12 @@ fun BatteryScreen(
         currentMultiplier = value
         appSettings.batteryCurrentMultiplier = value
     }
+    // 电流校准倍率总开关 state (关闭=不修正 1.0×, 开启=应用所选挡位)
+    var multiplierEnabled by remember { mutableStateOf(appSettings.batteryCurrentMultiplierEnabled) }
+    val onMultiplierEnabledChange: (Boolean) -> Unit = { value ->
+        multiplierEnabled = value
+        appSettings.batteryCurrentMultiplierEnabled = value
+    }
     val onDualCellChange: (Boolean) -> Unit = { enabled ->
         dualCellEnabled = enabled
         appSettings.dualCellBattery = enabled
@@ -208,6 +214,8 @@ fun BatteryScreen(
             "current_multiplier" -> BatteryCurrentMultiplierCard(
                 multiplier = currentMultiplier,
                 onMultiplierChange = onMultiplierChange,
+                enabled = multiplierEnabled,
+                onEnabledChange = onMultiplierEnabledChange,
                 title = stringResource(R.string.battery_current_multiplier_title),
                 subtitle = stringResource(R.string.battery_current_multiplier_subtitle),
                 resetLabel = stringResource(R.string.battery_current_multiplier_reset)
@@ -655,6 +663,8 @@ private fun snapTierIndex(raw: Float): Int =
 private fun BatteryCurrentMultiplierCard(
     multiplier: Double,
     onMultiplierChange: (Double) -> Unit,
+    enabled: Boolean,
+    onEnabledChange: (Boolean) -> Unit,
     title: String,
     subtitle: String,
     resetLabel: String
@@ -664,7 +674,14 @@ private fun BatteryCurrentMultiplierCard(
     var sliderIndex by remember(multiplier) { mutableFloatStateOf(multiplierToTierIndex(multiplier).toFloat()) }
     var isDragging by remember { mutableStateOf(false) }
     // 拖拽中头部显示「待确认挡位」实时预览，松手后回到实际生效值（兼容旧版遗留非挡位值）
-    val displayMultiplier = if (isDragging) CURRENT_MULTIPLIER_TIERS[snapTierIndex(sliderIndex)] else multiplier
+    // ★ 总开关关闭时强制显示 1.0× (不修正); 拖拽实时预览仅在开启时生效
+    val displayMultiplier = if (!enabled) {
+        1.0
+    } else if (isDragging) {
+        CURRENT_MULTIPLIER_TIERS[snapTierIndex(sliderIndex)]
+    } else {
+        multiplier
+    }
 
     Card(
         modifier = Modifier.fillMaxWidth()
@@ -695,12 +712,22 @@ private fun BatteryCurrentMultiplierCard(
                             )
                         }
                     }
-                    Text(
-                        "×${"%.1f".format(displayMultiplier)}",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = NeonPurpleBright
-                    )
+                    // ★ 右分组: 当前生效倍率 + 赛博摇杆开关 (复用 CyberJoystickSwitch 样式)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            "×${"%.1f".format(displayMultiplier)}",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (enabled) NeonPurpleBright else TextSecondary.copy(alpha = 0.5f)
+                        )
+                        CyberJoystickSwitch(
+                            checked = enabled,
+                            onCheckedChange = onEnabledChange
+                        )
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 // ★ 自由滑动（steps=0）：valueRange=0..3 映射 4 挡，松手时 snap 到最近挡位
@@ -719,6 +746,7 @@ private fun BatteryCurrentMultiplierCard(
                     },
                     valueRange = 0f..(CURRENT_MULTIPLIER_TIERS.size - 1).toFloat(),
                     steps = 0,
+                    enabled = enabled,
                     modifier = Modifier.fillMaxWidth(),
                     colors = SliderDefaults.colors(
                         thumbColor = NeonPurpleBright,
@@ -740,6 +768,7 @@ private fun BatteryCurrentMultiplierCard(
                     CURRENT_MULTIPLIER_TIERS.forEach { preset ->
                         TextButton(
                             onClick = { onMultiplierChange(preset) },
+                            enabled = enabled,
                             modifier = Modifier.weight(1f).defaultMinSize(minWidth = 1.dp, minHeight = 32.dp),
                             contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
                         ) {
@@ -753,6 +782,7 @@ private fun BatteryCurrentMultiplierCard(
                     }
                     TextButton(
                         onClick = { onMultiplierChange(1.0) },
+                        enabled = enabled,
                         modifier = Modifier.defaultMinSize(minWidth = 1.dp, minHeight = 32.dp),
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                     ) {

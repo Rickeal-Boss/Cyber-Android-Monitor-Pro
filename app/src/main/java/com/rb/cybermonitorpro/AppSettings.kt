@@ -77,6 +77,13 @@ class AppSettings private constructor(context: Context) {
             putFloat("battery_current_multiplier", value.toFloat().coerceIn(1.0f, 1000.0f))
         }
 
+    // ── 电池电流校准倍率总开关 ──
+    // false = 关闭 (不修正, 强制 1.0×, 默认值); true = 开启, 应用 batteryCurrentMultiplier 所选挡位。
+    // 关闭时仍保留已选挡位, 重新开启即恢复, 不丢用户设置 (数据层在 BatteryDataSource 统一裁决)。
+    var batteryCurrentMultiplierEnabled: Boolean
+        get() = prefs.getBoolean("battery_current_multiplier_enabled", false)
+        set(value) = prefs.edit { putBoolean("battery_current_multiplier_enabled", value) }
+
     // ── 概览页卡片排序 (逗号分隔的卡片 ID) ──
     // 指标卡: cpu_temp, mem_usage, battery_level, gpu_load
     // 快速访问: cpu, gpu, mem, net, gps, device, battery, sensor

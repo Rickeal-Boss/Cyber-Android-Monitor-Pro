@@ -269,7 +269,9 @@ class BatteryDataSource(private val context: Context) {
         //   解决 ColorOS 等 OEM ROM 的 oplus_chg / BATTERY_PROPERTY_CURRENT_NOW 因单位或
         //   增益偏差导致的读数不准。倍率在此单一总入口施加，自然流向瓦特/内阻等派生指标。
         val (rawCurrentUA, source0) = getCurrentNowFull()
-        val currentMultiplier = AppSettings.getInstance(appContext).batteryCurrentMultiplier
+        // ★ 校准倍率总开关: 关闭则强制 1.0× (不修正), 保留已选挡位供重新开启时恢复
+        val appSettingsCur = AppSettings.getInstance(appContext)
+        val currentMultiplier = if (appSettingsCur.batteryCurrentMultiplierEnabled) appSettingsCur.batteryCurrentMultiplier else 1.0
         // currentUA / currentSource 作为单一真源: 下游瓦特/内阻/充放电判定与归一化统一引用
         var currentUA = (rawCurrentUA * currentMultiplier).toLong()
         var currentSource = source0
