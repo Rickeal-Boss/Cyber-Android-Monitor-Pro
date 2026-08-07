@@ -65,6 +65,7 @@ data class DeviceDetailInfo(
     // ── USB (增强) ──
     var usbVersion: String = "",              // USB 2.0 / USB 3.0 / USB 3.1 / USB 3.2
     var usbTypeC: Boolean = false,            // 是否 Type-C
+    var usbMicroUsb: Boolean = false,         // 是否 Micro-USB（推断：非 Type-C 口型）
     var usbHostMode: Boolean = false,         // USB Host 模式
 
     // ── Bluetooth (增强) ──

@@ -325,6 +325,7 @@ fun DeviceScreen(
                     FormatUtils.joinNonBlank(" · ",
                         detail?.usbVersion?.takeIf { it.isNotEmpty() } ?: "USB",
                         if (detail?.usbTypeC == true) "Type-C" else null,
+                        if (detail?.usbMicroUsb == true) "Micro-USB" else null,
                         if (detail?.usbHostMode == true) "Host" else null
                     )
                 )

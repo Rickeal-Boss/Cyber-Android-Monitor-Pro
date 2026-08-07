@@ -977,18 +977,20 @@ class DeviceDetailDataSource(private val context: Context) {
             val pm = context.packageManager
             info.usbHostMode = pm.hasSystemFeature("android.hardware.usb.host")
 
+            // Type-C 检测：仅基于物理口型相关信号（不与配件模式混淆）
+            // 1) OEM 板级属性（主信号）
+            val typecProp = SysFsReader.readProp("ro.hardware.usb.typec")
+            // 2) 内核 typec class 注册（OEM 无关；新内核迁移至 /sys/bus/typec，两路都查）
+            val typecSysfs = SysFsReader.fileExists("/sys/class/typec")
+                || SysFsReader.fileExists("/sys/bus/typec")
+            // 注意：android.hardware.usb.accessory 是 USB 配件模式(AOA 协议)，与物理口型无关，不可作 Type-C 判据
+            info.usbTypeC = typecProp == "1" || typecProp == "true" || typecSysfs
+
+            // MicroUSB：无干净负向 sysprop；非 Type-C 的 Android 手机口型几乎都是 MicroUSB（推断）
+            info.usbMicroUsb = !info.usbTypeC
+
             // USB 版本: 仅基于实际 sysfs/usb_speed 属性
             info.usbVersion = try {
-                val usbConfig = SysFsReader.readProp("ro.usb.config")
-                    .ifEmpty { SysFsReader.readProp("persist.sys.usb.config") }
-
-                // Type-C 检测
-                info.usbTypeC = try {
-                    val hasTypeC = SysFsReader.readProp("ro.hardware.usb.typec")
-                    hasTypeC == "1" || hasTypeC == "true" ||
-                        pm.hasSystemFeature("android.hardware.usb.accessory")
-                } catch (_: Throwable) { false } // ★ 修复(F1): 异常时不假设 Type-C (原 true 致误显)
-
                 // USB 版本: 仅基于实际属性读取
                 when {
                     pm.hasSystemFeature("android.hardware.usb.host") -> {
@@ -1002,7 +1004,7 @@ class DeviceDetailDataSource(private val context: Context) {
                             else -> ""  // 无法确定时不推断
                         }
                     }
-                    else -> "USB 2.0"
+                    else -> ""  // ★ 修复(F3): 原写死 "USB 2.0" 与上面哲学矛盾，改为不推断
                 }
             } catch (_: Throwable) { "" }
 
