@@ -1,7 +1,6 @@
 package com.rb.cybermonitorpro.ui.effects
 
 import android.os.Build
-import android.graphics.RuntimeShader
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,7 +17,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
@@ -94,9 +92,14 @@ fun Modifier.revealLight(
     // ¡ï ÐÂÔö£ºper-element »º´æ RuntimeShader ÊµÀý£¨Ã¿ÔªËØÉúÃüÖÜÆÚÄÚÖ»±àÒëÒ»´Î£©
     //   ²»ÄÜÓÃÄ£¿é¼¶µ¥Àý ¡ª 1) RuntimeShader ÊÇ API 33+ Àà£¬¶¥²ã val »áÖÂ API<33 Àà¼ÓÔØ±ÀÀ£
     //   2) µ¥Àý¿çÔªËØ¹²Ïí uniform ÓÐ´®É«·çÏÕ£¨display list »Ø·ÅÊ± uniform ±»¸²¸Ç£©
-    val shader = remember {
+    // FIX 2026-08-07 (startup crash, Samsung Android 8.0 / API 26, release):
+    //   Declared as Any? NOT RuntimeShader? -- Kotlin emits CHECKCAST outside the
+    //   SDK_INT guard for a RuntimeShader? type, ART resolves the class unconditionally
+    //   -> NoClassDefFoundError on API < 33. Real AGSL impl lives in RevealLightAgsl.kt
+    //   (never loaded on old devices).
+    val shader: Any? = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            try { RuntimeShader(SHADER_REVEAL_LIGHT) } catch (_: Exception) { null }
+            createRevealLightShader()
         } else null
     }
 
@@ -107,8 +110,10 @@ fun Modifier.revealLight(
         }
         .then(
             // ¡ï ¸ÄÎªÅÐ¿Õ shader ÊµÀý£¬¶ø·ÇÃ¿´Î new
-            if (useAGSL && shader != null) {
-                revealLightAGSL(shader, animatedPos, elementWindowPos, elementSize, radiusPx, effectiveIntensity, lightColor, isActive)
+            // FIX 2026-08-07: explicit SDK_INT check REQUIRED for lint NewApi
+            //   (shader != null alone is enough at runtime, but lint does not treat it as a guard).
+            if (useAGSL && shader != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                revealLightAgslImpl(shader, animatedPos, elementWindowPos, elementSize, radiusPx, effectiveIntensity, lightColor, isActive)
             } else {
                 revealLightCanvas(animatedPos, elementWindowPos, elementSize, radiusPx, effectiveIntensity, lightColor, isActive)
             }
@@ -166,72 +171,4 @@ private fun Modifier.revealLightCanvas(
         radius = maxOf(size.width, size.height) * 1.2f,
         center = localLightCenter
     )
-}
-
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•?
-//  AGSL ç€è‰²å™¨å®žçŽ° (API 33+ â€? GPU åŽŸç”Ÿç¡¬ä»¶åŠ é€?)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•?
-
-private val SHADER_REVEAL_LIGHT = """
-    uniform float2 uLightCenter;
-    uniform float uRadius;
-    uniform float3 uColor;
-    uniform float uIntensity;
-    uniform float uActive;
-
-    half4 main(float2 fragCoord) {
-        if (uActive < 0.5) {
-            return half4(0.0);
-        }
-        float2 delta = fragCoord - uLightCenter;
-        float dist = length(delta);
-        float falloff = 1.0 - smoothstep(0.0, uRadius, dist);
-        falloff = pow(falloff, 1.5);
-        return half4(uColor.r, uColor.g, uColor.b, falloff * uIntensity);
-    }
-""".trimIndent()
-
-/**
- * AGSL RuntimeShader GPU åŠ é€Ÿè·¯å¾? (API 33+)
- */
-// ¡ï Ç©ÃûÐÂÔö shader: RuntimeShader ²ÎÊý£¨µ÷ÓÃ·½ remember ´«Èë£¬²»ÔÙÄÚ²¿ new£©
-private fun Modifier.revealLightAGSL(
-    shader: RuntimeShader,
-    animatedPos: Offset,
-    elementWindowPos: Offset,
-    elementSize: Size,
-    radiusPx: Float,
-    intensity: Float,
-    lightColor: Color,
-    isActive: Boolean,
-): Modifier = this.drawWithContent {
-    drawContent()
-
-    if (!isActive || intensity < 0.001f) return@drawWithContent
-
-    // ¡ï ±£Áô try/catch ·ÀÓù ¡ª ÍòÒ» AGSL Çý¶¯ÓÅ»¯µôÎ´ÓÃ uniform£¬setFloatUniform Å×Òì³£Ê±¾²Ä¬½µ¼¶
-    try {
-        val localCenter = Offset(
-            x = animatedPos.x - elementWindowPos.x,
-            y = animatedPos.y - elementWindowPos.y
-        )
-
-        val buffer = radiusPx * 0.3f
-        if (localCenter.x < -buffer || localCenter.x > elementSize.width + buffer ||
-            localCenter.y < -buffer || localCenter.y > elementSize.height + buffer) {
-            return@drawWithContent
-        }
-
-        // ¡ï ¸´ÓÃ´«ÈëÊµÀý£¬Ã¿Ö¡Ö»¸üÐÂ uniform£¬Áã·ÖÅä
-        shader.apply {
-            setFloatUniform("uLightCenter", localCenter.x, localCenter.y)
-            setFloatUniform("uRadius", radiusPx)
-            setFloatUniform("uColor", lightColor.red, lightColor.green, lightColor.blue)
-            setFloatUniform("uIntensity", intensity)
-            setFloatUniform("uActive", 1.0f)
-        }
-        drawRect(brush = ShaderBrush(shader))
-    } catch (_: Exception) {
-        // AGSL ²»¿ÉÓÃÊ±¾²Ä¬½µ¼¶
-    }
 }
