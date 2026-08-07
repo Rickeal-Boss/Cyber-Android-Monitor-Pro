@@ -64,6 +64,40 @@ object CpuCache {
     // 天玑家族兜底模式：提升为常量，避免每次 lookup 重新编译正则
     private val DIMENSITY_PATTERN = Regex("mt(67|68|69)\\d{2}")
 
+    // ═══ 天玑营销后缀归一化 (Ultra/Max/+/Ultimate/Turbo/Apex/Energy/Elite/Pro/X/e) ═══
+    //   仅用于查找, 不用于显示 (UI 保留 OEM 营销名)。
+    //   背景: 三星/OEM 在 ro.chipname / ro.hardware.chipname / ro.chipset 写入带后缀营销名
+    //   (如 Dimensity 8300-Ultra / mt6897-ultra), 归一化到基础硅片号再查表。
+    //   映射表仅含项目 KNOWN_CHIPS 中真实存在的天玑型号 (硅片号已逐条核对),
+    //   不为每个 Ultra 变体新增条目 — 它们与基础型号同规格。
+
+    /** 营销名 → 硅片号 (层2): 仅映射 KNOWN_CHIPS 中真实存在的型号, 避免错配 */
+    internal val DIMENSITY_MARKETING_TO_SILICON = mapOf(
+        "dimensity 9300" to "mt6989",  // 9300 / 9300+
+        "dimensity 8400" to "mt6899",
+        "dimensity 8300" to "mt6897",
+        "dimensity 7300" to "mt6878",
+        "dimensity 9200" to "mt6983",
+        "dimensity 9000" to "mt6985",  // 9000 / 9000+
+        "dimensity 8200" to "mt6896",
+        "dimensity 7200" to "mt6886",
+        "dimensity 1080" to "mt6879",
+        "dimensity 1200" to "mt6893",
+        "dimensity 8100" to "mt6895",
+    )
+
+    /** 营销后缀剥离正则 (层1): -ultra / -max / ultra / x / e / plus ... (空格或短横可选) */
+    private val MARKETING_SUFFIX_PATTERN = Regex(
+        """[\s\-]?(?:ultra|ultimate|turbo|apex|energy|elite|pro|max|plus|x|e)$""",
+        RegexOption.IGNORE_CASE
+    )
+
+    /** 紧贴数字的 U 后缀 (如 "MT6989U" → "MT6989") */
+    private val TRAILING_U_PATTERN = Regex("""(?<=\d)u$""", RegexOption.IGNORE_CASE)
+
+    /** "+" 后缀 (如 "Dimensity 9300+") */
+    private val PLUS_SUFFIX_PATTERN = Regex("""\+$""")
+
     val KNOWN_CHIPS: Map<String, KnownChip> = mapOf(
 
         // ═══ Snapdragon 865 (SM8250) — kona ═══
@@ -522,10 +556,60 @@ object CpuCache {
 
     // ═══════════════ 方法 ═══════════════
 
+    /**
+     * 剥离天玑营销后缀, 归一化到基础标识 (层1)。
+     *   "Dimensity 9300-Ultra" → "dimensity 9300"
+     *   "mt6897-ultra"         → "mt6897"
+     *   "MT6989U"              → "mt6989"
+     *   "MediaTek Dimensity 8300-Ultra" → "dimensity 8300"
+     * 仅用于查找, 不用于显示 (UI 保留 OEM 营销名)。
+     */
+    internal fun stripMarketingSuffix(input: String): String {
+        var s = input.trim().lowercase()
+        // 厂商前缀 (ro.chipset 常返回 "MediaTek Dimensity 8300-Ultra")
+        s = s.removePrefix("mediatek ").removePrefix("mtk ")
+        // "+" 后缀 (Dimensity 9300+)
+        s = PLUS_SUFFIX_PATTERN.replace(s, "")
+        // 营销后缀 (-ultra / -max / ultra / x / e ...)
+        s = MARKETING_SUFFIX_PATTERN.replace(s, "")
+        // 紧贴数字的 U 后缀 (MT6989U → mt6989)
+        s = TRAILING_U_PATTERN.replace(s, "")
+        return s.trim()
+    }
+
+    /**
+     * 营销名 → 硅片号 (层2)。不匹配返回 null。
+     *   "dimensity 9300" → "mt6989"
+     *   "dimensity 8300" → "mt6897"
+     */
+    internal fun marketingToSiliconId(input: String): String? {
+        val normalized = stripMarketingSuffix(input)
+        DIMENSITY_MARKETING_TO_SILICON[normalized]?.let { return it }
+        // 去空格形式 (dimensity9300) 兜底
+        DIMENSITY_MARKETING_TO_SILICON[normalized.replace(" ", "")]?.let { return it }
+        return null
+    }
+
     fun lookup(platform: String): KnownChip? {
         // ★ 规范化: 去空格/换行 + 小写
         val raw = platform.lowercase().trim()
         if (raw.isEmpty()) return null
+
+        // ★ 天玑营销后缀归一化 (Ultra/Max/+/Ultimate/Turbo...):
+        //   三星/OEM 在 ro.chipname 等属性写入带后缀营销名 (Dimensity 8300-Ultra / mt6897-ultra),
+        //   归一化到基础硅片号后再走既有匹配链, 避免 "mt6897-ultra" 落入 DIMENSITY 兜底分支
+        //   显示错误芯片名 (Dimensity 6897) 与空白制程。仅用于查找, UI 显示保留 OEM 营销名。
+        val normalizedInput = stripMarketingSuffix(raw)
+        if (normalizedInput != raw) {
+            // 硅片号形式 (mt6897-ultra → mt6897) 直命中
+            KNOWN_CHIPS[normalizedInput]?.let { return it }
+            KNOWN_CHIPS.values.firstOrNull { it.platformId == normalizedInput }?.let { return it }
+            // 营销名形式 (dimensity 8300-ultra → dimensity 8300 → mt6897) 经映射命中
+            marketingToSiliconId(normalizedInput)?.let { sid ->
+                KNOWN_CHIPS[sid]?.let { return it }
+                KNOWN_CHIPS.values.firstOrNull { it.platformId == sid }?.let { return it }
+            }
+        }
 
         // ★ 按优先级依次尝试匹配
         // 策略1: 精确 key 匹配

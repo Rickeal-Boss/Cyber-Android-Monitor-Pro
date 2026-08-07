@@ -782,10 +782,20 @@ class DeviceDetailDataSource(private val context: Context) {
 
             // 策略1: 精确查表 (每项标识符分别尝试)
             for (socModel in socCandidates) {
-                val processNode = SOC_PROCESS_MAP[socModel]
-                if (processNode != null) {
-                    info.socProcessNode = processNode
+                // 策略1a: 精确查表 (硅片号/营销号直接命中)
+                SOC_PROCESS_MAP[socModel]?.let {
+                    info.socProcessNode = it
                     info.socProcessNodeSource = "lookup:$socModel"
+                    return
+                }
+                // 策略1b: 天玑营销后缀归一化 (Dimensity 8300-Ultra / mt6897-ultra → MT6897)
+                //   SOC_PROCESS_MAP key 为大写硅片号 (MT6897), 故归一化后转大写再查。
+                //   仅用于查找; UI 显示仍保留 OEM 营销名。
+                val stripped = CpuCache.stripMarketingSuffix(socModel)
+                val normalizedKey = (CpuCache.marketingToSiliconId(stripped) ?: stripped).uppercase()
+                SOC_PROCESS_MAP[normalizedKey]?.let {
+                    info.socProcessNode = it
+                    info.socProcessNodeSource = "lookup:$normalizedKey (from $socModel)"
                     return
                 }
             }
