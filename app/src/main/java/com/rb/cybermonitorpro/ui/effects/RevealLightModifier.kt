@@ -24,22 +24,22 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 
-/** ȫ�ֹ��յ���ʱ�� (ms) �� IDLE ʱǿ�Ƚ��� (ԭ 1200 ����, ָ��ͣ���Ժ�� ~2-3s; ��խ�� 800 ���ٻ���) */
+/** 全局光照淡出时长 (ms) — IDLE 时强度渐隐 (原 1200 过长, 指针停下仍红绘 ~2-3s; 收窄到 800 快速回落) */
 private const val GLOBAL_LIGHT_FADE_OUT_MS = 800
 
 /**
- * Windows 10 Fluent Design �? Reveal Light 光照效果 Modifier
+ * Windows 10 Fluent Design Reveal Light 光照效果 Modifier
  *
- * 性能迁移 (2026-06-21): 移除 `composed { }` 包装，改为直�? `@Composable fun Modifier.revealLight()`�?
- * `composed` 会在 modifier 链中注入额外 composition 边界，每个使�? revealLight 的组�? (InfoCard�?
- * MetricCard、Dashboard 等多�?) 都会产生额外开销。改�? @Composable 函数声明后，组合状态读�?
- * 直接发生在调用方�? composition 上下文中，无额外边界�?
+ * 性能迁移 (2026-06-21): 移除 `composed { }` 包装，改为直接 `@Composable fun Modifier.revealLight()`。
+ * `composed` 会在 modifier 链中注入额外 composition 边界，每个使用 revealLight 的组件 (InfoCard、
+ * MetricCard、Dashboard 等多个) 都会产生额外开销。改为 @Composable 函数声明后，组合状态读取
+ * 直接发生在调用方的 composition 上下文中，无额外边界。
  *
  * 核心算法 (基于 Microsoft RevealBrush):
- * 1. �? CompositionLocal (LocalLightState) 获取全局光照动画位置
+ * 1. 通过 CompositionLocal (LocalLightState) 获取全局光照动画位置
  * 2. 通过 onGloballyPositioned 获知元素在窗口中的位置和尺寸
- * 3. 将全局光照坐标映射到元素本地坐标空�?
- * 4. 若光照点在元素范围内 �? 绘制径向渐变光斑
+ * 3. 将全局光照坐标映射到元素本地坐标空间
+ * 4. 若光照点在元素范围内，绘制径向渐变光斑
  *
  * @param radius 光照半径, 默认 180.dp
  * @param intensity 悬停光照强度, 0-1, 默认 0.25f
@@ -69,19 +69,19 @@ fun Modifier.revealLight(
         GlobalLightState.Mode.IDLE -> 0f
     }
 
-    // �� ��������: IDLE ʱǿ�������� tween ����; ��ͣ/����ʱ���� spring ��Ӧ, ���ָ���
+    // ★ 缓慢淡出: IDLE 时强度以慢速 tween 渐隐; 悬停/触摸时快速 spring 响应, 保持跟手
     val effectiveIntensity by animateFloatAsState(
         targetValue = targetIntensity,
         animationSpec = if (lightState.mode == GlobalLightState.Mode.IDLE) {
             tween(durationMillis = GLOBAL_LIGHT_FADE_OUT_MS, easing = FastOutSlowInEasing)
         } else {
-            // �� ԭ LowBouncy �� ָ������ƶ�ʱǿ��ֵ���嶶��, ������洰��; �� NoBouncy �Ӿ����켫С
+            // ★ 原 LowBouncy — 指针快速移动时强度值过冲抖动, 拉长红绘窗口; 改 NoBouncy 视觉差异极小
             spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium)
         },
         label = "lightIntensity"
     )
 
-    // �� �����ڼ� mode ��Ϊ IDLE ��ǿ�����ڽ���, ���ԡ�����ǿ��>0���ж���Ծ, ���򵭳���;������
+    // ★ 淡出期间 mode 已为 IDLE 但强度仍在渐隐, 故以「动画强度>0」判定活跃, 否则淡出中途被跳过
     val isActive = lightState.visible &&
             animatedPos.x.isFinite() && animatedPos.y.isFinite() &&
             animatedPos.x >= 0 && animatedPos.y >= 0 &&
@@ -89,9 +89,9 @@ fun Modifier.revealLight(
 
     val radiusPx = with(density) { radius.toPx() }
 
-    // �� ������per-element ���� RuntimeShader ʵ����ÿԪ������������ֻ����һ�Σ�
-    //   ������ģ�鼶���� �� 1) RuntimeShader �� API 33+ �࣬���� val ���� API<33 ����ر���
-    //   2) ������Ԫ�ع��� uniform �д�ɫ���գ�display list �ط�ʱ uniform �����ǣ�
+    // ★ 新增：per-element 缓存 RuntimeShader 实例（每个元素生命周期内只编译一次）
+    //   不能用模块级单例 — 1) RuntimeShader 是 API 33+ 类，顶层 val 会致 API<33 类加载崩溃
+    //   2) 单例跨元素共享 uniform 有串色风险（display list 回放时 uniform 被覆盖）
     // FIX 2026-08-07 (startup crash, Samsung Android 8.0 / API 26, release):
     //   Declared as Any? NOT RuntimeShader? -- Kotlin emits CHECKCAST outside the
     //   SDK_INT guard for a RuntimeShader? type, ART resolves the class unconditionally
@@ -109,7 +109,7 @@ fun Modifier.revealLight(
             elementSize = Size(coordinates.size.width.toFloat(), coordinates.size.height.toFloat())
         }
         .then(
-            // �� ��Ϊ�п� shader ʵ��������ÿ�� new
+            // ★ 改为判空 shader 实例，而非每次 new
             // FIX 2026-08-07: explicit SDK_INT check REQUIRED for lint NewApi
             //   (shader != null alone is enough at runtime, but lint does not treat it as a guard).
             if (useAGSL && shader != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -120,16 +120,16 @@ fun Modifier.revealLight(
         )
 }
 
-// ══════════════════════════════════════════════════════════════�?
-//  Canvas 实现 (API 21+ �? 全版本兼�?)
-// ══════════════════════════════════════════════════════════════�?
+// ══════════════════════════════════════════════════════════════════════════════
+//  Canvas 实现 (API 21+ 全版本兼容)
+// ══════════════════════════════════════════════════════════════════════════════════════════
 
 /**
- * Canvas 径向渐变路径 �? 兼容所�? API 级别 (21+)
+ * Canvas 径向渐变路径，兼容所有 API 级别 (21+)
  *
- * 渐变结构 (4 �? alpha 阶梯):
- *   center �? edge
- *   [intensity] �? [intensity*0.5] �? [intensity*0.15] �? [0.0]
+ * 渐变结构 (4 级 alpha 阶梯):
+ *   center → edge
+ *   [intensity] → [intensity*0.5] → [intensity*0.15] → [0.0]
  */
 private fun Modifier.revealLightCanvas(
     animatedPos: Offset,

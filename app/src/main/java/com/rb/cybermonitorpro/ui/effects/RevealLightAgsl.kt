@@ -11,11 +11,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ShaderBrush
 
 /**
- * AGSL RuntimeShader GPU 加速路径 (API 33+)。
+ * AGSL RuntimeShader GPU 加速绘制路径 (API 33+)。
  *
  * 此文件独占全部 android.graphics.RuntimeShader 引用。低版本设备永远不会加载本类
  * (调用方 RevealLightModifier 以 Any? 传句柄, ART 按方法惰性解析, 故低版本永不解析
  * RuntimeShader 类型), 从根上规避 NoClassDefFoundError 启动闪退。
+ *
+ * 【为什么必须独立成文件 — 三星 Android 8.0 / API 26 实测崩溃根因】
+ * 原实现把 `RuntimeShader` 类型写在了 revealLight() 方法体内 (remember 返回值被推断为
+ * RuntimeShader?), 即便外裹 `if (SDK_INT >= TIRAMISU)` 守卫, Kotlin 仍会在守卫【之外】
+ * 生成 `CHECKCAST android/graphics/RuntimeShader` 来强转 remember 返回值。ART 执行该指令前
+ * 必须先解析这个类 — API 26 上该类不存在 → NoClassDefFoundError。R8 的 API modeling 把它抽成
+ * $$ExternalSyntheticApiModelOutline0.m()(寄生无关 ComponentDialog), 调用点仍无条件执行,
+ * 守卫形同虚设, 故 debug 不重现、仅 release 崩。
+ *
+ * 【正确做法】把高版本 API 类型彻底隔离到本文件, 调用方只用 `Any` 传递句柄。ART 按方法惰性
+ * 解析: 低版本永远走不到这里, RevealLightAgslKt 这个类就永远不会被加载 → 无解析 → 不崩。
+ *
+ * 【第二层防御】catch 一律用 Throwable —— NoClassDefFoundError 是 Error 子类, catch (Exception)
+ * 根本抓不住它。
  *
  * 绘制逻辑与 uniform 与改动前 (dc634b2 之前) 一字未改, API 33+ 视觉应像素级一致。
  */
