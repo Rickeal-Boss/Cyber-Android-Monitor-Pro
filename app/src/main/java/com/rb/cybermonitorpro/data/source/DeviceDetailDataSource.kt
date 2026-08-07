@@ -20,6 +20,7 @@ import android.telephony.TelephonyManager
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
+import androidx.core.content.ContextCompat
 import com.rb.cybermonitorpro.data.model.CameraSensorInfo
 import com.rb.cybermonitorpro.data.model.DeviceDetailInfo
 import com.rb.cybermonitorpro.util.waitForWithTimeout
@@ -33,6 +34,30 @@ class DeviceDetailDataSource(private val context: Context) {
     companion object {
         private const val TAG = "DeviceDetailDS"
         private val WIDEVINE_UUID = UUID.fromString("edef8ba9-79d6-4ace-a3c8-27dcd51d21ed")
+
+        /** Vulkan 版本串 sanity 校验: 1.3 / 1.3.128 形态; 用于过滤 ro.hardware.vulkan 的 HAL 名 */
+        private val VK_VERSION_REGEX = Regex("""^\d+\.\d+(\.\d+)?$""")
+
+        /** BluetoothAdapter.getAddress() 自 Android 6.0 (API 23) 起对所有第三方应用返回的常量假值
+         *  依据: developer.android.com/about/versions/marshmallow/android-6.0-changes (核验 2026-08-07)
+         *  该限制无权限可豁免 —— 即便持有 BLUETOOTH_CONNECT 也仍返回此值。 */
+        private const val BT_ADDRESS_PLACEHOLDER = "02:00:00:00:00:00"
+
+        /** 语义键 — 与 strings.xml 中同名条目一一对应，由 UI 解析为本地化文案 */
+        private const val BT_NAME_NEEDS_PERMISSION = "bt_name_needs_permission"
+        private const val BT_ADDRESS_RESTRICTED = "bt_address_restricted"
+
+        // ═══════════════════════════════════════════
+        //  相机朝向语义键 — 替代旧实现直接写中文字面
+        // ═══════════════════════════════════════════
+        /** 与 strings.xml 同名条目一一对应: camera_facing_back / front / external / unknown */
+        private const val CAMERA_FACING_BACK = "camera_facing_back"
+        private const val CAMERA_FACING_FRONT = "camera_facing_front"
+        private const val CAMERA_FACING_EXTERNAL = "camera_facing_external"
+        private const val CAMERA_FACING_UNKNOWN = "camera_facing_unknown"
+        private const val CAMERA_FLASH = "camera_flash"
+        /** 3 级兜底: 系统声明有前置但两层枚举都拿不到时填充的占位 id */
+        private const val LEGACY_FRONT_PLACEHOLDER_ID = "front_unknown"
 
         /** SoC 型号 → 制程工艺 查找表
          *
@@ -533,25 +558,61 @@ class DeviceDetailDataSource(private val context: Context) {
     }
 
     // ═══════════════════════════════════════════
-    //  Vulkan — 扩展
+    //  Vulkan — 真实扩展枚举 (native) + OEM 提示兜底
     // ═══════════════════════════════════════════
+    //  ★ 重构 (2026-08-07):
+    //    此前 vulkanExtensions / vulkanDeviceCount 从未被赋值，DeviceScreen 的
+    //    Vulkan 扩展区块 (DeviceScreen.kt:172-199) 是永不执行的死代码。
+    //    现由 VulkanProbe (JNI + dlopen libvulkan.so) 提供真实枚举。
+    //
+    //    光追判据链为 OR 语义，任一命中即判定支持；OEM 提示判据全部保留不移除：
+    //      0) 真实扩展枚举命中 ray_tracing_pipeline / ray_query / VK_NV_ray_tracing → "vulkan-ext"  (实测)
+    //      1) systemAvailableFeatures 里含 vulkan+ray 的 feature 名                 → "feature-name" (推断)
+    //      2) hasSystemFeature("android.hardware.vulkan.ray_tracing")               → "system-feature"(推断)
+    //      3) ro.vendor.gpu.ray_tracing == 1/true                                   → "vendor-prop"  (推断)
+    //    真实枚举不可用时 (API<24 / 非 arm64-v8a / 无 Vulkan 驱动) 自动退化为原有
+    //    1)~3) 链，行为与重构前完全一致。
     private fun collectVulkan(info: DeviceDetailInfo) {
         try {
             val pm = context.packageManager
+
+            // ── 0. native 真实枚举（第 0 优先级，唯一可信来源）──
+            val probe = VulkanProbe.probe()
+            if (probe != null) {
+                info.vulkanExtensions = probe.extensions
+                info.vulkanDeviceCount = probe.deviceCount
+                if (probe.gpuName.isNotEmpty()) info.vulkanGpuName = probe.gpuName
+                // VkPhysicalDeviceProperties.apiVersion 精确到 patch，优于 feature 的 major.minor
+                if (probe.apiVersion.isNotEmpty()) info.vulkanVersion = probe.apiVersion
+                if (VulkanProbe.isRayTracingCapable(probe)) {
+                    info.rayTracingSupported = true
+                    info.rayTracingSource = "vulkan-ext"
+                }
+            }
+
+            // ── 1. PackageManager features（版本/硬件级别来源 + 光追判据 1）──
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 val features = pm.systemAvailableFeatures
                 for (f in features) {
                     val name = f.name ?: continue
                     when {
-                        name == "android.hardware.vulkan.version" -> info.vulkanVersion = extractVulkanVersion(f)
+                        // native 已给出精确版本时不回退覆盖
+                        name == "android.hardware.vulkan.version" ->
+                            if (info.vulkanVersion.isEmpty()) info.vulkanVersion = extractVulkanVersion(f)
                         name == "android.hardware.vulkan.level" -> info.vulkanApiLevel = extractVulkanLevel(f)
-                        name.contains("vulkan") && name.contains("ray") -> info.rayTracingSupported = true
+                        name.contains("vulkan") && name.contains("ray") -> {
+                            info.rayTracingSupported = true
+                            if (info.rayTracingSource.isEmpty()) info.rayTracingSource = "feature-name"
+                        }
                     }
                 }
             }
             if (info.vulkanVersion.isEmpty()) {
+                // ⚠️ ro.hardware.vulkan 在多数 ROM 上是 Vulkan HAL 名 (adreno / mali)，
+                //    并非版本号；直接赋值会让 UI 显示成 "Vulkan adreno"。
+                //    保留该 fallback，但加 sanity 校验只接受数字版本串。
                 val vkProp = SysFsReader.readProp("ro.hardware.vulkan")
-                if (vkProp.isNotEmpty()) info.vulkanVersion = vkProp
+                if (VK_VERSION_REGEX.matches(vkProp)) info.vulkanVersion = vkProp
             }
             if (info.vulkanApiLevel.isEmpty()) {
                 val level = SysFsReader.readPropInt("ro.vulkan.api.level")
@@ -560,22 +621,33 @@ class DeviceDetailDataSource(private val context: Context) {
                     else -> "Level $level"
                 }
             }
+
+            // ── 2/3. OEM 提示兜底（按需求保留，不移除）──
             if (!info.rayTracingSupported) {
-                info.rayTracingSupported = pm.hasSystemFeature("android.hardware.vulkan.ray_tracing")
+                if (pm.hasSystemFeature("android.hardware.vulkan.ray_tracing")) {
+                    info.rayTracingSupported = true
+                    info.rayTracingSource = "system-feature"
+                }
             }
             if (!info.rayTracingSupported) {
                 val rtProp = SysFsReader.readProp("ro.vendor.gpu.ray_tracing")
-                if (rtProp == "1" || rtProp == "true") info.rayTracingSupported = true
+                if (rtProp == "1" || rtProp == "true") {
+                    info.rayTracingSupported = true
+                    info.rayTracingSource = "vendor-prop"
+                }
             }
         } catch (e: Throwable) { Log.w(TAG, "Vulkan采集失败", e) }
     }
 
+    /** ★ 语义修正 (2026-08-07): 返回纯数字版本串，"Vulkan " 前缀由 UI 拼接，
+     *  否则 DeviceScreen 二次拼接会显示成 "Vulkan Vulkan 1.3"。 */
     private fun extractVulkanVersion(feature: android.content.pm.FeatureInfo): String {
         return try {
             val ver = feature.version
             val major = ver shr 22
             val minor = (ver shr 12) and 0x3FF
-            if (major > 0) "Vulkan $major.$minor" else ""
+            val patch = ver and 0xFFF
+            if (major > 0) "$major.$minor.$patch" else ""
         } catch (_: Throwable) { "" }
     }
 
@@ -1026,9 +1098,12 @@ class DeviceDetailDataSource(private val context: Context) {
             val adapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
             if (adapter != null) {
                 info.bluetoothSupported = true
-                info.bluetoothName = adapter.name ?: ""
-                @Suppress("MissingPermission")
-                info.bluetoothAddress = try { adapter.address } catch (_: SecurityException) { "" }
+
+                // ★ 重构 (2026-08-07): 名称/地址的权限与系统限制处理
+                val hasConnectPerm = hasBluetoothConnectPermission()
+                info.bluetoothPermissionGranted = hasConnectPerm
+                info.bluetoothName = readBluetoothName(adapter, hasConnectPerm)
+                info.bluetoothAddress = readBluetoothAddress(adapter)
 
                 // BLE 支持
                 info.bleSupported = context.packageManager.hasSystemFeature("android.hardware.bluetooth_le")
@@ -1041,6 +1116,72 @@ class DeviceDetailDataSource(private val context: Context) {
                     context.packageManager.hasSystemFeature("android.hardware.bluetooth_le_audio")
             }
         } catch (_: Throwable) {}
+    }
+
+    /**
+     * BLUETOOTH_CONNECT 是否已授予。
+     *
+     * 官方依据 (核验 2026-08-07, developer.android.com/develop/connectivity/bluetooth/bt-permissions):
+     *   · API 31 (Android 12) 起 BLUETOOTH_CONNECT 为**运行时**权限，属「附近的设备」权限组，
+     *     必须经 ActivityResultContracts.RequestPermission 显式申请。
+     *   · API 30 及以下由 manifest 的 BLUETOOTH（安装时权限）覆盖，恒为已授予。
+     */
+    private fun hasBluetoothConnectPermission(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        return try {
+            ContextCompat.checkSelfPermission(
+                context, android.Manifest.permission.BLUETOOTH_CONNECT
+            ) == PackageManager.PERMISSION_GRANTED
+        } catch (_: Throwable) { false }
+    }
+
+    /**
+     * 蓝牙本机名称。三级链：
+     *   1) 已授权 → BluetoothAdapter.getName()（权威）
+     *   2) 未授权 / 个别 ROM 仍拦截 → Settings.Secure "bluetooth_name"
+     *      该键是系统设置项，读取不需要任何蓝牙权限，多数 ROM 上可用（⚠️ 非公开常量，属社区实测路径）
+     *   3) 都拿不到且未授权 → 返回语义键，UI 渲染成可点击的「点击授权」
+     */
+    private fun readBluetoothName(
+        adapter: android.bluetooth.BluetoothAdapter,
+        hasPermission: Boolean
+    ): String {
+        if (hasPermission) {
+            try {
+                val n = adapter.name
+                if (!n.isNullOrBlank()) return n
+            } catch (_: SecurityException) {
+                // 个别 ROM 即便已授权仍拦截，落下一级
+            } catch (_: Throwable) {}
+        }
+        try {
+            val n = Settings.Secure.getString(context.contentResolver, "bluetooth_name")
+            if (!n.isNullOrBlank()) return n
+        } catch (_: Throwable) {}
+        return if (hasPermission) "" else BT_NAME_NEEDS_PERMISSION
+    }
+
+    /**
+     * 蓝牙本机 MAC。
+     *
+     * ⚠️ 官方原文 (developer.android.com/about/versions/marshmallow/android-6.0-changes，核验 2026-08-07):
+     *    自 Android 6.0 (API 23) 起 BluetoothAdapter.getAddress() 对所有第三方应用
+     *    恒返回常量 02:00:00:00:00:00。**该限制无任何权限可豁免** —— 持有
+     *    BLUETOOTH_CONNECT 同样拿不到真实地址。
+     *
+     * 因此这里仍实际调用而非按 SDK_INT 硬判（万一某 ROM 给出真值就照实显示），
+     * 但一旦识别出占位值就返回语义键，由 UI 渲染成「系统限制」，不展示假 MAC 误导用户。
+     */
+    private fun readBluetoothAddress(adapter: android.bluetooth.BluetoothAdapter): String {
+        val raw = try {
+            @Suppress("MissingPermission")
+            adapter.address
+        } catch (_: SecurityException) { null } catch (_: Throwable) { null }
+        return when {
+            raw.isNullOrBlank() -> BT_ADDRESS_RESTRICTED
+            raw == BT_ADDRESS_PLACEHOLDER -> BT_ADDRESS_RESTRICTED
+            else -> raw
+        }
     }
 
     /** 蓝牙版本检测: 仅使用 sysfs 和系统属性实际值，不做 API 级别推断 */
@@ -1299,84 +1440,203 @@ class DeviceDetailDataSource(private val context: Context) {
     // ═══════════════════════════════════════════
     private fun collectCamera(info: DeviceDetailInfo) {
         try {
-            val cm = context.packageManager
-            val hasFlash = cm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH)
-            info.cameraIds = buildList {
-                if (cm.hasSystemFeature(PackageManager.FEATURE_CAMERA)) add("后置")
-                if (cm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)) add("前置")
-                if (hasFlash) add("闪光灯")
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                collectCameraSensors(info)
-            }
+            // minSdk 21 == LOLLIPOP，camera2 恒可用，原有的 SDK_INT 守卫是死条件，已移除
+            collectCameraSensors(info)
+            info.cameraIds = buildCameraSummary(info)
         } catch (e: Throwable) { Log.w(TAG, "相机采集失败", e) }
     }
 
+    /**
+     * 相机摘要行。
+     * ★ 修改 (2026-08-07): 优先由 camera2 实测朝向反推，实测为空才退回 PackageManager feature。
+     *   旧实现只看 feature，而 FEATURE_CAMERA / FEATURE_CAMERA_FRONT 在部分 ROM 上缺声明，
+     *   导致明明枚举到了前置、摘要里却不显示。
+     *   返回值为**语义键**，由 UI 解析成本地化文案（旧实现直接写中文，英文环境会串语言）。
+     */
+    private fun buildCameraSummary(info: DeviceDetailInfo): List<String> {
+        val pm = context.packageManager
+        val facings = info.cameraSensors.mapTo(HashSet()) { it.facing }
+        val hasFlash = pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FLASH) ||
+                info.cameraSensors.any { it.flashSupported }
+        return buildList {
+            if (facings.isNotEmpty()) {
+                if (CAMERA_FACING_BACK in facings) add(CAMERA_FACING_BACK)
+                if (CAMERA_FACING_FRONT in facings) add(CAMERA_FACING_FRONT)
+                if (CAMERA_FACING_EXTERNAL in facings) add(CAMERA_FACING_EXTERNAL)
+                if (CAMERA_FACING_UNKNOWN in facings) add(CAMERA_FACING_UNKNOWN)
+            } else {
+                // camera2 完全不可用时的兜底（保留旧判据）
+                if (pm.hasSystemFeature(PackageManager.FEATURE_CAMERA)) add(CAMERA_FACING_BACK)
+                if (pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)) add(CAMERA_FACING_FRONT)
+                if (this@buildList.isEmpty() && pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY)) add(CAMERA_FACING_UNKNOWN)
+            }
+            if (hasFlash) add(CAMERA_FLASH)
+        }
+    }
+
+    /**
+     * 相机传感器枚举 — 前置检测 5 级 fallback 链 (★ 重构 2026-08-07)
+     *
+     * 加强动机与官方依据 (核验 2026-08-07):
+     *   · CameraManager.getCameraIdList() 官方原文:
+     *     "This list doesn't contain physical cameras that can only be used as part of
+     *      a logical multi-camera device." → 逻辑多摄机型上部分镜头在这一层不可见。
+     *   · CameraManager.getCameraCharacteristics() 官方原文:
+     *     "From API level 29, this function can also be used to query the capabilities of
+     *      physical cameras that can only be used as part of logical multi-camera."
+     *     → API 29+ 可用 getPhysicalCameraIds() 展开物理子摄。
+     *
+     * 链路:
+     *   1) cameraIdList + LENS_FACING                       (逻辑相机，主路径)
+     *   2) API 29+ getPhysicalCameraIds() 展开物理子摄        (逻辑多摄机型的隐藏镜头)
+     *   3) HAL1 android.hardware.Camera.getCameraInfo()      (camera2 藏前置的 ROM)
+     *   4) PackageManager.FEATURE_CAMERA_FRONT               (系统声明有前置但无法枚举)
+     *   5) camera id 启发式 "0"=后置 / "1"=前置               (⚠️ 社区惯例，仅纠正 unknown)
+     */
     private fun collectCameraSensors(info: DeviceDetailInfo) {
         try {
             val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager ?: return
-            val camIds = cameraManager.cameraIdList
-            val sensors = mutableListOf<CameraSensorInfo>()
+            // LinkedHashMap: 按 id 去重且保持枚举顺序
+            val sensors = LinkedHashMap<String, CameraSensorInfo>()
 
+            // ── 1 级: 逻辑相机 ──
+            val camIds = try { cameraManager.cameraIdList } catch (_: Throwable) { emptyArray() }
             for (id in camIds) {
-                try {
-                    val chars = cameraManager.getCameraCharacteristics(id)
-                    val sensor = CameraSensorInfo(id = id)
-
-                    val facing = chars.get(CameraCharacteristics.LENS_FACING)
-                    sensor.facing = when (facing) {
-                        CameraCharacteristics.LENS_FACING_BACK -> "后置"
-                        CameraCharacteristics.LENS_FACING_FRONT -> "前置"
-                        else -> "外置"
-                    }
-
-                    val streamMap = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-                    if (streamMap != null) {
-                        val sizes = streamMap.getOutputSizes(android.graphics.ImageFormat.JPEG)
-                        val maxSize = sizes?.maxByOrNull { it.width * it.height }
-                        if (maxSize != null) {
-                            val mp = (maxSize.width * maxSize.height) / 1_000_000f
-                            sensor.resolution = "${maxSize.width}×${maxSize.height} (${"%.1f".format(mp)}MP)"
-                        }
-                    }
-
-                    val aperture = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)
-                    if (aperture != null && aperture.isNotEmpty()) {
-                        sensor.aperture = "f/${"%.1f".format(aperture[0])}"
-                    }
-
-                    val focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
-                    if (focalLengths != null && focalLengths.isNotEmpty()) {
-                        sensor.focalLength = "${focalLengths[0].toInt()}mm"
-                    }
-
-                    val pixelSize = chars.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
-                    if (pixelSize != null) {
-                        val sensorSize = chars.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
-                        if (sensorSize != null && pixelSize.width > 0) {
-                            val pxSize = (pixelSize.width / sensorSize.width) * 1000f
-                            sensor.pixelSize = "%.1f".format(pxSize) + "µm"
-                        }
-                    }
-
-                    resolveCamera2Constants()
-                    if (cachedOisKey != null) {
-                        @Suppress("UNCHECKED_CAST")
-                        val oisModes = chars.get(cachedOisKey as CameraCharacteristics.Key<IntArray>)
-                        sensor.oisSupported = oisModes?.any { it == cachedOisModeOn } == true
-                    }
-
-                    val eisModes = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
-                    sensor.eisSupported = eisModes?.any { it == CameraCharacteristics.CONTROL_VIDEO_STABILIZATION_MODE_ON } == true
-
-                    sensor.flashSupported = chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
-
-                    sensors.add(sensor)
-                } catch (_: Throwable) {}
+                readCameraSensor(cameraManager, id)?.let { sensors[id] = it }
             }
-            info.cameraSensors = sensors
+
+            // ── 2 级: API 29+ 展开逻辑多摄的物理子摄 ──
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                for (id in camIds) {
+                    val physicalIds = try {
+                        cameraManager.getCameraCharacteristics(id).physicalCameraIds
+                    } catch (_: Throwable) { emptySet<String>() }
+                    for (pid in physicalIds) {
+                        if (sensors.containsKey(pid)) continue
+                        readCameraSensor(cameraManager, pid)?.let { sensors[pid] = it }
+                    }
+                }
+            }
+
+            // ── 3/4 级: camera2 一个前置都没枚举到时的兜底 ──
+            if (sensors.values.none { it.facing == CAMERA_FACING_FRONT }) {
+                val legacyFrontId = detectLegacyFrontCameraId()
+                when {
+                    legacyFrontId != null -> {
+                        val existing = sensors[legacyFrontId]
+                        if (existing != null) {
+                            // camera2 把它读成 external/unknown，用 HAL1 的朝向纠正
+                            existing.facing = CAMERA_FACING_FRONT
+                        } else {
+                            sensors[legacyFrontId] =
+                                CameraSensorInfo(id = legacyFrontId).apply { facing = CAMERA_FACING_FRONT }
+                        }
+                    }
+                    context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT) -> {
+                        // 系统声明有前置但两层枚举都拿不到 — 只补朝向，不编造参数
+                        sensors[LEGACY_FRONT_PLACEHOLDER_ID] =
+                            CameraSensorInfo(id = LEGACY_FRONT_PLACEHOLDER_ID).apply { facing = CAMERA_FACING_FRONT }
+                    }
+                }
+            }
+
+            // ── 5 级: id 启发式，仅用于把 unknown 补成具体朝向 ──
+            //   ⚠️ "0"=后置 / "1"=前置 属社区惯例而非官方保证，故排在最后且不覆盖已知值
+            for (s in sensors.values) {
+                if (s.facing == CAMERA_FACING_UNKNOWN) {
+                    when (s.id) {
+                        "0" -> s.facing = CAMERA_FACING_BACK
+                        "1" -> s.facing = CAMERA_FACING_FRONT
+                    }
+                }
+            }
+
+            info.cameraSensors = sensors.values.toList()
         } catch (_: Throwable) { Log.w(TAG, "相机传感器详细检测失败") }
+    }
+
+    /** 读取单个相机（逻辑或物理）的完整特性；任一环节异常返回 null */
+    private fun readCameraSensor(cameraManager: CameraManager, id: String): CameraSensorInfo? {
+        return try {
+            val chars = cameraManager.getCameraCharacteristics(id)
+            val sensor = CameraSensorInfo(id = id)
+
+            // ★ 修复 (2026-08-07): 原实现 `else -> "外置"` 把 LENS_FACING 为 null 的相机
+            //   一律判成外置。null 在部分 ROM 与物理子摄上确实会出现，导致前置被错标。
+            //   现在 null 单列 unknown，交由 3~5 级链纠正。
+            sensor.facing = when (chars.get(CameraCharacteristics.LENS_FACING)) {
+                CameraCharacteristics.LENS_FACING_BACK -> CAMERA_FACING_BACK
+                CameraCharacteristics.LENS_FACING_FRONT -> CAMERA_FACING_FRONT
+                CameraCharacteristics.LENS_FACING_EXTERNAL -> CAMERA_FACING_EXTERNAL
+                else -> CAMERA_FACING_UNKNOWN
+            }
+
+            val streamMap = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            if (streamMap != null) {
+                val sizes = streamMap.getOutputSizes(android.graphics.ImageFormat.JPEG)
+                val maxSize = sizes?.maxByOrNull { it.width * it.height }
+                if (maxSize != null) {
+                    val mp = (maxSize.width * maxSize.height) / 1_000_000f
+                    sensor.resolution = "${maxSize.width}×${maxSize.height} (${"%.1f".format(mp)}MP)"
+                }
+            }
+
+            val aperture = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)
+            if (aperture != null && aperture.isNotEmpty()) {
+                sensor.aperture = "f/${"%.1f".format(aperture[0])}"
+            }
+
+            val focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
+            if (focalLengths != null && focalLengths.isNotEmpty()) {
+                sensor.focalLength = "${focalLengths[0].toInt()}mm"
+            }
+
+            val pixelSize = chars.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
+            if (pixelSize != null) {
+                val sensorSize = chars.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+                if (sensorSize != null && pixelSize.width > 0) {
+                    val pxSize = (pixelSize.width / sensorSize.width) * 1000f
+                    sensor.pixelSize = "%.1f".format(pxSize) + "µm"
+                }
+            }
+
+            resolveCamera2Constants()
+            if (cachedOisKey != null) {
+                @Suppress("UNCHECKED_CAST")
+                val oisModes = chars.get(cachedOisKey as CameraCharacteristics.Key<IntArray>)
+                sensor.oisSupported = oisModes?.any { it == cachedOisModeOn } == true
+            }
+
+            val eisModes = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
+            sensor.eisSupported = eisModes?.any { it == CameraCharacteristics.CONTROL_VIDEO_STABILIZATION_MODE_ON } == true
+
+            sensor.flashSupported = chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+
+            sensor
+        } catch (_: Throwable) { null }
+    }
+
+    /**
+     * HAL1 前置枚举 — 第 3 级兜底。
+     *
+     * android.hardware.Camera.getNumberOfCameras() / getCameraInfo() 都是**静态**方法，
+     * 不需要 CAMERA 权限（只有 Camera.open() 才需要）。API 21 起标记 deprecated 但至今可用，
+     * 在把前置藏进逻辑多摄的 ROM 上，这是唯一还能拿到前置朝向的公开路径。
+     *
+     * ⚠️ HAL1 的相机序号与 camera2 的 id 字符串只是**惯例上**一致，非官方保证；
+     *    因此仅用来纠正朝向 / 补一条记录，不用来推翻 camera2 已给出的朝向。
+     */
+    @Suppress("DEPRECATION")
+    private fun detectLegacyFrontCameraId(): String? {
+        return try {
+            val count = android.hardware.Camera.getNumberOfCameras()
+            for (i in 0 until count) {
+                val ci = android.hardware.Camera.CameraInfo()
+                android.hardware.Camera.getCameraInfo(i, ci)
+                if (ci.facing == android.hardware.Camera.CameraInfo.CAMERA_FACING_FRONT) return i.toString()
+            }
+            null
+        } catch (_: Throwable) { null }
     }
 
     // ═══════════════════════════════════════════

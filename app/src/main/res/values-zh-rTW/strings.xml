@@ -1319,4 +1319,15 @@
     <string name="sensor_type_ambient_temp">环境溫度感測器</string>
     <string name="sensor_type_linear_accel">线性加速度感測器</string>
     <string name="sensor_type_magnetic_uncalibrated">磁场感測器(未校准)</string>
+
+    <!-- 藍牙與相機語義鍵 -->
+    <string name="bt_name_needs_permission">點擊授權</string>
+    <string name="bt_address_restricted">系統限制</string>
+    <string name="device_bt_name">藍牙名稱</string>
+    <string name="device_bt_address">藍牙地址</string>
+    <string name="camera_facing_back">後置</string>
+    <string name="camera_facing_front">前置</string>
+    <string name="camera_facing_external">外置</string>
+    <string name="camera_facing_unknown">未知</string>
+    <string name="camera_flash">閃光燈</string>
 </resources>

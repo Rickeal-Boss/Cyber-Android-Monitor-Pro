@@ -180,6 +180,18 @@ class DeviceRepository(context: Context) {
         }
     }
 
+    /**
+     * ★ 新增 (2026-08-07): 仅重采「设备详情」一块。
+     * 用于 BLUETOOTH_CONNECT 运行时权限授予后立刻回填蓝牙名称，
+     * 避免为一个字段重跑 loadStaticData() 的全量静态采集。
+     */
+    fun refreshDeviceDetail() {
+        scope.launch(Dispatchers.IO) {
+            runCatching { deviceDetailLiveData.postValue(deviceDetailDataSource.collect()) }
+                .onFailure { e -> Log.w(TAG, "设备详情刷新失败", e) }
+        }
+    }
+
     // ═══════ 核心采集块 (写入 SharedFlow + LiveData + History) ═══════
 
     private suspend fun collectCpuBlock() {

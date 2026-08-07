@@ -1322,4 +1322,22 @@
     <string name="sensor_type_ambient_temp">Ambient Temperature</string>
     <string name="sensor_type_linear_accel">Linear Acceleration</string>
     <string name="sensor_type_magnetic_uncalibrated">Magnetometer (Uncalibrated)</string>
+
+    <!-- ═══════════════════════════════════════════
+         ★ 2026-08-07: 蓝牙与相机语义键
+         被 DeviceDetailDataSource 用作 Language-Neutral 的 faker 值,
+         由 DeviceScreen 运行时映射至此 i18n 资源显示。
+         ═══════════════════════════════════════════ -->
+    <!-- 蓝牙语义键 -->
+    <string name="bt_name_needs_permission">Tap to authorize</string>
+    <string name="bt_address_restricted">System restricted</string>
+    <string name="device_bt_name">Bluetooth Name</string>
+    <string name="device_bt_address">Bluetooth Address</string>
+
+    <!-- 相机朝向语义键 -->
+    <string name="camera_facing_back">Main</string>
+    <string name="camera_facing_front">Front</string>
+    <string name="camera_facing_external">External</string>
+    <string name="camera_facing_unknown">Unknown</string>
+    <string name="camera_flash">Flash</string>
 </resources>

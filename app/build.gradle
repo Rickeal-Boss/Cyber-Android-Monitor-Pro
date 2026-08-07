@@ -7,6 +7,23 @@ plugins {
 android {
     namespace 'com.rb.cybermonitorpro'
     compileSdk 36   // AGP9 上限 36.1；BOM 2025.06.00 + 内置 Kotlin 2.2.10 要求 compileSdk ≥ 36；targetSdk 同步 36（Android 16，满足 2026-08-31 Play 目标 API 截止）
+
+    // ★ 新增 (2026-08-07): NDK — Vulkan 真实扩展枚举探针 libcybervulkan.so
+    //   显式 pin 版本，避免 CI 与本地 NDK 漂移导致的不可复现构建。
+    //   r29 = Latest Stable (developer.android.com/ndk/downloads，核验 2026-08-07)。
+    //   选 r29 而非 LTS r27d 的理由: NDK r28+ 默认 16 KB page 对齐，
+    //   而 targetSdk 36 (≥35) 且含 native 代码的应用自 2025-11-01 起被 Play 强制要求 16 KB 兼容。
+    ndkVersion "29.0.14206865"
+
+    externalNativeBuild {
+        cmake {
+            path file("src/main/cpp/CMakeLists.txt")
+            // "+" 后缀 = 最低版本语义 (对齐 cmake_minimum_required 行为，官方 DSL 支持)。
+            // CI 显式安装 cmake;3.22.1；若 runner 预装了更高版本亦可直接满足，
+            // 避免硬钉版本在 SDK 仓库变动时把构建打挂。
+            version "3.22.1+"
+        }
+    }
     def ksBase64  = System.getenv("KEYSTORE_BASE64")
     def ksPassword = System.getenv("KEYSTORE_PASSWORD")
     def ksAlias   = System.getenv("KEY_ALIAS")
@@ -38,6 +55,14 @@ defaultConfig {
     targetSdk 36   // Android 16 (API 36)；2026-08-31 Play 目标 API 截止。健康权限: 本应用未声明/使用 BODY_SENSORS 或 android.permission.health.*，无需迁移。
     versionCode 500
     versionName "5.0.0"
+
+    // ★ 新增 (2026-08-07): 仅为 arm64-v8a 打包 native 探针。
+    //   理由: 32 位设备已无新机，多打三份 ABI 会让 APK 无谓膨胀。
+    //   其它 ABI 上 System.loadLibrary 抛 UnsatisfiedLinkError，
+    //   VulkanProbe 捕获后静默降级到原有 OEM 提示判据链，功能不缺失。
+    ndk {
+        abiFilters "arm64-v8a"
+    }
 
     buildConfigField "long", "BUILD_TIMESTAMP", "${System.currentTimeMillis()}L"
     def buildDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date())

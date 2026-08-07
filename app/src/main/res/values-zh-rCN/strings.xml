@@ -1314,4 +1314,15 @@
     <string name="sensor_type_ambient_temp">环境温度传感器</string>
     <string name="sensor_type_linear_accel">线性加速度传感器</string>
     <string name="sensor_type_magnetic_uncalibrated">磁场传感器(未校准)</string>
+
+    <!-- 蓝牙与相机语义键 -->
+    <string name="bt_name_needs_permission">点击授权</string>
+    <string name="bt_address_restricted">系统限制</string>
+    <string name="device_bt_name">蓝牙名称</string>
+    <string name="device_bt_address">蓝牙地址</string>
+    <string name="camera_facing_back">后置</string>
+    <string name="camera_facing_front">前置</string>
+    <string name="camera_facing_external">外置</string>
+    <string name="camera_facing_unknown">未知</string>
+    <string name="camera_flash">闪光灯</string>
 </resources>

@@ -27,11 +27,18 @@ data class DeviceDetailInfo(
     var gpuLocalMemoryKb: Int = 0,           // GPU 专用显存 KB (新增, Adreno/Mali)
 
     // ── Vulkan ──
+    // ★ 语义修正 (2026-08-07): vulkanVersion 存**纯数字**版本串 ("1.3.128")，不带 "Vulkan " 前缀。
+    //   修正前 extractVulkanVersion 返回 "Vulkan 1.3"，UI 再拼一次前缀 → 显示成 "Vulkan Vulkan 1.3"。
     var vulkanVersion: String = "",
     var vulkanApiLevel: String = "",
     var rayTracingSupported: Boolean = false,
-    var vulkanDeviceCount: Int = 0,           // Vulkan 物理设备数
-    var vulkanExtensions: List<String> = emptyList(),
+    // ★ 新增 (2026-08-07): 光追判据来源，区分「实测」与「OEM 推断」
+    //   vulkan-ext = 真实扩展枚举命中(可信) / system-feature / vendor-prop / feature-name = OEM 提示(推断)
+    var rayTracingSource: String = "",
+    // ★ 已启用 (2026-08-07): 由 VulkanProbe native 真实枚举填充，此前为死字段
+    var vulkanDeviceCount: Int = 0,           // Vulkan 物理设备数 (vkEnumeratePhysicalDevices)
+    var vulkanExtensions: List<String> = emptyList(),  // instance 级 + device 级扩展并集，已去重排序
+    var vulkanGpuName: String = "",           // VkPhysicalDeviceProperties.deviceName，与 glRenderer 交叉验证
 
     // ── CPU Cache Architecture (新增) ──
     var cpuCacheL1iKb: Int = 0,              // L1 指令缓存 KB
@@ -69,8 +76,12 @@ data class DeviceDetailInfo(
     var usbHostMode: Boolean = false,         // USB Host 模式
 
     // ── Bluetooth (增强) ──
+    // ★ 2026-08-07: 二者可能是语义键而非字面值，由 UI 解析:
+    //   bluetoothName    = "bt_name_needs_permission" → 未授予 BLUETOOTH_CONNECT
+    //   bluetoothAddress = "bt_address_restricted"    → Android 6.0+ 恒返回假 MAC，无权限可豁免
     var bluetoothName: String = "",
     var bluetoothAddress: String = "",
+    var bluetoothPermissionGranted: Boolean = false,  // BLUETOOTH_CONNECT 是否已授予 (API<31 恒 true)
     var bluetoothSupported: Boolean = false,
     var bluetoothVersion: String = "",        // BT 4.0 / 4.1 / 4.2 / 5.0 / 5.1 / 5.2 / 5.3 (新增)
     var bleSupported: Boolean = false,        // BLE 支持 (新增)

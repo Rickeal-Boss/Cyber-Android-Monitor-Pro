@@ -58,6 +58,14 @@
 # 其余项目代码 (UI/DataSource/Repository/ViewModel) 交由 R8 正常缩减。
 # ⚠️ 构建后须真机冒烟验证: 导出(JSON)/Koin 初始化/隐藏 API 反射采集。
 
+# ===== JNI — Vulkan 探针 (2026-08-07) =====
+# native 符号名 = Java_<包名>_<类名>_<方法名>, 硬编码在 libcybervulkan.so 里。
+# 本项目虽 -dontobfuscate, 但 R8 的横向类合并 / 方法搬迁仍会改变归属类,
+# 导致运行时 UnsatisfiedLinkError。必须显式钉死类名与 native 方法名。
+-keep class com.rb.cybermonitorpro.data.source.VulkanProbe {
+    native <methods>;
+}
+
 # ===== 不混淆枚举 =====
 -keepclassmembers enum * { public static **[] values(); public static ** valueOf(java.lang.String); }
 

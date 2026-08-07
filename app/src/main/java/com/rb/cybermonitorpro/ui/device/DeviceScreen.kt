@@ -1,5 +1,6 @@
 package com.rb.cybermonitorpro.ui.device
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,18 +19,24 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
+import android.Manifest
+import android.Manifest
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import com.rb.cybermonitorpro.data.model.CameraSensorInfo
 import com.rb.cybermonitorpro.data.model.DeviceDetailInfo
 import com.rb.cybermonitorpro.data.model.OemPowerMode
@@ -49,6 +56,14 @@ fun DeviceScreen(
 ) {
     val detail by viewModel.detail.observeAsState()
     val oem by oemViewModel.oemInfo.observeAsState()
+
+    // ★ 2026-08-07: BLUETOOTH_CONNECT 运行时权限 launcher
+    //   授予后自动触发重采, 蓝牙名称即刻回填, 无需用户手动刷新。
+    val btPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) viewModel.refreshDetail()
+    }
 
     // 交错滑动卡片索引（逐卡片从上到下级联跟随变换）
     var devCardIdx = 0
@@ -154,7 +169,9 @@ fun DeviceScreen(
         val vkLevel = detail?.vulkanApiLevel?.takeIf { it.isNotEmpty() }
         val vkExts = detail?.vulkanExtensions?.takeIf { it.isNotEmpty() }
         val vkDevCount = detail?.vulkanDeviceCount?.takeIf { it > 0 }
-        if (vkVersion != null || vkLevel != null || vkExts != null || vkDevCount != null) {
+        // ★ 新增 (2026-08-07): VkPhysicalDeviceProperties.deviceName，来自 native 真实枚举
+        val vkGpuName = detail?.vulkanGpuName?.takeIf { it.isNotEmpty() }
+        if (vkVersion != null || vkLevel != null || vkExts != null || vkDevCount != null || vkGpuName != null) {
             Box(Modifier.fillMaxWidth().staggeredSwipe(devCardIdx++)) {
     SectionCard("Vulkan") {
                     if (vkVersion != null) {
@@ -168,6 +185,7 @@ fun DeviceScreen(
                         RowItem(stringResource(R.string.device_api_version_label), detailed)
                     }
                     if (vkLevel != null) RowItem(stringResource(R.string.device_hardware_level_label), vkLevel)
+                    if (vkGpuName != null) RowItem(stringResource(R.string.device_gpu_model), vkGpuName)
                     if (vkDevCount != null) RowItem(stringResource(R.string.device_physical_devices_label), stringResource(R.string.device_physical_devices_value_format, vkDevCount))
                     if (vkExts != null) {
                         val keyExts = listOf(
@@ -197,7 +215,15 @@ fun DeviceScreen(
                                     SuccessNeon else NeonPurpleBright)
                         }
                     }
-                    RowItem(stringResource(R.string.device_ray_tracing), if (detail?.rayTracingSupported == true) stringResource(R.string.device_supported) else stringResource(R.string.device_not_supported),
+                    // ★ 2026-08-07: 附带判据来源 — vulkan-ext 为真实扩展枚举实测，
+                    //   其余 (feature-name / system-feature / vendor-prop) 为 OEM 提示推断
+                    RowItem(stringResource(R.string.device_ray_tracing),
+                        if (detail?.rayTracingSupported == true)
+                            FormatUtils.joinNonBlank(" · ",
+                                stringResource(R.string.device_supported),
+                                detail?.rayTracingSource?.takeIf { it.isNotEmpty() }
+                            )
+                        else stringResource(R.string.device_not_supported),
                         if (detail?.rayTracingSupported == true) SuccessNeon else WarningNeon)
                 }
 }
@@ -270,7 +296,7 @@ fun DeviceScreen(
         } else {
             Box(Modifier.fillMaxWidth().staggeredSwipe(devCardIdx++)) {
     SectionCard(stringResource(R.string.device_section_camera)) {
-                    RowItem(stringResource(R.string.device_camera_facing_suffix), detail?.cameraIds?.joinToString(", ").orEmpty().ifEmpty { stringResource(R.string.common_not_detected) })
+                    RowItem(stringResource(R.string.device_camera_facing_suffix), detail?.cameraIds?.map { resolveCameraLabel(it) }?.joinToString(", ").orEmpty().ifEmpty { stringResource(R.string.common_not_detected) })
                 }
 }
         }
@@ -313,6 +339,31 @@ fun DeviceScreen(
                         )
                     else stringResource(R.string.device_not_supported)
                 )
+                // ★ 2026-08-07: 蓝牙名称 — 权限未授时显示可点击的「点击授权」
+                val btName = detail?.bluetoothName?.takeIf { it.isNotEmpty() }
+                if (btName != null) {
+                    if (btName == "bt_name_needs_permission") {
+                        RowItemClickable(
+                            label = stringResource(R.string.device_bt_name),
+                            value = stringResource(R.string.bt_name_needs_permission),
+                            onClick = { btPermLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT) },
+                            valueColor = WarningNeon
+                        )
+                    } else {
+                        RowItem(stringResource(R.string.device_bt_name), btName)
+                    }
+                }
+                // ★ 2026-08-07: 蓝牙地址 — 系统限制 or 真实值
+                val btAddr = detail?.bluetoothAddress?.takeIf { it.isNotEmpty() }
+                if (btAddr != null) {
+                    if (btAddr == "bt_address_restricted") {
+                        RowItem(stringResource(R.string.device_bt_address),
+                            stringResource(R.string.bt_address_restricted),
+                            valueColor = NeonPurpleBright.copy(alpha = 0.6f))
+                    } else {
+                        RowItem(stringResource(R.string.device_bt_address), btAddr)
+                    }
+                }
                 RowItem(stringResource(R.string.device_wifi),
                     FormatUtils.joinNonBlank(" · ",
                         detail?.wifiStandard?.takeIf { it.isNotEmpty() } ?: stringResource(R.string.common_yes),
@@ -579,7 +630,7 @@ fun DeviceScreen(
 private fun CameraRow(sensor: CameraSensorInfo) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("${sensor.facing}${stringResource(R.string.device_camera_facing_suffix)}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = NeonPurple)
+            Text("${resolveCameraLabel(sensor.facing)}${stringResource(R.string.device_camera_facing_suffix)}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = NeonPurple)
         }
         if (sensor.resolution.isNotEmpty())
             RowItem(stringResource(R.string.device_resolution), sensor.resolution)
@@ -639,5 +690,47 @@ private fun RowItem(label: String, value: String, valueColor: androidx.compose.u
                 maxLines = 5, softWrap = true
             )
         }
+    }
+}
+
+/** ★ 2026-08-07: 可点击的 RowItem —— 蓝牙「点击授权」入口 */
+@Composable
+private fun RowItemClickable(
+    label: String,
+    value: String,
+    onClick: () -> Unit,
+    valueColor: androidx.compose.ui.graphics.Color = NeonPurpleBright
+) {
+    if (value.isNotBlank()) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 2.dp).clickable { onClick() },
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                label, fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(0.35f),
+                maxLines = 2, softWrap = true
+            )
+            Text(
+                value, fontSize = 13.sp,
+                color = valueColor,
+                modifier = Modifier.weight(0.65f),
+                maxLines = 5, softWrap = true
+            )
+        }
+    }
+}
+
+/** 相机语义键 (朝向 / 闪光灯) → i18n 文案 */
+@Composable
+private fun resolveCameraLabel(key: String): String {
+    return when (key) {
+        "camera_facing_back" -> stringResource(R.string.camera_facing_back)
+        "camera_facing_front" -> stringResource(R.string.camera_facing_front)
+        "camera_facing_external" -> stringResource(R.string.camera_facing_external)
+        "camera_facing_unknown" -> stringResource(R.string.camera_facing_unknown)
+        "camera_flash" -> stringResource(R.string.camera_flash)
+        else -> key  // 兼容旧硬编码中文值
     }
 }

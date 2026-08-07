@@ -39,7 +39,10 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools'
+          # ★ 2026-08-07: 追加 NDK + CMake — Vulkan 真实扩展枚举探针 (libcybervulkan.so)
+          #   ndk;29.0.14206865 = NDK r29 Latest Stable (developer.android.com/ndk/downloads)
+          #   必须与 app/build.gradle 的 ndkVersion 完全一致，否则 AGP 报 "NDK not configured"
+          packages: 'platforms;android-36 build-tools;36.0.0 platform-tools ndk;29.0.14206865 cmake;3.22.1'
 
       - name: Accept Android SDK licenses
         run: |
@@ -71,6 +74,24 @@ jobs:
           yes | "${SDKMANAGER}" --sdk_root="${ANDROID_SDK_ROOT}" --licenses
           echo ""
           echo "=== License acceptance complete ==="
+
+      # ★ 2026-08-07: NDK 首次引入本项目，构建前先确认工具链就位，
+      #   否则 AGP 会在 configure 阶段抛较隐晦的 "NDK not configured" 而难以定位。
+      - name: Verify NDK & CMake toolchain
+        run: |
+          NDK_VER="29.0.14206865"
+          echo "=== NDK ==="
+          if [ -d "${ANDROID_SDK_ROOT}/ndk/${NDK_VER}" ]; then
+            echo "  ✅ ndk/${NDK_VER}"
+          else
+            echo "::error::NDK ${NDK_VER} not found. Installed NDKs:"
+            ls -1 "${ANDROID_SDK_ROOT}/ndk/" 2>/dev/null || echo "  (none)"
+            exit 1
+          fi
+          echo "=== CMake ==="
+          ls -1 "${ANDROID_SDK_ROOT}/cmake/" 2>/dev/null || echo "  (none)"
+          echo "=== Native sources ==="
+          ls -la app/src/main/cpp/
 
       - name: Cache Gradle packages
         uses: actions/cache@v4
