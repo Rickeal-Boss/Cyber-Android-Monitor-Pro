@@ -55,6 +55,12 @@ fun Modifier.revealLight(
     touchIntensity: Float = 0.15f,
     useAGSL: Boolean = true,
 ): Modifier {
+    // ★ F2 (2026-08-10): 硬开关 — 关闭时整条修饰链不安装:
+    //   无 drawWithContent 透传层 / 无 onGloballyPositioned 布局观察者 / 无空载动画持有者,
+    //   每卡零修饰开销 (原软开关仅 isActive 恒 false, 修饰链仍常驻)。
+    //   读取 enabled 于组合期 → 切换开关触发一次全卡重组以摘/装修饰链, 手动操作非每帧, 可接受。
+    if (!GlobalLightSwitch.enabled) return this
+
     val lightState = LocalLightState.current
     val animatedPos = rememberAnimatedLightPosition(lightState)
     val density = LocalDensity.current

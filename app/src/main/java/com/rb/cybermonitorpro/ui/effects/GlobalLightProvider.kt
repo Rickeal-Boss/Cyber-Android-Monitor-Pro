@@ -61,7 +61,8 @@ fun GlobalLightProvider(
     // �? F9 (2026-07-28): 去掉 60 �?/秒的协程取消/重建 �? �? LaunchedEffect �? lastEventTime �?
     //   key, 每次指针事件都取消并重启协程。改�? LaunchedEffect(Unit) 常驻循环, 内部 delay �?
     //   判超�?; 仅在�? IDLE 且确实空闲超时才 toIdle(), 避免重复触发淡出动画�?
-    LaunchedEffect(Unit) {
+    // �� F4 (2026-08-10): ���м��Э���濪���ſ� �� �ر�ʱ��������פѭ��
+    if (GlobalLightSwitch.enabled) LaunchedEffect(Unit) {
         while (true) {
             delay(idleTimeoutMs)
             if (lightState.mode != GlobalLightState.Mode.IDLE &&
@@ -74,7 +75,9 @@ fun GlobalLightProvider(
 
     // ── 后台暂停光照动效: 退至后台时停止全局光照渲染，省 CPU/GPU ──
     val refreshState by RefreshPolicy.state.collectAsState()
-    SideEffect {
+    // �� F3 (2026-08-10): ���عر�ʱ��д visible �� ����ǰ��̨�л���ת visible
+    //   �������� revealLight �� (30+) ������һ�� (rememberAnimatedLightPosition ���� visible)
+    if (GlobalLightSwitch.enabled) SideEffect {
         when (refreshState) {
             RefreshPolicy.RefreshState.BACKGROUND -> lightState.hide()
             RefreshPolicy.RefreshState.FOREGROUND -> lightState.show()
@@ -99,7 +102,9 @@ fun GlobalLightProvider(
                 }
                 // ── 全局指针捕获 ──
                 // 固定 key(Unit) 避免重启；windowOffset 通过 rememberUpdatedState 读取
-                .pointerInput(Unit) {
+                // �� F1 (2026-08-10): Ӳ���� �� �ر�ʱ��ָ�����Э�̲���װ,
+                //   ȫ����ָ���¼��㴦�� (ԭ�����ؽ� update() �緵��, Э��ʼ������)
+                .then(if (GlobalLightSwitch.enabled) Modifier.pointerInput(Unit) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
@@ -149,7 +154,7 @@ fun GlobalLightProvider(
                             // 避免干扰 Tab 点击、BackHandler 手势等现有交�?
                         }
                     }
-                }
+                } else Modifier)
         ) {
             content()
         }

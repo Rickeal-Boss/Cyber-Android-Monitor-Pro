@@ -3,10 +3,11 @@ package com.rb.cybermonitorpro.ui.effects
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -52,9 +53,15 @@ private var entrancePlayed = false
 /**
  * 首屏入场错峰 reveal — draw 域 (graphicsLayer) 应用, 不触发卡片 content 重组。
  *
+ * ★ A3 (2026-08-10): 移除 `composed { }` 包装, 改为 @Composable 扩展函数 —
+ *   `composed` 在 modifier 链注入额外组合边界, 每个使用点每次重组都生效;
+ *   与 staggeredSwipe v5 R3 / RevealLight (2026-06-21) 的优化保持一致。
+ *
  * @param order 入场顺序, 0 = 最先显. 概览页按视觉/重要度自上而下赋值。
  */
-fun Modifier.entranceReveal(order: Int = 0): Modifier = composed {
+@Stable
+@Composable
+fun Modifier.entranceReveal(order: Int = 0): Modifier {
     // 非首次入场(应用内导航/后台回前台重组)→ Animatable 直接以 1f 初始化, 首帧即 alpha=1, 无闪烁无动画
     val progress = remember { Animatable(if (entrancePlayed) 1f else 0f) }
     LaunchedEffect(Unit) {
@@ -70,7 +77,7 @@ fun Modifier.entranceReveal(order: Int = 0): Modifier = composed {
     }
     val density = LocalDensity.current
     val offsetPx = REVEAL_OFFSET.value * density.density
-    graphicsLayer {
+    return this.graphicsLayer {
         alpha = progress.value
         translationY = (1f - progress.value) * offsetPx
     }
