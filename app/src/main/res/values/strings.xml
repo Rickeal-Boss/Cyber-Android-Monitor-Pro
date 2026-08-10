@@ -1211,6 +1211,12 @@
     <string name="oem_flash_none">None</string>
     <string name="oem_front">Front</string>
     <string name="oem_front_aperture">Front Aperture</string>
+    <string name="oem_front_resolution">Front Resolution</string>
+    <string name="oem_front_sensor_size">Front Sensor Size</string>
+    <string name="oem_front_pixel_size">Front Pixel Size</string>
+    <string name="oem_front_fov">Front FOV</string>
+    <string name="oem_rear_fov">Rear FOV</string>
+    <string name="oem_front_af">Front Focus</string>
     <string name="oem_game_engine">Game Engine</string>
     <string name="oem_game_mode">Game Mode</string>
     <string name="oem_game_mode_activated">Activated ✓</string>

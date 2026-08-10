@@ -1203,6 +1203,12 @@
     <string name="oem_flash_none">无</string>
     <string name="oem_front">前置</string>
     <string name="oem_front_aperture">前置光圈</string>
+    <string name="oem_front_resolution">前置分辨率</string>
+    <string name="oem_front_sensor_size">前置传感器尺寸</string>
+    <string name="oem_front_pixel_size">前置像素尺寸</string>
+    <string name="oem_front_fov">前置视场角</string>
+    <string name="oem_rear_fov">后置视场角</string>
+    <string name="oem_front_af">前置对焦</string>
     <string name="oem_game_engine">游戏引擎</string>
     <string name="oem_game_mode">游戏模式</string>
     <string name="oem_game_mode_activated">已激活 ✓</string>

@@ -512,6 +512,8 @@ class OemDataSource(private val context: Context? = null) {
             val manager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager ?: return
             val rearSensors = mutableListOf<String>()
             val frontSensors = mutableListOf<String>()
+            // ★ B5 (2026-08-10): 收集后置各摄焦距, 用焦距比推算光学变焦范围
+            val rearFocals = mutableListOf<Float>()
 
             for (id in manager.cameraIdList) {
                 try {
@@ -524,8 +526,26 @@ class OemDataSource(private val context: Context? = null) {
 
                     // 传感器物理尺寸
                     val physicalSize = chars.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE)
-                    if (physicalSize != null && isRear) {
+                    if (physicalSize != null && isRear && info.cameraSensorPhysicalSize.isEmpty()) {
                         info.cameraSensorPhysicalSize = "${"%.1f".format(physicalSize.width)}×${"%.1f".format(physicalSize.height)} mm"
+                    }
+                    // ★ B2 (2026-08-10): 前置物理尺寸同样记录 (原仅后置)
+                    if (physicalSize != null && isFront && info.cameraFrontSensorPhysicalSize.isEmpty()) {
+                        info.cameraFrontSensorPhysicalSize = "${"%.1f".format(physicalSize.width)}×${"%.1f".format(physicalSize.height)} mm"
+                    }
+
+                    // ★ B1 (2026-08-10): 前置分辨率 — 像素阵列 → MP (原 OEM 区前置无分辨率)
+                    val pixelArray = chars.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
+                    if (isFront && pixelArray != null && info.cameraFrontResolution.isEmpty()) {
+                        val mp = (pixelArray.width * pixelArray.height) / 1_000_000f
+                        info.cameraFrontResolution = "${pixelArray.width}×${pixelArray.height} (${"%.1f".format(mp)}MP)"
+                    }
+
+                    // ★ B3 (2026-08-10): 前置像素尺寸 µm = 物理宽 / 像素阵列宽 × 1000
+                    if (isFront && physicalSize != null && pixelArray != null &&
+                        pixelArray.width > 0 && info.cameraFrontPixelSize.isEmpty()
+                    ) {
+                        info.cameraFrontPixelSize = "%.1f".format(physicalSize.width / pixelArray.width * 1000f) + "µm"
                     }
 
                     // 光圈
@@ -558,12 +578,44 @@ class OemDataSource(private val context: Context? = null) {
                         }
                     }
 
-                    // 焦距 (用于推算变焦倍数)
+                    // ★ B4 (2026-08-10): 前置对焦模式 — CONTROL_AF_AVAILABLE_MODES 含 AUTO/CONTINUOUS 即为 AF
+                    if (isFront && info.cameraFrontAf.isEmpty()) {
+                        val afModes = chars.get(CameraCharacteristics.CONTROL_AF_AVAILABLE_MODES)
+                        if (afModes != null && afModes.isNotEmpty()) {
+                            val hasAf = afModes.any {
+                                it == CameraCharacteristics.CONTROL_AF_MODE_AUTO ||
+                                it == CameraCharacteristics.CONTROL_AF_MODE_CONTINUOUS_PICTURE ||
+                                it == CameraCharacteristics.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                            }
+                            info.cameraFrontAf = if (hasAf) "AF(自动对焦)" else "FF(定焦)"
+                        }
+                    }
+
+                    // 焦距 (用于推算变焦倍数 + FOV)
                     val focalLengths = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)
                     if (focalLengths != null && focalLengths.isNotEmpty()) {
                         val fl = focalLengths[0]
                         val desc = if (isRear) "后置 ${fl}mm" else "前置 ${fl}mm"
-                        if (isRear) rearSensors.add(desc) else frontSensors.add(desc)
+                        if (isRear) {
+                            rearSensors.add(desc)
+                            rearFocals.add(fl)
+                        } else {
+                            frontSensors.add(desc)
+                        }
+
+                        // ★ B3 (2026-08-10): 水平视场角 FOV — Camera2 无公开 FOV key
+                        //   (审查 addendum 引用的 LENS_INFO_FIELD_OF_VIEW 不存在于公开 API),
+                        //   由 物理尺寸+焦距 推算: HFOV = 2·atan(w / 2f)
+                        if (physicalSize != null && physicalSize.width > 0 && fl > 0f) {
+                            val fov = 2.0 * Math.toDegrees(
+                                kotlin.math.atan((physicalSize.width / (2f * fl)).toDouble())
+                            )
+                            if (fov in 1.0..179.0) {
+                                val fovStr = "%.0f°".format(fov)
+                                if (isFront && info.cameraFrontFov.isEmpty()) info.cameraFrontFov = fovStr
+                                if (isRear && info.cameraRearFov.isEmpty()) info.cameraRearFov = fovStr
+                            }
+                        }
                     } else {
                         if (isRear) rearSensors.add("后置 #$id") else frontSensors.add("前置 #$id")
                     }
@@ -573,9 +625,17 @@ class OemDataSource(private val context: Context? = null) {
             info.cameraRearSensors = rearSensors.joinToString(" · ")
             info.cameraFrontSensor = frontSensors.joinToString(" · ")
 
-            // 最大变焦倍数 (通过不同后置摄像头焦距推算)
+            // ★ B5 (2026-08-10): 变焦倍数改为焦距比推算 (maxFocal/minFocal)
+            //   原 "摄数-1x" 与真实光学变焦无关 (3摄→"2x"), 误导用户。
+            //   多摄焦距范围: 超广角(f小)~长焦(f大), max/min 比 ≈ 光学变焦范围。
             if (rearSensors.size > 1) {
-                info.cameraMaxZoom = "${rearSensors.size}摄 (${rearSensors.size - 1}x 变焦)"
+                val minF = rearFocals.minOrNull()
+                val maxF = rearFocals.maxOrNull()
+                info.cameraMaxZoom = if (minF != null && maxF != null && minF > 0f && maxF / minF >= 1.2f) {
+                    "${rearSensors.size}摄 (${"%.1f".format(maxF / minF)}x 变焦范围)"
+                } else {
+                    "${rearSensors.size}摄"
+                }
             }
 
         } catch (e: Throwable) {

@@ -7,6 +7,10 @@ import com.rb.cybermonitorpro.data.model.MemoryInfo
  */
 class MemoryDataSource {
 
+    // ★ S1 (2026-08-10): dumpsys 冷启动瞬时不可用时的连续失败重试上限 —
+    //   达到次数后才永久跳过, 避免冷启动 dumpsys 尚未就绪被误杀整个会话。
+    private val MAX_DUMPSYS_RETRIES = 3
+
     fun getMemoryInfo(): MemoryInfo {
         val info = MemoryInfo()
         info.timestamp = System.currentTimeMillis()
@@ -65,9 +69,13 @@ class MemoryDataSource {
     private var cachedProcstats = emptyList<Triple<String, Float, Float>>()
     // ★ #4: dumpsys procstats 需 DUMP 权限, 三方 App 大概率每次被拒但进程照起 (30s 一次)。
     //   首次失败即永久跳过 — 失败设备本就拿不到数据, 零损失。
+    // ★ S1 (2026-08-10): 冷启动瞬间 dumpsys 尚未就绪 (输出为空) 会误触永久跳过,
+    //   一个本可正常工作的功能被整个会话关闭。改为连续失败 3 次才永久跳过;
+    //   目标场景(三方 App 无 DUMP 权限)本就每次失败, 护栏不影响它, 但能挡住瞬时冷启动误杀。
     @Volatile
     private var procstatsPermanentSkip = false
-
+    @Volatile
+    private var procstatsFailCount = 0
     private fun loadProcstats(info: MemoryInfo) {
         if (procstatsPermanentSkip) return
         val now = System.currentTimeMillis()
@@ -79,13 +87,15 @@ class MemoryDataSource {
             val output = ShellCommandDataSource.getDumpsysProcstats()
             val parsed = ShellCommandDataSource.extractTopProcesses(output, 5)
             if (parsed.isEmpty()) {
-                procstatsPermanentSkip = true   // 进程跑了但解析为空 → 权限被拒, 永久跳过
+                // 连续 3 次空解析才永久跳过; 成功会清零
+                if (++procstatsFailCount >= MAX_DUMPSYS_RETRIES) procstatsPermanentSkip = true
                 return
             }
+            procstatsFailCount = 0
             cachedProcstats = parsed
             lastProcstatsTime = now
         } catch (_: Throwable) {
-            procstatsPermanentSkip = true       // 进程直接失败 → 永久跳过
+            if (++procstatsFailCount >= MAX_DUMPSYS_RETRIES) procstatsPermanentSkip = true
             return
         }
         info.topProcesses = cachedProcstats.map { "${it.first}: ${String.format("%.0f", it.second)}MB" }
@@ -149,8 +159,11 @@ class MemoryDataSource {
     @Volatile
     private var cachedDumpsysOom: DumpsysMeminfoParser.OomCategories? = null
     // ★ #4: 同 procstats — dumpsys meminfo -a 首次失败/不可用即永久跳过, 不再每 30s 白起进程
+    // ★ S1 (2026-08-10): 同 procstats, 连续失败 3 次才永久跳过, 防冷启动瞬时误杀
     @Volatile
     private var dumpsysOomPermanentSkip = false
+    @Volatile
+    private var dumpsysOomFailCount = 0
 
     /**
      * 加载 dumpsys meminfo OOM 分类数据 (缓存 30 秒)
@@ -177,17 +190,19 @@ class MemoryDataSource {
             val output = ShellCommandDataSource.getDumpsysMeminfoDetail()
             val (oom, _) = DumpsysMeminfoParser.parse(output)
             if (oom.isAvailable) {
+                dumpsysOomFailCount = 0
                 cachedDumpsysOom = oom
                 lastDumpsysMeminfoTime = now
             } else {
-                dumpsysOomPermanentSkip = true   // 权限被拒 → 永久跳过
+                // 连续 3 次不可用才永久跳过
+                if (++dumpsysOomFailCount >= MAX_DUMPSYS_RETRIES) dumpsysOomPermanentSkip = true
             }
             info.systemProcessPssKB = oom.systemPssKB
             info.appProcessPssKB = oom.appPssKB + oom.cachedPssKB
             info.cachedProcessPssKB = oom.cachedPssKB
             info.dumpsysAvailable = oom.isAvailable
         } catch (_: Throwable) {
-            dumpsysOomPermanentSkip = true       // 进程直接失败 → 永久跳过
+            if (++dumpsysOomFailCount >= MAX_DUMPSYS_RETRIES) dumpsysOomPermanentSkip = true
             info.dumpsysAvailable = false
         }
     }

@@ -190,13 +190,26 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
         val hasCameraInfo = o?.cameraRearSensors?.isNotEmpty() == true
             || o?.cameraFrontSensor?.isNotEmpty() == true
             || o?.cameraSensorPhysicalSize?.isNotEmpty() == true
+            // ★ B1-B4 (2026-08-10): 前置加强版新字段也作为分区显隐条件
+            || o?.cameraFrontResolution?.isNotEmpty() == true
+            || o?.cameraFrontSensorPhysicalSize?.isNotEmpty() == true
+            || o?.cameraFrontPixelSize?.isNotEmpty() == true
+            || o?.cameraFrontFov?.isNotEmpty() == true
+            || o?.cameraRearFov?.isNotEmpty() == true
+            || o?.cameraFrontAf?.isNotEmpty() == true
         if (hasCameraInfo) {
             SectionCard(stringResource(R.string.oem_section_camera_sensor)) {
                 RowItem(stringResource(R.string.oem_rear), o?.cameraRearSensors?.ifEmpty { "-" } ?: "-")
+                o?.cameraRearFov?.takeIf { it.isNotEmpty() }?.let { RowItem(stringResource(R.string.oem_rear_fov), it) }
                 o?.cameraFrontSensor?.takeIf { it.isNotEmpty() }?.let { RowItem(stringResource(R.string.oem_front), it) }
+                o?.cameraFrontResolution?.takeIf { it.isNotEmpty() }?.let { RowItem(stringResource(R.string.oem_front_resolution), it) }
                 RowItem(stringResource(R.string.oem_sensor_size), o?.cameraSensorPhysicalSize?.ifEmpty { "-" } ?: "-")
+                o?.cameraFrontSensorPhysicalSize?.takeIf { it.isNotEmpty() }?.let { RowItem(stringResource(R.string.oem_front_sensor_size), it) }
+                o?.cameraFrontPixelSize?.takeIf { it.isNotEmpty() }?.let { RowItem(stringResource(R.string.oem_front_pixel_size), it) }
+                o?.cameraFrontFov?.takeIf { it.isNotEmpty() }?.let { RowItem(stringResource(R.string.oem_front_fov), it) }
                 o?.cameraRearAperture?.takeIf { it.isNotEmpty() }?.let { RowItem(stringResource(R.string.oem_rear_aperture), it) }
                 o?.cameraFrontAperture?.takeIf { it.isNotEmpty() }?.let { RowItem(stringResource(R.string.oem_front_aperture), it) }
+                o?.cameraFrontAf?.takeIf { it.isNotEmpty() }?.let { RowItem(stringResource(R.string.oem_front_af), it) }
                 if (o?.cameraOpticalStabilization == true) {
                     RowItemWithColor(stringResource(R.string.oem_ois_label), stringResource(R.string.oem_ois_supported), SuccessNeon)
                 }

@@ -224,6 +224,13 @@ class DeviceDetailDataSource(private val context: Context) {
             "t310" to "28nm",               // Tiger T310 (2019)
         )
 
+        // ★ S3 (2026-08-10): 小写键查找表 — 策略1a 大小写不敏感精确查表恢复 O(1),
+        //   替代原 entries.firstOrNull{ equals(ignoreCase) } 的 O(条目数) 全扫。
+        //   lazy 构建避免类加载期额外开销; mapKeys 遇重复小写键保留最后一个 (表内无冲突)。
+        private val SOC_PROCESS_MAP_LC: Map<String, String> by lazy {
+            SOC_PROCESS_MAP.mapKeys { it.key.lowercase() }
+        }
+
         /**
          * 平台 codename → 制程查找表
          * 用于 ro.board.platform 返回 codename 时的二次推断
@@ -420,25 +427,38 @@ class DeviceDetailDataSource(private val context: Context) {
         } catch (_: Throwable) { 0 }
     }
 
-    /** 色深检测: 仅读取 sysfs/属性中的实际值，不做推断 */
+    /**
+     * 色深检测 — 修复 (2026-08-10, 审查 C1 🔴):
+     *
+     * 旧实现把帧缓冲 bpp/3 当作面板每通道色深, 而 fb0 几乎所有机型都是 RGBA8888=32bpp,
+     * 32/3=10 → 把标准 8-bit 面板系统性误报为 "10-bit" 并上屏 (DeviceScreen:238)。
+     *
+     * 修正: Android 无公开可靠的面板每通道色深 API, 只能分级近似:
+     *   1) 厂商明确声明的面板色深属性 (最权威, 多数未设置)
+     *   2) 帧缓冲位宽的「无歧义」精确映射 (24=RGB888→8bit, 30=RGBX1010102→10bit, 36→12bit)
+     *      — 32bpp 同时覆盖 8-bit(RGBA8) 与 10-bit(ABGR2101010), 不可断言, 一律留空
+     *   3) 留空: UI 以 takeIf{isNotEmpty()} 隐藏该行, 不谎报
+     */
     private fun detectColorDepth(): String {
         return try {
-            // 方法1: fb0 bits_per_pixel (内核直接暴露的实际值)
+            // 1) 厂商明确声明的面板色深 (最权威)
+            val vendorBit = SysFsReader.readProp("ro.vendor.display.bit")
+            if (vendorBit == "10") return "10-bit"
+            if (vendorBit == "12") return "12-bit"
+            if (vendorBit == "8") return "8-bit"
+
+            // 2) 帧缓冲位宽 — 仅映射无歧义值; 32bpp 不推断 (同时覆盖 RGBA8 与 ABGR2101010)
             val bpp = SysFsReader.readFile("/sys/class/graphics/fb0/bits_per_pixel")
                 .trim().toIntOrNull() ?: 0
-            if (bpp >= 30) return "${bpp / 3}-bit"
-            if (bpp in 24..29) return "8-bit"
-
-            // 方法2: SystemProperties 实际值
-            val depth = SysFsReader.readProp("ro.display.bpp")
-            if (depth.isNotEmpty()) {
-                val d = depth.toIntOrNull() ?: 0
-                if (d >= 30) return "${d / 3}-bit"
-                if (d in 24..29) return "8-bit"
+            when (bpp) {
+                24 -> "8-bit"     // RGB888
+                30 -> "10-bit"    // RGBX1010102
+                36 -> "12-bit"    // 罕见
+                else -> ""        // 32 及其它: 不推断, 留空 (不谎报)
             }
 
-            // 无实际数据时返回空（不推断）
-            ""
+            // 注: 旧方法2 (ro.display.bpp) 沿用同一 bpp/3 缺陷, 已删除 —
+            //     该属性多数 ROM 未设置且同样不可靠, 保留只会重复误报。
         } catch (_: Throwable) { "" }
     }
 
@@ -864,7 +884,9 @@ class DeviceDetailDataSource(private val context: Context) {
             // 策略1: 精确查表 (每项标识符分别尝试)
             for (socModel in socCandidates) {
                 // 策略1a: 精确查表 (硅片号/营销号直接命中) — ★ #6d: 大小写不敏感查表
-                SOC_PROCESS_MAP.entries.firstOrNull { (k, _) -> k.equals(socModel, ignoreCase = true) }?.let { (_, v) ->
+                // ★ S3 (2026-08-10): 改用 SOC_PROCESS_MAP_LC 小写键 O(1) 查找,
+                //   替代原 entries.firstOrNull{ equals(ignoreCase) } 的 O(条目数) 全扫。
+                SOC_PROCESS_MAP_LC[socModel.lowercase()]?.let { v ->
                     info.socProcessNode = v
                     info.socProcessNodeSource = "lookup:$socModel"
                     return

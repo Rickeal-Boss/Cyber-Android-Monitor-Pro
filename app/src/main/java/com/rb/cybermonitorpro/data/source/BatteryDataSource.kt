@@ -556,14 +556,18 @@ class BatteryDataSource(private val context: Context) {
 
     // ★ #1: 会话缓存 — 满充容量(charge_full)为硬件固化值, 首次成功解析后缓存,
     //   后续 tick 直接复用, 避免每帧重复 fork shell / 读 sysfs (仿 cachedCycleCount)。
+    // ★ S2 (2026-08-10): 一并缓存 chargeFullSource — 原缓存命中分支未回填数据来源,
+    //   导致第 2 个 tick 起 chargeFullSource 为空 (BatteryScreen:105 展示来源行空白)。
     private var cachedChargeFull: Long? = null
     private var cachedChargeFullDesign: Long? = null
+    private var cachedChargeFullSource: String? = null
 
     private fun readBatteryCapacity(info: BatteryInfo) {
         // ★ #1: 缓存命中 — 直接复用首次解析的容量, 跳过全部 sysfs/shell 读取
         cachedChargeFull?.let { cf ->
             info.chargeFullMAh = cf
             cachedChargeFullDesign?.let { info.chargeFullDesignMAh = it }
+            cachedChargeFullSource?.let { info.chargeFullSource = it }
             if (info.capacityDesignMAh <= 0 && info.chargeFullDesignMAh > 0) {
                 info.capacityDesignMAh = info.chargeFullDesignMAh
             }
@@ -690,9 +694,11 @@ class BatteryDataSource(private val context: Context) {
         }
 
         // ★ #1: 写入会话缓存 — 首次成功解析后缓存, 后续 tick 零开销复用
+        // ★ S2: 同步缓存 chargeFullSource, 命中时回填
         if (info.chargeFullMAh > 0) {
             cachedChargeFull = info.chargeFullMAh
             cachedChargeFullDesign = info.chargeFullDesignMAh.takeIf { it > 0 }
+            cachedChargeFullSource = info.chargeFullSource.takeIf { it.isNotEmpty() }
         }
     }
 

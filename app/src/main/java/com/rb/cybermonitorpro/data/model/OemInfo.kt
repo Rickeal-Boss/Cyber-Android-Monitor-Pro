@@ -90,7 +90,14 @@ data class OemInfo(
     var cameraFrontSensor: String = "",     // 前置传感器型号
     var cameraRearAperture: String = "",    // 后置光圈 f/x.x
     var cameraFrontAperture: String = "",   // 前置光圈
-    var cameraSensorPhysicalSize: String = "",// 传感器物理尺寸 mm
+    var cameraSensorPhysicalSize: String = "",// 后置传感器物理尺寸 mm
+    // ★ 前置加强版 (2026-08-10, 审查 B1-B4): 补齐前置分辨率/物理尺寸/像素尺寸/FOV/对焦
+    var cameraFrontResolution: String = "",      // 前置分辨率 (PixelArray → MP)
+    var cameraFrontSensorPhysicalSize: String = "", // 前置传感器物理尺寸 mm
+    var cameraFrontPixelSize: String = "",       // 前置像素尺寸 µm
+    var cameraFrontFov: String = "",             // 前置水平视场角 (焦距+物理尺寸推算)
+    var cameraRearFov: String = "",              // 后置水平视场角
+    var cameraFrontAf: String = "",              // 前置对焦: AF(自动)/FF(定焦)
     var cameraOpticalStabilization: Boolean = false,// OIS 光学防抖
     var cameraFlashType: String = "",       // 闪光灯: LED/双色温/无
     var cameraMaxZoom: String = "",         // 最大变焦: 2x/5x/10x/100x
