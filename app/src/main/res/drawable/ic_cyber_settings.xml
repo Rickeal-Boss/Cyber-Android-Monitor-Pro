@@ -1,0 +1,38 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 六角齿轮外框 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,2.5 L19,6.5 L19,17.5 L12,21.5 L5,17.5 L5,6.5 Z" />
+
+    <!-- 内环 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,8 A4,4 0 1,0 12,16 A4,4 0 1,0 12,8 Z" />
+
+    <!-- 中心方点 (填充) -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M11,11 L13,11 L13,13 L11,13 Z" />
+
+    <!-- 齿轮顶点标记 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,2.5 L12,4.5 M19,6.5 L17.5,7.5 M19,17.5 L17.5,16.5 M12,21.5 L12,19.5 M5,17.5 L6.5,16.5 M5,6.5 L6.5,7.5" />
+
+</vector>

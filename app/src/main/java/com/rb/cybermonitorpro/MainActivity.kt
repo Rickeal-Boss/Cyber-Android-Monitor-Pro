@@ -20,8 +20,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
@@ -504,7 +502,7 @@ private fun MainTabs(
             contentDescription = stringResource(R.string.common_settings)
         ) {
             Icon(
-                Icons.Filled.Settings,
+                CyberIcons.Settings,
                 contentDescription = null,
                 tint = Color(0xFF1A1A2E).copy(alpha = 0.85f),
                 modifier = Modifier.size(17.dp)

@@ -1,0 +1,29 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 六角外框 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,2.5 L20,7 L20,17 L12,21.5 L4,17 L4,7 Z" />
+
+    <!-- 上方圆点 (填充) -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M11,6.5 L13,6.5 L13,8.5 L11,8.5 Z" />
+
+    <!-- 竖线 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,10.5 L12,16.5" />
+
+</vector>

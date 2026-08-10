@@ -1,0 +1,42 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- 屋顶 (切角三角形) -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M3,11 L12,3 L21,11" />
+
+    <!-- 房屋主体 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M5,9.5 L5,20 L19,20 L19,9.5" />
+
+    <!-- 门 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,14 L10,20 L14,20 L14,14 Z" />
+
+    <!-- 窗户横线 -->
+    <path
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M10,11.5 L14,11.5" />
+
+</vector>

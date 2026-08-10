@@ -20,9 +20,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import com.rb.cybermonitorpro.ui.components.CyberIcons
-import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -475,7 +473,7 @@ fun BatteryScreen(
             modifier = Modifier.staggeredSwipe(0),
             title = statusText,
             subtitle = techText.ifEmpty { batteryInfo?.chargeStatus?.takeIf { it.isNotEmpty() } ?: "" },
-            icon = Icons.Filled.Favorite, iconTint = NeonPurple
+            icon = CyberIcons.Favorite, iconTint = NeonPurple
         )
 
         // ── 可重排卡片区 (内层 LazyColumn, items 列表 == getVisibleItems()，索引与 onMove 对齐) ──

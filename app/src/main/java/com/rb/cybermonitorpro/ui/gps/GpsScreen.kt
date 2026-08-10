@@ -30,8 +30,6 @@ import com.rb.cybermonitorpro.ui.components.SatelliteSkyView
 import com.rb.cybermonitorpro.ui.components.constellationColor
 import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
 @Composable
@@ -66,7 +64,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
             modifier = Modifier.staggeredSwipe(cardIdx++),
             title = statusTitle,
             subtitle = statusSubtitle,
-            icon = Icons.Filled.PlayArrow,
+            icon = CyberIcons.PlayArrow,
             iconTint = if (enabled) NeonPurple else NeonPurple.copy(alpha = 0.4f)
         )
 

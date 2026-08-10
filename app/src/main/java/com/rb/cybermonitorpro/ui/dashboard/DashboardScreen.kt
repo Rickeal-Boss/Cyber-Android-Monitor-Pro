@@ -10,8 +10,6 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -155,7 +153,7 @@ fun DashboardScreen(
                 "$uptimePrefix $uptimeStr",
                 if (deepSleepTimeStr.isNotEmpty()) "$deepSleepPrefix $deepSleepTimeStr" else null
             ),
-            icon = Icons.Filled.Home, iconTint = NeonPurple
+            icon = CyberIcons.Home, iconTint = NeonPurple
         )
 
         // ── 数据源健康指示条 ──
@@ -444,15 +442,15 @@ private fun QuickLinkByType(
 ) {
     val ctx = LocalContext.current
     val meta = when (id) {
-        "cpu" -> QuickMeta(stringResource(R.string.dashboard_quick_cpu_title), stringResource(R.string.dashboard_quick_cpu_desc), Icons.Filled.PlayArrow, NeonPurple, 1)
-        "gpu" -> QuickMeta(stringResource(R.string.dashboard_quick_gpu_title), stringResource(R.string.dashboard_quick_gpu_desc), Icons.Filled.Info, NeonPurpleBright, 2)
-        "mem" -> QuickMeta(stringResource(R.string.dashboard_quick_mem_title), "$memUsed / $memTotal", Icons.Filled.Star, NeonPurple, 3)
-        "net" -> QuickMeta(stringResource(R.string.dashboard_quick_net_title), stringResource(R.string.dashboard_quick_net_desc), Icons.Filled.Share, NeonPurpleBright, 5)
-        "gps" -> QuickMeta(stringResource(R.string.dashboard_quick_gps_title), stringResource(R.string.dashboard_quick_gps_desc), Icons.Filled.PlayArrow, NeonMagenta, 6)
-        "device" -> QuickMeta(stringResource(R.string.dashboard_quick_device_title), stringResource(R.string.dashboard_quick_device_desc), Icons.Filled.Search, SuccessNeon, 8)
+        "cpu" -> QuickMeta(stringResource(R.string.dashboard_quick_cpu_title), stringResource(R.string.dashboard_quick_cpu_desc), CyberIcons.PlayArrow, NeonPurple, 1)
+        "gpu" -> QuickMeta(stringResource(R.string.dashboard_quick_gpu_title), stringResource(R.string.dashboard_quick_gpu_desc), CyberIcons.Info, NeonPurpleBright, 2)
+        "mem" -> QuickMeta(stringResource(R.string.dashboard_quick_mem_title), "$memUsed / $memTotal", CyberIcons.Star, NeonPurple, 3)
+        "net" -> QuickMeta(stringResource(R.string.dashboard_quick_net_title), stringResource(R.string.dashboard_quick_net_desc), CyberIcons.Share, NeonPurpleBright, 5)
+        "gps" -> QuickMeta(stringResource(R.string.dashboard_quick_gps_title), stringResource(R.string.dashboard_quick_gps_desc), CyberIcons.PlayArrow, NeonMagenta, 6)
+        "device" -> QuickMeta(stringResource(R.string.dashboard_quick_device_title), stringResource(R.string.dashboard_quick_device_desc), CyberIcons.Search, SuccessNeon, 8)
         "battery" -> QuickMeta(stringResource(R.string.dashboard_quick_battery_title), stringResource(R.string.dashboard_quick_battery_desc), CyberIcons.BatteryFull, NeonPurple, 4)
         "sensor" -> QuickMeta(stringResource(R.string.dashboard_quick_sensor_title), stringResource(R.string.dashboard_quick_sensor_desc), CyberIcons.Sensors, NeonPurpleBright, 7)
-        else -> QuickMeta(id, "", Icons.Filled.Info, NeonPurple, 0)
+        else -> QuickMeta(id, "", CyberIcons.Info, NeonPurple, 0)
     }
     QuickLinkCard(
         meta.title, meta.subtitle, meta.icon, meta.tint,

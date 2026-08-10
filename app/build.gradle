@@ -95,10 +95,10 @@ defaultConfig {
     }
 
     // ★ 启动性能优化 (2026-06-19): R8 dex startup optimization
-    // gradle.properties 已启用 android.experimental.r8.dex-startup-optimization=true
-    // R8 根据 manifest 的启动 Activity 顺序优化 dex 类排列，冷启动减少 page fault
-    // 注: 完整 Baseline Profile 需 macrobenchmark 模块自动生成，
-    // src/main/baseline-prof.txt 为手写参考，需未来集成 macrobenchmark 插件生效
+    //   android.experimental.r8.dex-startup-optimization 在 AGP 8.x 已废弃 (README 说明)，
+    //   故 gradle.properties 未启用该开关；R8 仍会通过 minifyEnabled + shrinkResources 缩减代码与资源。
+    //   完整 Baseline Profile 需 macrobenchmark 模块自动生成，
+    //   src/main/baseline-prof.txt 为手写参考，需未来集成 macrobenchmark 插件生效
 
 }
 
@@ -120,10 +120,16 @@ dependencies {
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
-    implementation 'androidx.compose.material3:material3'
+    implementation('androidx.compose.material3:material3') {
+        // ★ 裁剪 material-icons-core: 全仓 22 处通用图标已由 CyberIcons 自绘替代，
+        //   强制排除 material3 传递引入的 material-icons-core，进一步缩小 APK / dex。
+        //   注意: 若未来 M3 组件内部硬编码引用 Icons.*，此处 exclude 会导致运行时崩溃，
+        //   故替换后须全页面冒烟测试。
+        exclude group: 'androidx.compose.material', module: 'material-icons-core'
+    }
     // ★ 裁剪 material-icons-extended: 全仓仅 6 图标依赖 (Window/Language/DragHandle/Sensors/Schedule/BatteryFull),
     //   已由 ui/components/CyberIcons.kt 自绘替代 (描边风格与 ic_cyber_* 一致)。
-    //   收益: release APK -2~4MB, dex 少 2000+ 类, 构建变快。core 图标由 material3 传递依赖自带。
+    //   收益: release APK -2~4MB, dex 少 2000+ 类, 构建变快。
     implementation 'sh.calvin.reorderable:reorderable:3.1.0'
     implementation 'androidx.compose.runtime:runtime-livedata'
     implementation 'androidx.compose.ui:ui-text-google-fonts'

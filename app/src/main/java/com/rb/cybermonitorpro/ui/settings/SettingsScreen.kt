@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -69,16 +67,16 @@ private data class ModuleIntervalConfig(
 )
 
 private val moduleConfigs = listOf(
-    ModuleIntervalConfig(R.string.tab_cpu, Icons.Filled.PlayArrow,
+    ModuleIntervalConfig(R.string.tab_cpu, CyberIcons.PlayArrow,
         R.string.module_cpu_desc,
         { it.getCpuRefreshMs() }, { vm, ms -> vm.setCpuRefreshMs(ms) }),
-    ModuleIntervalConfig(R.string.tab_gpu, Icons.Filled.Settings,
+    ModuleIntervalConfig(R.string.tab_gpu, CyberIcons.Settings,
         R.string.module_gpu_desc,
         { it.getGpuRefreshMs() }, { vm, ms -> vm.setGpuRefreshMs(ms) }),
-    ModuleIntervalConfig(R.string.tab_memory, Icons.Filled.Star,
+    ModuleIntervalConfig(R.string.tab_memory, CyberIcons.Star,
         R.string.module_memory_desc,
         { it.getMemoryRefreshMs() }, { vm, ms -> vm.setMemoryRefreshMs(ms) }),
-    ModuleIntervalConfig(R.string.tab_battery, Icons.Filled.Favorite,
+    ModuleIntervalConfig(R.string.tab_battery, CyberIcons.Favorite,
         R.string.module_battery_desc,
         { it.getBatteryRefreshMs() }, { vm, ms -> vm.setBatteryRefreshMs(ms) }),
     // ★ Network/GPS/Sensors 不支持独立频率配置，已移除
@@ -245,7 +243,7 @@ private fun LanguagePickerDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            if (selected) Icons.Filled.Check else CyberIcons.Language,
+                            if (selected) CyberIcons.Check else CyberIcons.Language,
                             contentDescription = null,
                             tint = if (selected) NeonPurpleBright else TextSecondary,
                             modifier = Modifier.size(20.dp)

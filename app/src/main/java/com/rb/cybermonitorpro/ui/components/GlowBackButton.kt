@@ -31,8 +31,6 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -446,7 +444,7 @@ fun LightCircleBackButton(
 
             // 底层: 大幅模糊光晕
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                imageVector = CyberIcons.ArrowBack,
                 contentDescription = null,
                 tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.14f),
                 modifier = Modifier
@@ -455,7 +453,7 @@ fun LightCircleBackButton(
             )
             // 中层: 轻微模糊
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                imageVector = CyberIcons.ArrowBack,
                 contentDescription = null,
                 tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha * 0.30f),
                 modifier = Modifier
@@ -464,7 +462,7 @@ fun LightCircleBackButton(
             )
             // 主层: 锐利焦点
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                imageVector = CyberIcons.ArrowBack,
                 contentDescription = stringResource(R.string.common_back),
                 tint = Color(0xFF1A1A2E).copy(alpha = iconAlpha),
                 modifier = Modifier.size(iconSize)

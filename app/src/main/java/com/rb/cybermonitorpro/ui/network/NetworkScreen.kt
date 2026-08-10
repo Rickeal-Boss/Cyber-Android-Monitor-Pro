@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -82,7 +80,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
             networkType
         )
         InfoCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = wifiStatus, subtitle = wifiSubtitle.ifEmpty { stringResource(R.string.common_waiting_data) },
-            icon = Icons.Filled.Share, iconTint = NeonPurple)
+            icon = CyberIcons.Share, iconTint = NeonPurple)
 
         MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Network activity", value = "${wifiInfo?.linkSpeedMbps ?: 0} Mbps", valueColor = NeonPurpleBright) {
             DualLineChart(data1 = wifiSpeedChart, data2 = signalChart,
