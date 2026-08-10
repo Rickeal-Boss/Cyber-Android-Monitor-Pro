@@ -54,6 +54,13 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getBoolean("dark_mode", DEFAULT_DARK_MODE)
         set(value) = prefs.edit { putBoolean("dark_mode", value) }
 
+    // ── 全局光照 (GlobalLight / Reveal Highlight) ──
+    // false = 整体关闭指针跟随光照效果, 消除每帧径向渐变光栅开销 (低端设备省电提帧)
+    // 由 GlobalLightSwitch 在运行期消费; 设置页开关即时生效, 无需重启
+    var globalLightEnabled: Boolean
+        get() = prefs.getBoolean("global_light_enabled", true)
+        set(value) = prefs.edit { putBoolean("global_light_enabled", value) }
+
     // ── 震动反馈 ──
     var hapticEnabled: Boolean
         get() = prefs.getBoolean("haptic_enabled", true)

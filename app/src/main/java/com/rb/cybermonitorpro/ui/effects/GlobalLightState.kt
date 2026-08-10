@@ -62,6 +62,8 @@ class GlobalLightState {
      * @param isTouch true=触摸事件, false=鼠标/笔悬停
      */
     fun update(position: Offset, isTouch: Boolean) {
+        // 全局光照总开关关闭时静默丢弃事件 — 不写 State, 弹簧/绘制全链路零开销
+        if (!GlobalLightSwitch.enabled) return
         targetPosition = position
         mode = if (isTouch) Mode.TOUCH else Mode.HOVER
         lastEventTime = System.currentTimeMillis()
@@ -117,6 +119,20 @@ fun rememberAnimatedLightPosition(state: GlobalLightState): Offset {
         label = "lightPosition"
     )
     return animatedPos
+}
+
+/**
+ * 全局光照总开关 — 设置页可整体关闭以降低性能开销
+ *
+ * 初始值由 DeviceApplication.onCreate 从 AppSettings 读取注入;
+ * 设置页开关切换时同步更新, 全 App 即时生效 (Compose State 驱动)。
+ *
+ * 关闭时:
+ * - GlobalLightState.update() 直接丢弃指针事件, 不再触发弹簧动画
+ * - revealLight() 的 isActive 恒为 false, 跳过全部径向渐变光栅绘制
+ */
+object GlobalLightSwitch {
+    var enabled by mutableStateOf(true)
 }
 
 /**

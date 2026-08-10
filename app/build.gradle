@@ -121,7 +121,9 @@ dependencies {
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation 'androidx.compose.material3:material3'
-    implementation 'androidx.compose.material:material-icons-extended'
+    // ★ 裁剪 material-icons-extended: 全仓仅 6 图标依赖 (Window/Language/DragHandle/Sensors/Schedule/BatteryFull),
+    //   已由 ui/components/CyberIcons.kt 自绘替代 (描边风格与 ic_cyber_* 一致)。
+    //   收益: release APK -2~4MB, dex 少 2000+ 类, 构建变快。core 图标由 material3 传递依赖自带。
     implementation 'sh.calvin.reorderable:reorderable:3.1.0'
     implementation 'androidx.compose.runtime:runtime-livedata'
     implementation 'androidx.compose.ui:ui-text-google-fonts'

@@ -82,7 +82,8 @@ fun Modifier.revealLight(
     )
 
     // ★ 淡出期间 mode 已为 IDLE 但强度仍在渐隐, 故以「动画强度>0」判定活跃, 否则淡出中途被跳过
-    val isActive = lightState.visible &&
+    // ★ GlobalLightSwitch: 设置页关闭全局光照时 isActive 恒 false, 跳过全部光栅绘制
+    val isActive = GlobalLightSwitch.enabled && lightState.visible &&
             animatedPos.x.isFinite() && animatedPos.y.isFinite() &&
             animatedPos.x >= 0 && animatedPos.y >= 0 &&
             effectiveIntensity > 0.001f
@@ -175,7 +176,11 @@ private fun Modifier.revealLightCanvas(
             center = localLightCenter,
             radius = radiusPx
         ),
-        radius = maxOf(size.width, size.height) * 1.2f,
+        // ★ Canvas 巨型圆修复: 光栅半径 = 渐变半径。
+        //   原 maxOf(w,h)*1.2f 在 1080p 头部栏产生 ≈2500×2500px/帧 的填充,
+        //   其中渐变半径 radiusPx 之外 80%+ 全透明 — 纯浪费。渐变边缘已收敛到 Transparent,
+        //   半径收窄视觉零差异, API<33 老设备 (全走此路径) 光栅开销大幅降低。
+        radius = radiusPx,
         center = localLightCenter
     )
 }

@@ -45,9 +45,9 @@ class DeviceRepository(context: Context) {
         } else ""
         val platform = if (socModel.isNotEmpty()) socModel
         else SysFsReader.readProp("ro.board.platform")
-        val resolved = if (platform.isNotEmpty()) platform
-        else SysFsReader.readProp("ro.board.platform")
-        val finalPlatform = if (resolved.isNotEmpty()) resolved
+        // ★ #11c: 删除恒等冗余 `resolved` 中间变量 (其 else 分支重复读同一 prop, 值与 platform 恒等)
+        //   注意: 仅删变量, cachedChip 字段保留 — collectCpuBlock/collectGpuBlock 仍依赖它注入芯片信息
+        val finalPlatform = if (platform.isNotEmpty()) platform
         else SysFsReader.readProp("ro.hardware.chipname")
         CpuCache.lookup(finalPlatform)
     }
@@ -134,8 +134,13 @@ class DeviceRepository(context: Context) {
 
         // 辅助模块 + 历史数据推送 — 共享全局间隔
         auxJob = PollingFlow.launchModulePolling("Aux", cpuIntervalFlow, scope, immediate = false) {
-            val historyMap = auxCollector.collectAndPushHistory(healthTracker, historyCache)
-            historyData.postValue(historyMap)
+            // ★ #2: 观察者守卫 — 无活跃观察者时跳过 15 组历史快照构建 + postValue
+            //   (每 tick ≈1200 个对象拷贝)。HistoryCache.addPoint 照常运行, 缓存持续记录,
+            //   切回图表页激活观察者后 ≤1 个 tick 即重建曲线。
+            val snapshotActive = historyData.hasActiveObservers()
+            val historyMap = auxCollector.collectAndPushHistory(
+                healthTracker, historyCache, buildSnapshot = snapshotActive)
+            if (snapshotActive) historyData.postValue(historyMap)
         }
 
         // 观察刷新策略 (省电模式降频，前后台不降频 — 仅动画暂停)
@@ -315,7 +320,8 @@ class DeviceRepository(context: Context) {
         val prefix = "sensor_${sensorType}"
         val labels = meta.axisLabelResIds.map { appContext.getString(it) }
         val map = mutableMapOf<String, List<HistoryDataPoint>>()
-        for (label in labels) map["${prefix}_${label}"] = historyCache.getSeries("${prefix}_${label}")
+        // ★ #3: 全量 getSeries(300点) → getRecentSeries(80点), 详情页每秒减少 ≈1.4 万次对象拷贝
+        for (label in labels) map["${prefix}_${label}"] = historyCache.getRecentSeries("${prefix}_${label}", 80)
         sensorHistoryData.postValue(map)
     }
 

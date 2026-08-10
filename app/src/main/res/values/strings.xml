@@ -52,6 +52,10 @@
     <string name="settings_haptic_weak">Weak</string>
     <string name="settings_haptic_medium">Medium</string>
     <string name="settings_haptic_strong">Strong</string>
+    <string name="settings_globallight">Global Lighting</string>
+    <string name="settings_globallight_desc">Pointer-follow reveal lighting on cards; turn off to cut GPU raster cost on low-end devices</string>
+    <string name="settings_globallight_on">On</string>
+    <string name="settings_globallight_off">Off</string>
     <string name="settings_app_name">Cyber Android Monitor Pro</string>
     <string name="settings_app_version">v5.0.0</string>
     <string name="settings_app_tech">Kotlin 2.2.10 · Compose · Bat Theme</string>

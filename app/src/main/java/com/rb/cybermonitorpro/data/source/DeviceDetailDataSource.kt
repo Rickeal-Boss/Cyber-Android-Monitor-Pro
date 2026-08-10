@@ -252,6 +252,9 @@ class DeviceDetailDataSource(private val context: Context) {
             "sdm660" to "14nm Samsung",
             "sdm845" to "10nm Samsung LPP",
             "msm8998" to "10nm Samsung",
+            // ★ #6a: 补齐缺失平台代号 (注: msm8996/8994/8974 已在 SOC_PROCESS_MAP, 不重复搬入)
+            "msmnile" to "7nm TSMC N7",         // SM8150 — Snapdragon 855/855+/860
+            "sm6150" to "8nm Samsung LPP",      // Snapdragon 730/730G
             // MediaTek
             "mt6983" to "4nm TSMC N4",
             "mt6895" to "5nm TSMC N5",
@@ -264,6 +267,9 @@ class DeviceDetailDataSource(private val context: Context) {
             // HiSilicon
             "kirin9000" to "5nm TSMC N5",
         )
+
+        /** ★ #6e: 已知短键白名单 — 合法标识符长度 < 5, 需放行模糊匹配 (避免被长度守卫误杀) */
+        private val SHORT_KEY_WHITELIST = setOf("gsp", "t310")
 
         /** ARM CPU Part → 架构 + 缓存 映射 */
         private val ARM_CPU_PART_MAP = mapOf(
@@ -291,6 +297,10 @@ class DeviceDetailDataSource(private val context: Context) {
             "0xd49" to CpuArchInfo("Cortex-A510r1", "ARMv9-A", 32, 32, 256, 0),
             "0xd4a" to CpuArchInfo("Cortex-A520", "ARMv9.2-A", 32, 32, 256, 0),
             // Qualcomm Kryo
+            // ★ #6b: 初代 Kryo (SD820/821) — 缺失时 SD820 会落入频率猜测被错标 A78/A55
+            //   L1/L2 为社区共识值 (Kryo 200 系: 32K I$ / 24K D$, 大核簇 L2 更大)
+            "0x201" to CpuArchInfo("Kryo Gold", "ARMv8-A", 32, 24, 512, 0),
+            "0x205" to CpuArchInfo("Kryo Silver", "ARMv8-A", 32, 24, 256, 0),
             "0x802" to CpuArchInfo("Kryo 585 Gold", "ARMv8.2-A", 64, 64, 512, 0),
             "0x803" to CpuArchInfo("Kryo 585 Silver", "ARMv8.2-A", 16, 16, 128, 0),
             "0x804" to CpuArchInfo("Kryo 670 Gold", "ARMv8.2-A", 64, 64, 512, 0),
@@ -849,14 +859,13 @@ class DeviceDetailDataSource(private val context: Context) {
                 SysFsReader.readProp("ro.hardware"),
             ).filter { it.isNotBlank() }.distinct()
 
-            // 记录所有识别的标识符便于调试
-            Log.d(TAG, "SoC识别标识符: $socCandidates | SOC_PROCESS_MAP keys: ${SOC_PROCESS_MAP.keys}")
+            // ★ #11e: 移除 Log.d 全表打印 (每次采集 dump 整个 SOC_PROCESS_MAP keys, release 包白跑字符串拼接)
 
             // 策略1: 精确查表 (每项标识符分别尝试)
             for (socModel in socCandidates) {
-                // 策略1a: 精确查表 (硅片号/营销号直接命中)
-                SOC_PROCESS_MAP[socModel]?.let {
-                    info.socProcessNode = it
+                // 策略1a: 精确查表 (硅片号/营销号直接命中) — ★ #6d: 大小写不敏感查表
+                SOC_PROCESS_MAP.entries.firstOrNull { (k, _) -> k.equals(socModel, ignoreCase = true) }?.let { (_, v) ->
+                    info.socProcessNode = v
                     info.socProcessNodeSource = "lookup:$socModel"
                     return
                 }
@@ -878,7 +887,8 @@ class DeviceDetailDataSource(private val context: Context) {
                     // 双向 contains 匹配，避免误伤
                     if (socModel.contains(key, ignoreCase = true) || key.contains(socModel, ignoreCase = true)) {
                         // 防止短数字误匹配（如 "820" 匹配到 "SM820" 而非 "SDM820"）
-                        if (key.length >= 5 || socModel.length >= 5) {
+                        // ★ #6e: 放行已知短键白名单 (gsp=3, t310=4), 其余短键仍按长度守卫拦截
+                        if (key.length >= 5 || socModel.length >= 5 || key.lowercase() in SHORT_KEY_WHITELIST) {
                             info.socProcessNode = value
                             info.socProcessNodeSource = "lookup:~$key"
                             Log.d(TAG, "SoC模糊匹配: $socModel → $key → $value")
@@ -1854,6 +1864,16 @@ class DeviceDetailDataSource(private val context: Context) {
     private fun runGetProp(key: String): String =
         try { ShellCommandDataSource.exec("getprop", key).trim() } catch (_: Throwable) { "" }
 
+    // ★ #11d: 序列号会话缓存 — 硬件序列号属设备固化值, 首次读取后缓存,
+    //   避免每 tick 重复 fork shell 执行 getprop (ro.serialno/sys.serialno)。
+    private var cachedSerial: String? = null
+    private fun readCachedSerialProp(): String {
+        cachedSerial?.let { return it }
+        val s = runGetProp("ro.serialno").ifBlank { runGetProp("sys.serialno") }
+        cachedSerial = s.ifBlank { null }
+        return s
+    }
+
     private fun collectIdentifiers(info: DeviceDetailInfo) {
         try {
             // Android ID — Settings.Secure 无需额外权限
@@ -1887,10 +1907,9 @@ class DeviceDetailDataSource(private val context: Context) {
                 catch (_: Throwable) { "" }
             }
 
-            // ── Path ②: getprop shell (最可靠! 绕过 hidden API 限制) ──
+            // ── Path ②: getprop shell (最可靠! 绕过 hidden API 限制) — ★ #11d: 会话缓存
             if (serial.isBlank()) {
-                serial = runGetProp("ro.serialno")
-                    .ifBlank { runGetProp("sys.serialno") }
+                serial = readCachedSerialProp()
             }
 
             // ── Path ③: 直接读 sysfs 文件 (部分设备可从 USB 节点获取) ──
@@ -1909,10 +1928,9 @@ class DeviceDetailDataSource(private val context: Context) {
             info.serialNumber = serial.ifBlank { "不可用" }
         } catch (e: Throwable) { Log.w(TAG, "序列号读取失败", e) }
 
-        // 硬件序列号 — 同样用 shell 优先策略
+        // 硬件序列号 — 同样用 shell 优先策略 — ★ #11d: shell 部分复用会话缓存, 避免重复 fork
         try {
-            info.hardwareSerial = runGetProp("ro.serialno")
-                .ifEmpty { runGetProp("sys.serialno") }
+            info.hardwareSerial = readCachedSerialProp()
                 .ifEmpty { SysFsReader.readProp("ro.serialno") }
                 .ifEmpty { SysFsReader.readProp("sys.serialno") }
         } catch (e: Throwable) { Log.w(TAG, "硬件序列号读取失败", e) }

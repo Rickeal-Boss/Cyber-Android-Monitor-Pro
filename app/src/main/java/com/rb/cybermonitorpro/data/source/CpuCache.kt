@@ -62,7 +62,8 @@ object CpuCache {
     )
 
     // 天玑家族兜底模式：提升为常量，避免每次 lookup 重新编译正则
-    private val DIMENSITY_PATTERN = Regex("mt(67|68|69)\\d{2}")
+    // ★ #6c: 移除 mt67xx — mt67xx 全系是 Helio (P65/G70/G90 等), 原正则会误标 "Dimensity 67xx"
+    private val DIMENSITY_PATTERN = Regex("mt(68|69)\\d{2}")
 
     // ═══ 天玑营销后缀归一化 (Ultra/Max/+/Ultimate/Turbo/Apex/Energy/Elite/Pro/X/e) ═══
     //   仅用于查找, 不用于显示 (UI 保留 OEM 营销名)。
@@ -99,6 +100,102 @@ object CpuCache {
     private val PLUS_SUFFIX_PATTERN = Regex("""\+$""")
 
     val KNOWN_CHIPS: Map<String, KnownChip> = mapOf(
+
+        // ═══════════════ #6f: 下探扩充 — 旧旗舰骁龙 (SD820/821/835/845/855) ═══════════════
+        //   对应 SOC_PROCESS_MAP 既有键 (MSM8996/MSM8998/SDM845) 与 #6a 新增 PLATFORM msmnile
+
+        // ═══ Snapdragon 820 / 821 (MSM8996) — kryo ═══
+        "msm8996" to KnownChip(
+            platformId = "msm8996",
+            chipName = "Snapdragon 820/821",
+            cpuModel = "Kryo (2+2)",
+            processNode = "14nm Samsung",
+            releaseDate = "2015-11",
+            clusters = listOf(
+                ClusterSpec("Kryo Prime", 2, 2.15f),
+                ClusterSpec("Kryo",        2, 1.59f),
+            ),
+            l1iPerBig = "32 KB", l1dPerBig = "32 KB", l2PerBig = "1 MB",
+            l1iPerSmall = "32 KB", l1dPerSmall = "32 KB", l2PerSmall = "1 MB",
+            l3Shared = "—",
+            gpuModel = "Adreno 530",
+            gpuClockMhz = 624,
+            gpuAlus = 256,
+            gpuFp32Tflops = 0.64f,
+            isp = "Spectra (14-bit)",
+            npu = "Hexagon 680",
+            modem = "Snapdragon X12",
+        ),
+
+        // ═══ Snapdragon 835 (MSM8998) — kryo ═══
+        "msm8998" to KnownChip(
+            platformId = "msm8998",
+            chipName = "Snapdragon 835",
+            cpuModel = "Kryo 280 (Cortex-A73 + A53)",
+            processNode = "10nm Samsung",
+            releaseDate = "2017-03",
+            clusters = listOf(
+                ClusterSpec("Cortex-A73", 4, 2.45f),
+                ClusterSpec("Cortex-A53", 4, 1.90f),
+            ),
+            l1iPerBig = "32 KB", l1dPerBig = "32 KB", l2PerBig = "2 MB",
+            l1iPerSmall = "32 KB", l1dPerSmall = "32 KB", l2PerSmall = "1 MB",
+            l3Shared = "—",
+            gpuModel = "Adreno 540",
+            gpuClockMhz = 710,
+            gpuAlus = 256,
+            gpuFp32Tflops = 0.73f,
+            isp = "Spectra 180",
+            npu = "Hexagon 682",
+            modem = "Snapdragon X16",
+        ),
+
+        // ═══ Snapdragon 845 (SDM845) — kryo ═══
+        "sdm845" to KnownChip(
+            platformId = "sdm845",
+            chipName = "Snapdragon 845",
+            cpuModel = "Kryo 385 (Cortex-A75 + A55)",
+            processNode = "10nm Samsung LPP",
+            releaseDate = "2017-12",
+            clusters = listOf(
+                ClusterSpec("Cortex-A75", 4, 2.80f),
+                ClusterSpec("Cortex-A55", 4, 1.80f),
+            ),
+            l1iPerBig = "64 KB", l1dPerBig = "64 KB", l2PerBig = "512 KB",
+            l1iPerSmall = "32 KB", l1dPerSmall = "32 KB", l2PerSmall = "128 KB",
+            l3Shared = "2 MB",
+            gpuModel = "Adreno 630",
+            gpuClockMhz = 710,
+            gpuAlus = 256,
+            gpuFp32Tflops = 0.73f,
+            isp = "Spectra 280",
+            npu = "Hexagon 685",
+            modem = "Snapdragon X20",
+        ),
+
+        // ═══ Snapdragon 855 / 855+ / 860 (SM8150) — msmnile ═══
+        "sm8150" to KnownChip(
+            platformId = "msmnile",
+            chipName = "Snapdragon 855/855+/860",
+            cpuModel = "Kryo 485 (Cortex-A76 + A55)",
+            processNode = "7nm TSMC N7",
+            releaseDate = "2018-12",
+            clusters = listOf(
+                ClusterSpec("Cortex-A76 Prime", 1, 2.84f),
+                ClusterSpec("Cortex-A76 Gold",  3, 2.42f),
+                ClusterSpec("Cortex-A55 Silver", 4, 1.80f),
+            ),
+            l1iPerBig = "64 KB", l1dPerBig = "64 KB", l2PerBig = "512 KB",
+            l1iPerSmall = "32 KB", l1dPerSmall = "32 KB", l2PerSmall = "128 KB",
+            l3Shared = "2 MB",
+            gpuModel = "Adreno 640",
+            gpuClockMhz = 585,
+            gpuAlus = 384,
+            gpuFp32Tflops = 0.90f,
+            isp = "Spectra 380",
+            npu = "Hexagon 690",
+            modem = "Snapdragon X24",
+        ),
 
         // ═══ Snapdragon 865 (SM8250) — kona ═══
         "sm8250" to KnownChip(

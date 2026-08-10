@@ -42,12 +42,10 @@ Cyber-Android-Monitor-Pro
 
 ### 🎨 Bat 灵感的未来科技赛博朋克主题
 - 纯紫霓虹配色（NeonPurple/Bright/Pale/Deep）
-- 脉冲指示器（PulseDot）实时监测标志
 - 矩阵数字字体 + 扫描线动画
 - 全面屏 Edge-to-Edge 设计
-- 全局光照效果（GlobalLightState）：Canvas 径向渐变 + AGSL RuntimeShader（API 33+），Spring 动画跟随手指
+- 全局光照效果（GlobalLightState）：Canvas 径向渐变 + AGSL RuntimeShader（API 33+），Spring 动画跟随手指（设置页可整体关闭）
 - Acrylic 亚克力噪点覆盖层（Win10 Fluent 风格）
-- 脉冲指示器（PulseDot）实时监测标志
 - Orbitron 字体（Bold 标题 / Medium 正文，通过 MaterialTheme.typography 全局注入）
 ---
 

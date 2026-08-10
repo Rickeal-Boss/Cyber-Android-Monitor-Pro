@@ -733,6 +733,10 @@
     <string name="settings_haptic_weak">弱</string>
     <string name="settings_haptic_medium">中</string>
     <string name="settings_haptic_strong">强</string>
+    <string name="settings_globallight">全局光照</string>
+    <string name="settings_globallight_desc">卡片指针跟随光照效果；低端设备关闭可降低 GPU 光栅开销</string>
+    <string name="settings_globallight_on">已开启</string>
+    <string name="settings_globallight_off">已关闭</string>
     <string name="settings_app_name">Cyber Android Monitor Pro</string>
     <string name="settings_app_version">v5.0.0</string>
     <string name="settings_app_tech">Kotlin 2.2.10 · Compose · Bat Theme</string>

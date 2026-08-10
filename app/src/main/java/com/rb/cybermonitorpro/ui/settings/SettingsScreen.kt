@@ -40,7 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.LocaleManager
+import com.rb.cybermonitorpro.ui.components.CyberIcons
 import com.rb.cybermonitorpro.ui.components.CyberJoystickSwitch
+import com.rb.cybermonitorpro.ui.effects.GlobalLightSwitch
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
@@ -110,6 +112,9 @@ fun SettingsScreen(viewModel: SettingsViewModel = koinViewModel()) {
         // ═══ 震动反馈 ═══
         HapticSettingsCard()
 
+        // ═══ 全局光照 ═══
+        GlobalLightSettingsCard()
+
         // ═══ App 信息 ═══
         Card(
             Modifier.fillMaxWidth(),
@@ -165,7 +170,7 @@ private fun LanguageSettingsCard() {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.Language, null,
+                Icon(CyberIcons.Language, null,
                     tint = NeonPurpleBright, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.size(8.dp))
                 Column {
@@ -240,7 +245,7 @@ private fun LanguagePickerDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            if (selected) Icons.Filled.Check else Icons.Filled.Language,
+                            if (selected) Icons.Filled.Check else CyberIcons.Language,
                             contentDescription = null,
                             tint = if (selected) NeonPurpleBright else TextSecondary,
                             modifier = Modifier.size(20.dp)
@@ -345,6 +350,62 @@ private fun ModuleIntervalCard(cfg: ModuleIntervalConfig, viewModel: SettingsVie
 
 /** ★ 将 ms 值 snap 到最近的 refreshOptions 离散档位 */
 private fun Long.snapToOption(): Long = refreshOptions.minByOrNull { kotlin.math.abs(it - this) } ?: this
+
+// ═══════ 全局光照卡片 ═══════
+
+@Composable
+private fun GlobalLightSettingsCard() {
+    val ctx = LocalContext.current
+    val settings = remember { AppSettings.getInstance(ctx) }
+    // 运行期真源在 GlobalLightSwitch (Compose State), AppSettings 仅持久化
+    var enabled by remember { mutableStateOf(GlobalLightSwitch.enabled) }
+
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = NeonPurple.copy(alpha = 0.08f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(CyberIcons.Light, null,
+                    tint = NeonPurpleBright, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.size(8.dp))
+                Column {
+                    Text(stringResource(R.string.settings_globallight),
+                        fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary)
+                    Text(stringResource(R.string.settings_globallight_desc),
+                        fontSize = 11.sp, color = TextSecondary)
+                    Text(
+                        if (enabled) stringResource(R.string.settings_globallight_on)
+                        else stringResource(R.string.settings_globallight_off),
+                        fontSize = 11.sp, color = TextSecondary)
+                }
+            }
+            // 开关自带震动反馈 (CyberJoystickSwitch 内部 standardTap), 无需额外触发
+            CyberJoystickSwitch(
+                checked = enabled,
+                onCheckedChange = { v ->
+                    enabled = v
+                    settings.globalLightEnabled = v
+                    GlobalLightSwitch.enabled = v   // 即时生效, 无需重启
+                },
+            )
+        }
+    }
+}
 
 // ═══════ 震动反馈卡片 ═══════
 

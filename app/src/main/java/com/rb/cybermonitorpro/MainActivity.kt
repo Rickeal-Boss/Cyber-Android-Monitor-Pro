@@ -46,6 +46,7 @@ import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.ui.AppViewModel
 import com.rb.cybermonitorpro.RefreshPolicy
 import com.rb.cybermonitorpro.ui.battery.BatteryScreen
+import com.rb.cybermonitorpro.ui.components.CyberIcons
 import com.rb.cybermonitorpro.ui.components.LightCircleBackButton
 import com.rb.cybermonitorpro.ui.components.GlassCircleButton
 import com.rb.cybermonitorpro.ui.components.NeonDivider
@@ -491,7 +492,7 @@ private fun MainTabs(
             contentDescription = stringResource(R.string.float_title)
         ) {
             Icon(
-                Icons.Filled.Window,
+                CyberIcons.Window,
                 contentDescription = null,
                 tint = Color(0xFF1A1A2E).copy(alpha = 0.85f),
                 modifier = Modifier.size(17.dp)

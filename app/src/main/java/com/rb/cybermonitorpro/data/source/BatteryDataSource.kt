@@ -554,7 +554,25 @@ class BatteryDataSource(private val context: Context) {
         }
     }
 
+    // ★ #1: 会话缓存 — 满充容量(charge_full)为硬件固化值, 首次成功解析后缓存,
+    //   后续 tick 直接复用, 避免每帧重复 fork shell / 读 sysfs (仿 cachedCycleCount)。
+    private var cachedChargeFull: Long? = null
+    private var cachedChargeFullDesign: Long? = null
+
     private fun readBatteryCapacity(info: BatteryInfo) {
+        // ★ #1: 缓存命中 — 直接复用首次解析的容量, 跳过全部 sysfs/shell 读取
+        cachedChargeFull?.let { cf ->
+            info.chargeFullMAh = cf
+            cachedChargeFullDesign?.let { info.chargeFullDesignMAh = it }
+            if (info.capacityDesignMAh <= 0 && info.chargeFullDesignMAh > 0) {
+                info.capacityDesignMAh = info.chargeFullDesignMAh
+            }
+            if (info.capacityNowMAh <= 0 && info.chargeFullMAh > 0) {
+                info.capacityNowMAh = info.chargeFullMAh
+            }
+            return
+        }
+
         // 1. BatteryManager 官方属性
         // ★ 修正: BATTERY_PROPERTY_CAPACITY 返回的是【剩余容量百分比(0-100)】, 不是 mAh!
         //   原代码误赋给 info.capacityDesignMAh, 污染设计容量。此处仅作 levelPercent 交叉校验。
@@ -669,6 +687,12 @@ class BatteryDataSource(private val context: Context) {
                     info.chargeFullSource = "SoC 典型值推断"
                 }
             } catch (_: Throwable) {}
+        }
+
+        // ★ #1: 写入会话缓存 — 首次成功解析后缓存, 后续 tick 零开销复用
+        if (info.chargeFullMAh > 0) {
+            cachedChargeFull = info.chargeFullMAh
+            cachedChargeFullDesign = info.chargeFullDesignMAh.takeIf { it > 0 }
         }
     }
 

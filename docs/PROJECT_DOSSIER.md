@@ -305,7 +305,7 @@ Repository 同时维护 `SharedFlow`（`cpuFlow` 等，`replay=1, DROP_OLDEST`�
 | `NeonHeaderDecoration` | `NeonHeaderDecoration.kt:27` | 顶部药丸头部渐变光晕（零重组） |
 | `NeonDivider` | `:91` | 霓虹水平分割线 |
 | `GlowBackButton` | `GlowBackButton.kt:52` | 暗玻璃返回键（弹簧/涟漪） |
-| `PulseDot` | `PulseDot.kt:18` | 实时监控状态灯（infinite 脉冲） |
+| `CyberIcons` | `CyberIcons.kt` | 赛博风自绘图标（Window/Language/DragHandle/Schedule/Light/BatteryFull/Sensors，替代 material-icons-extended） |
 | `SatelliteSkyView` | `SatelliteSkyView.kt` | GPS 卫星天图 |
 | `MemoryDistributionCard` | `MemoryDistributionCard.kt` | 内存分布环形/条形卡 |
 | `acrylic()` / `revealLight()` / `GlobalLightProvider` | `AcrylicModifier.kt`/`RevealLightModifier.kt` | 玻璃拟态 / 指针光晕 / 全局光照根 |

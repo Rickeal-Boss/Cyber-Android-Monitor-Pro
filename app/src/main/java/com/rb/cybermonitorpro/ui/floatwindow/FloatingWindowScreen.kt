@@ -18,8 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Schedule
+import com.rb.cybermonitorpro.ui.components.CyberIcons
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -198,7 +197,7 @@ private fun RefreshIntervalCard() {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.Schedule, null, tint = NeonPurple, modifier = Modifier.size(18.dp))
+                    Icon(CyberIcons.Schedule, null, tint = NeonPurple, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(stringResource(R.string.float_refresh_interval), fontSize = 15.sp,
                         color = TextPrimary)

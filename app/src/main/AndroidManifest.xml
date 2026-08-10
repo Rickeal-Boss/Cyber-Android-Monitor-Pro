@@ -29,7 +29,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <!-- 存储（本地文件） -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <!-- ★ #11a: API 33+ 由照片选择器/分区存储接管, READ_EXTERNAL_STORAGE 不再生效, 收窄声明 -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 

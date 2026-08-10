@@ -51,10 +51,13 @@ class AuxiliaryCollector(context: Context) {
      * 一次采集所有辅助模块 (并行 async/await)
      * @param healthTracker 健康状态追踪器，用于上报各模块健康度
      * @param historyCache 历史缓存，用于写入图表数据
+     * @param buildSnapshot false 时跳过末尾 15 组历史快照构建 (#2 无观察者守卫),
+     *   采集与 historyCache.addPoint 不受影响, 返回 emptyMap
      */
     suspend fun collectAndPushHistory(
         healthTracker: HealthTracker,
         historyCache: HistoryCache,
+        buildSnapshot: Boolean = true,
     ): Map<String, List<HistoryDataPoint>> = coroutineScope {
         val asyncResults = listOf(
             async {
@@ -107,6 +110,8 @@ class AuxiliaryCollector(context: Context) {
             }
         )
         asyncResults.awaitAll()
+
+        if (!buildSnapshot) return@coroutineScope emptyMap()
 
         HashMap<String, List<HistoryDataPoint>>(15).apply {
             put("cpu_temp", historyCache.getRecentSeries("cpu_temp", 80))

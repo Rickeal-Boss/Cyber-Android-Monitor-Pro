@@ -38,6 +38,7 @@ import com.rb.cybermonitorpro.HapticUtils
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.HistoryDataPoint
 import com.rb.cybermonitorpro.data.repository.HealthTracker.SourceHealth
+import com.rb.cybermonitorpro.ui.components.CyberIcons
 import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
@@ -347,7 +348,7 @@ private fun ReorderHandle(modifier: Modifier, handleModifier: Modifier) {
             .then(handleModifier)
     ) {
         Icon(
-            Icons.Filled.DragHandle,
+            CyberIcons.DragHandle,
             stringResource(R.string.dashboard_reorder_handle),
             tint = TextSecondary.copy(alpha = 0.7f),
             modifier = Modifier.size(18.dp)
@@ -449,8 +450,8 @@ private fun QuickLinkByType(
         "net" -> QuickMeta(stringResource(R.string.dashboard_quick_net_title), stringResource(R.string.dashboard_quick_net_desc), Icons.Filled.Share, NeonPurpleBright, 5)
         "gps" -> QuickMeta(stringResource(R.string.dashboard_quick_gps_title), stringResource(R.string.dashboard_quick_gps_desc), Icons.Filled.PlayArrow, NeonMagenta, 6)
         "device" -> QuickMeta(stringResource(R.string.dashboard_quick_device_title), stringResource(R.string.dashboard_quick_device_desc), Icons.Filled.Search, SuccessNeon, 8)
-        "battery" -> QuickMeta(stringResource(R.string.dashboard_quick_battery_title), stringResource(R.string.dashboard_quick_battery_desc), Icons.Filled.BatteryFull, NeonPurple, 4)
-        "sensor" -> QuickMeta(stringResource(R.string.dashboard_quick_sensor_title), stringResource(R.string.dashboard_quick_sensor_desc), Icons.Filled.Sensors, NeonPurpleBright, 7)
+        "battery" -> QuickMeta(stringResource(R.string.dashboard_quick_battery_title), stringResource(R.string.dashboard_quick_battery_desc), CyberIcons.BatteryFull, NeonPurple, 4)
+        "sensor" -> QuickMeta(stringResource(R.string.dashboard_quick_sensor_title), stringResource(R.string.dashboard_quick_sensor_desc), CyberIcons.Sensors, NeonPurpleBright, 7)
         else -> QuickMeta(id, "", Icons.Filled.Info, NeonPurple, 0)
     }
     QuickLinkCard(

@@ -8,6 +8,7 @@ import com.rb.cybermonitorpro.data.repository.DeviceRepository
 import com.rb.cybermonitorpro.data.source.SysFsCapabilityProbe
 import com.rb.cybermonitorpro.di.appModule
 import com.rb.cybermonitorpro.service.FloatingWindowConfig
+import com.rb.cybermonitorpro.ui.effects.GlobalLightSwitch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -88,6 +89,9 @@ class DeviceApplication : Application() {
         } catch (e: Throwable) {
             Log.e(TAG, "FloatingWindowConfig init failed", e)
         }
+
+        // 全局光照总开关 — 从 AppSettings 注入 (SP 读取, 微秒级, 主线程安全)
+        GlobalLightSwitch.enabled = AppSettings.getInstance(this@DeviceApplication).globalLightEnabled
 
         // 启动阶段汇总日志异步写入（不阻塞主线程）
         startupScope.launch {

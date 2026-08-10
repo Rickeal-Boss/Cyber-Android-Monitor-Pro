@@ -63,8 +63,13 @@ class MemoryDataSource {
     private var lastProcstatsTime = 0L
     @Volatile
     private var cachedProcstats = emptyList<Triple<String, Float, Float>>()
+    // ★ #4: dumpsys procstats 需 DUMP 权限, 三方 App 大概率每次被拒但进程照起 (30s 一次)。
+    //   首次失败即永久跳过 — 失败设备本就拿不到数据, 零损失。
+    @Volatile
+    private var procstatsPermanentSkip = false
 
     private fun loadProcstats(info: MemoryInfo) {
+        if (procstatsPermanentSkip) return
         val now = System.currentTimeMillis()
         if (now - lastProcstatsTime < 30_000L) {
             info.topProcesses = cachedProcstats.map { "${it.first}: ${String.format("%.0f", it.second)}MB" }
@@ -72,9 +77,17 @@ class MemoryDataSource {
         }
         try {
             val output = ShellCommandDataSource.getDumpsysProcstats()
-            cachedProcstats = ShellCommandDataSource.extractTopProcesses(output, 5)
+            val parsed = ShellCommandDataSource.extractTopProcesses(output, 5)
+            if (parsed.isEmpty()) {
+                procstatsPermanentSkip = true   // 进程跑了但解析为空 → 权限被拒, 永久跳过
+                return
+            }
+            cachedProcstats = parsed
             lastProcstatsTime = now
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+            procstatsPermanentSkip = true       // 进程直接失败 → 永久跳过
+            return
+        }
         info.topProcesses = cachedProcstats.map { "${it.first}: ${String.format("%.0f", it.second)}MB" }
     }
 
@@ -135,6 +148,9 @@ class MemoryDataSource {
     private var lastDumpsysMeminfoTime = 0L
     @Volatile
     private var cachedDumpsysOom: DumpsysMeminfoParser.OomCategories? = null
+    // ★ #4: 同 procstats — dumpsys meminfo -a 首次失败/不可用即永久跳过, 不再每 30s 白起进程
+    @Volatile
+    private var dumpsysOomPermanentSkip = false
 
     /**
      * 加载 dumpsys meminfo OOM 分类数据 (缓存 30 秒)
@@ -143,6 +159,10 @@ class MemoryDataSource {
      * 日常刷新时复用缓存。OOM 分类不频繁变化，30 秒延迟对显示无影响。
      */
     private fun loadDumpsysOom(info: MemoryInfo) {
+        if (dumpsysOomPermanentSkip) {
+            info.dumpsysAvailable = false
+            return
+        }
         val now = System.currentTimeMillis()
         if (now - lastDumpsysMeminfoTime < 30_000L) {
             cachedDumpsysOom?.let {
@@ -159,12 +179,15 @@ class MemoryDataSource {
             if (oom.isAvailable) {
                 cachedDumpsysOom = oom
                 lastDumpsysMeminfoTime = now
+            } else {
+                dumpsysOomPermanentSkip = true   // 权限被拒 → 永久跳过
             }
             info.systemProcessPssKB = oom.systemPssKB
             info.appProcessPssKB = oom.appPssKB + oom.cachedPssKB
             info.cachedProcessPssKB = oom.cachedPssKB
             info.dumpsysAvailable = oom.isAvailable
         } catch (_: Throwable) {
+            dumpsysOomPermanentSkip = true       // 进程直接失败 → 永久跳过
             info.dumpsysAvailable = false
         }
     }
