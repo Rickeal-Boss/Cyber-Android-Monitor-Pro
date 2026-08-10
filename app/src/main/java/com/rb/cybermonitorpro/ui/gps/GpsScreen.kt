@@ -24,6 +24,7 @@ import com.rb.cybermonitorpro.R
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.data.model.GpsSatelliteInfo
+import com.rb.cybermonitorpro.ui.components.CyberIcons
 import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.SatelliteSkyView
