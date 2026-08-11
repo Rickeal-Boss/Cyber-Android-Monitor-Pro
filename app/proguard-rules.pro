@@ -78,13 +78,6 @@
 # ===== 保留 R 类内部类 =====
 -keepclassmembers class **.R$* { public static <fields>; }
 
-# ===== WebView =====
--keepclassmembers class * extends android.webkit.WebView {
-   public <init>(android.content.Context);
-   public <init>(android.content.Context, android.util.AttributeSet);
-   public <init>(android.content.Context, android.util.AttributeSet, int);
-}
-
 # ===== 缩而不混 + 保留运行时元数据 =====
 -dontobfuscate
 -keepattributes Signature, *Annotation*, InnerClasses, EnclosingMethod
