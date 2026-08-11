@@ -14,7 +14,7 @@
 | 维度 | 事实（证据） |
 |------|------|
 | 语言/构建 | Kotlin **2.2.10**（AGP 9.0.1 内置 built-in Kotlin，无需显式 `kotlin-android` 插件）、`com.android.application` **9.0.1**（`build.gradle:1-5`）｜ Gradle **9.1.0**（wrapper） |
-| UI | Compose BOM **2025.06.00**（≈Compose 1.7.x；受内置 Kotlin 2.2.10 编译器约束，2026.06.00 需 Kotlin 2.4.x=AGP 9.1+）、Material3、`material-icons-extended`、`ui-text-google-fonts`（`app/build.gradle:98-107`） |
+| UI | Compose BOM **2025.06.00**（≈Compose 1.7.x；受内置 Kotlin 2.2.10 编译器约束，2026.06.00 需 Kotlin 2.4.x=AGP 9.1+）、Material3、`material-icons-extended`（依赖块见 `app/build.gradle`；`ui-text-google-fonts` 死依赖已删除，零引用） |
 | 架构 | MVVM + **Koin 3.5.6**（`app/build.gradle:96-97`）、lifecycle **2.8.4** |
 | 三方库 | `sh.calvin.reorderable:reorderable:3.1.0`、`gson 2.10.1`、`kotlinx-coroutines-android:1.11.0`（`app/build.gradle`） |
 | SDK | `compileSdk 36` / `minSdk 21` / `targetSdk 36`（已升，Android 16，满足 2026-08-31 Play 目标 API 截止）（`app/build.gradle:9,37-38`）；Java17 toolchain（`:62-69`） |

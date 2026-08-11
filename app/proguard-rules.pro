@@ -14,16 +14,22 @@
     volatile <fields>;
 }
 
-# ===== Kotlin 反射 (Koin DI + Hidden API 反射核心依赖) =====
--keep class kotlin.reflect.** { *; }
--keepclassmembers class kotlin.reflect.** { *; }
+# ===== Kotlin 元数据 (kotlin.reflect 全量 keep 已移除) =====
+# 本项目未使用 kotlin-reflect (Koin 走 Java 反射, 隐藏 API 反射作用于 framework 类)。
+# 仅显式保留 kotlin.Metadata —— R8 据此保留 Kotlin 类的类型/签名信息, 供序列化与反射判断。
+-keep class kotlin.Metadata { *; }
 
-# ===== Compose 运行时 =====
--keep class androidx.compose.** { *; }
+# ===== Compose 运行时 (收窄: 仅保留 runtime 包) =====
+# 旧规则 -keep class androidx.compose.** 过宽, 挡住 ui/ui-graphics/ui-text/material3 的缩减。
+# runtime 包是 recomposition 与编译器基础设施, 必须保留; 其余 compose 类由可达性 + AAR 规则保留。
+-keep class androidx.compose.runtime.** { *; }
 -dontwarn androidx.compose.**
 
-# ===== Koin DI =====
--keep class org.koin.** { *; }
+# ===== Koin DI (收窄: 移除 org.koin.** 全量 keep, 仅钉死注册入口 + Module 子类 + 注解成员) =====
+# 旧规则 -keep class org.koin.** 过宽, 挡住 Koin 库自身缩减。
+# 注册入口 appModule (AppModule.kt 顶层属性, 编译为 AppModuleKt) 显式保留;
+# Module 子类与 @Koin 注解注入点由下两条规则保留; Koin 库其余部分由可达性缩减。
+-keep class com.rb.cybermonitorpro.di.AppModuleKt { *; }
 -keep class * extends org.koin.core.module.Module { *; }
 -keepclassmembers class * {
     @org.koin.core.annotation.* <fields>;
