@@ -549,9 +549,12 @@ fun DeviceScreen(
                         RowItem(stringResource(R.string.device_version), oem!!.miuiVersion.ifEmpty { "-" })
                         RowItem(stringResource(R.string.device_region), oem!!.miuiRegion.ifEmpty { "-" })
                         RowItem(stringResource(R.string.device_hardware_model), oem!!.miuiHardware.ifEmpty { "-" })
-                        oem!!.miuiFeatures.takeIf { it.isNotBlank() }?.let { raw ->
-                            val translated = raw.split(" · ").joinToString(" · ") { seg ->
-                                when (seg) {
+                        val miuiFeaturesText = oem!!.miuiFeatures
+                        if (miuiFeaturesText.isNotBlank()) {
+                            val segs = miuiFeaturesText.split(" · ")
+                            val translatedParts = mutableListOf<String>()
+                            for (seg in segs) {
+                                val localized = when (seg) {
                                     "oem_feature_realblur" -> stringResource(R.string.oem_feature_realblur)
                                     "oem_feature_one_handed_mode" -> stringResource(R.string.oem_feature_one_handed_mode)
                                     "oem_feature_notch" -> stringResource(R.string.oem_feature_notch)
@@ -563,8 +566,9 @@ fun DeviceScreen(
                                     "oem_feature_hyperconnect" -> stringResource(R.string.oem_feature_hyperconnect)
                                     else -> seg
                                 }
+                                translatedParts.add(localized)
                             }
-                            RowItem(stringResource(R.string.device_features), translated.trim())
+                            RowItem(stringResource(R.string.device_features), translatedParts.joinToString(" · ").trim())
                         }
                     }
 }
