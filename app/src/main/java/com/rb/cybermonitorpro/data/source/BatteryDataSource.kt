@@ -960,7 +960,7 @@ class BatteryDataSource(private val context: Context) {
      *
      * 借用 Android 默认公开的电量百分比(level)与容量(capacity)，由二者随时间的差分反推
      * 平均电流。当 ColorOS 的 sysfs 被 SELinux 拦截、且 BATTERY_PROPERTY_CURRENT_NOW 恒为 0
-     * (即 getCurrentNowFull 返回 "无法获取") 时，此路仍能给出可用的平均电流估计。
+     * (即 getCurrentNowFull 返回 "source_unavailable") 时，此路仍能给出可用的平均电流估计。
      *
      * 公式: ΔQ(mAh) = capacityMAh × (levelNow% − levelPrev%) / 100
      *       avg(mA) = ΔQ / Δt(hours) ;  ×1000 → µA (正=充电 / 负=放电)

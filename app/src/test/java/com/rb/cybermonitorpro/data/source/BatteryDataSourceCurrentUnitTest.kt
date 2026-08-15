@@ -172,10 +172,10 @@ class BatteryDataSourceCurrentUnitTest {
     // ========================
 
     @Test
-    fun `全路径失败 无法获取 应触发SoCΔ`() {
-        // 原行为: source=="无法获取" + 0 电流 → 触发
-        val result = BatteryDataSource.shouldFallbackToSocDelta(0L, "无法获取", 50, 5000)
-        assertTrue("source=无法获取 should trigger SoC-Δ", result)
+    fun `全路径失败 source_unavailable 应触发SoCΔ`() {
+        // 全路径失败 → source=="source_unavailable" + 0 电流 → 触发 SoC-Δ 兜底
+        val result = BatteryDataSource.shouldFallbackToSocDelta(0L, "source_unavailable", 50, 5000)
+        assertTrue("source=source_unavailable should trigger SoC-Δ", result)
     }
 
     @Test
@@ -200,7 +200,7 @@ class BatteryDataSourceCurrentUnitTest {
 
     @Test
     fun `电量无效 不应触发`() {
-        val result = BatteryDataSource.shouldFallbackToSocDelta(0L, "无法获取", 0, 5000)
+        val result = BatteryDataSource.shouldFallbackToSocDelta(0L, "source_unavailable", 0, 5000)
         assertFalse("levelPercent=0 invalid → NOT trigger", result)
     }
 
