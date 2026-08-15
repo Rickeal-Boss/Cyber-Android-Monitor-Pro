@@ -99,8 +99,18 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
                 || o.powerMode != OemPowerMode.BALANCED || o.redmiFuryEngine
             if (hasHyperFeatures) {
                 SectionCard(stringResource(R.string.oem_section_hyper_features)) {
-                    RowItem(stringResource(R.string.oem_ai_model), o.hyperOsAIModel.ifEmpty { "-" })
-                    RowItem(stringResource(R.string.oem_cross_device), o.hyperOsCrossDevice.ifEmpty { "-" })
+                    RowItem(stringResource(R.string.oem_ai_model), o.hyperOsAIModel.ifEmpty { "-" }.let { key ->
+                        when (key) {
+                            "oem_ai_xiaoai_enabled" -> stringResource(R.string.oem_ai_xiaoai_enabled)
+                            else -> key
+                        }
+                    })
+                    RowItem(stringResource(R.string.oem_cross_device), o.hyperOsCrossDevice.ifEmpty { "-" }.let { key ->
+                        when (key) {
+                            "oem_cross_hyperconnect_enabled" -> stringResource(R.string.oem_cross_hyperconnect_enabled)
+                            else -> key
+                        }
+                    })
                     val gradeLabel = if (o.redmiFuryEngine) stringResource(R.string.oem_redmi_fury_engine)
                         else stringResource(o.powerMode.labelRes)
                     val gradeColor = when {
@@ -115,7 +125,20 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
 
             if (o.miuiFeatures.isNotBlank()) {
                 SectionCard(stringResource(R.string.oem_section_features_list)) {
-                    TagFlow(o.miuiFeatures.split(" · "))
+                    TagFlow(o.miuiFeatures.split(" · ").map { seg ->
+                        when (seg) {
+                            "oem_feature_realblur" -> stringResource(R.string.oem_feature_realblur)
+                            "oem_feature_one_handed_mode" -> stringResource(R.string.oem_feature_one_handed_mode)
+                            "oem_feature_notch" -> stringResource(R.string.oem_feature_notch)
+                            "oem_feature_punchhole" -> stringResource(R.string.oem_feature_punchhole)
+                            "oem_feature_oddly_shaped" -> stringResource(R.string.oem_feature_oddly_shaped)
+                            "oem_feature_security_center" -> stringResource(R.string.oem_feature_security_center)
+                            "oem_feature_advanced_textures" -> stringResource(R.string.oem_feature_advanced_textures)
+                            "oem_feature_xiaoai" -> stringResource(R.string.oem_feature_xiaoai)
+                            "oem_feature_hyperconnect" -> stringResource(R.string.oem_feature_hyperconnect)
+                            else -> seg
+                        }
+                    })
                 }
             }
         }

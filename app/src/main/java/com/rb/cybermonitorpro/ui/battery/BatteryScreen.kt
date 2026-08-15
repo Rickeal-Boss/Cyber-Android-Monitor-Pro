@@ -100,13 +100,24 @@ fun BatteryScreen(
     // 双电芯：容量随开关翻倍（effective getter，依赖 batteryInfo.dualCell，刷新后生效）
     val designCap = batteryInfo?.effectiveChargeFullDesignMAh?.takeIf { it > 0 }
     val nowCap = batteryInfo?.effectiveChargeFullMAh?.takeIf { it > 0 }
-    val capSource = batteryInfo?.chargeFullSource?.takeIf { it.isNotEmpty() && it != "无法获取" }
+    val capSource = batteryInfo?.chargeFullSource?.takeIf { it.isNotEmpty() && it != "source_unavailable" }
     val counter = batteryInfo?.chargeCounterUAh?.takeIf { it > 0 }
     // 通过容量预估的电量百分比 (chargeCounter ÷ chargeFull)
     val estLevel = batteryInfo?.capacityEstimatedLevelPercent?.takeIf { it >= 0 }
     val cycleCount = batteryInfo?.cycleCount?.takeIf { it >= 0 }
-    val cycleSource = batteryInfo?.cycleCountSource?.takeIf { it.isNotEmpty() && it != "无法获取" }
-    val health = batteryInfo?.health?.takeIf { it.isNotEmpty() } ?: stringResource(R.string.battery_health_unknown)
+    val cycleSource = batteryInfo?.cycleCountSource?.takeIf { it.isNotEmpty() && it != "source_unavailable" }
+    val health = batteryInfo?.health?.takeIf { it.isNotEmpty() }?.let { key ->
+        when (key) {
+            "battery_health_good" -> stringResource(R.string.battery_health_good)
+            "battery_health_overheat" -> stringResource(R.string.battery_health_overheat)
+            "battery_health_dead" -> stringResource(R.string.battery_health_dead)
+            "battery_health_overvoltage" -> stringResource(R.string.battery_health_overvoltage)
+            "battery_health_failure" -> stringResource(R.string.battery_health_failure)
+            "battery_health_cold" -> stringResource(R.string.battery_health_cold)
+            "battery_health_unknown" -> stringResource(R.string.battery_health_unknown)
+            else -> key
+        }
+    } ?: stringResource(R.string.battery_health_unknown)
     val apiSohPercent = batteryInfo?.healthPercent?.takeIf { it in 1..100 }
     val technology = batteryInfo?.technology?.takeIf { it.isNotEmpty() }
     val chargerType = batteryInfo?.chargerType?.takeIf { it.isNotEmpty() }
@@ -472,7 +483,18 @@ fun BatteryScreen(
         InfoCard(
             modifier = Modifier.staggeredSwipe(0),
             title = statusText,
-            subtitle = techText.ifEmpty { batteryInfo?.chargeStatus?.takeIf { it.isNotEmpty() } ?: "" },
+            subtitle = techText.ifEmpty {
+                batteryInfo?.chargeStatus?.takeIf { it.isNotEmpty() }?.let { key ->
+                    when (key) {
+                        "battery_status_charging" -> stringResource(R.string.battery_status_charging)
+                        "battery_status_discharging" -> stringResource(R.string.battery_status_discharging)
+                        "battery_status_full" -> stringResource(R.string.battery_status_full)
+                        "battery_status_not_charging" -> stringResource(R.string.battery_status_not_charging)
+                        "battery_status_unknown" -> stringResource(R.string.battery_status_unknown)
+                        else -> key
+                    }
+                } ?: ""
+            },
             icon = CyberIcons.Favorite, iconTint = NeonPurple
         )
 

@@ -106,7 +106,12 @@ fun CpuScreen(
             title = "CPU temperature",
             value = temp,
             valueColor = NeonPurpleBright,
-            subtitle = tempSource ?: ""
+            subtitle = tempSource?.let { key ->
+                when (key) {
+                    "cpu_temp_source_degraded" -> stringResource(R.string.cpu_temp_source_degraded)
+                    else -> key
+                }
+            } ?: ""
         ) {
             LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth())
         }
@@ -119,7 +124,14 @@ fun CpuScreen(
                 title = stringResource(R.string.cpu_title_c_states),
                 value = "${deepSleepPct.toInt()}%",
                 valueColor = NeonPurpleBright,
-                subtitle = cpuidleSource ?: ""
+                subtitle = cpuidleSource?.let { key ->
+                    when (key) {
+                        "cpuidle_unavailable" -> stringResource(R.string.cpuidle_unavailable)
+                        "cpuidle_zero" -> stringResource(R.string.cpuidle_zero)
+                        "cpuidle_read_failed" -> stringResource(R.string.cpuidle_read_failed)
+                        else -> key
+                    }
+                } ?: ""
             ) {
                 LineChart(data = deepSleepChart, modifier = Modifier.fillMaxWidth())
             }

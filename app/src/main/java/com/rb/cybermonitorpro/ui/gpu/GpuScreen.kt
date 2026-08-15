@@ -162,7 +162,13 @@ fun GpuScreen(
                 title = "Vulkan Driver Version",
                 value = displayVer,
                 valueColor = SuccessNeon,
-                subtitle = vulkanDeviceType ?: ""
+                subtitle = vulkanDeviceType?.let { key ->
+                    when (key) {
+                        "gpu_integrated" -> stringResource(R.string.gpu_integrated)
+                        "gpu_discrete" -> stringResource(R.string.gpu_discrete)
+                        else -> key
+                    }
+                } ?: ""
             )
         }
     }

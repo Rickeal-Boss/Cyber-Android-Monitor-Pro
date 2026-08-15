@@ -1350,4 +1350,27 @@
     <string name="camera_facing_external">External</string>
     <string name="camera_facing_unknown">Unknown</string>
     <string name="camera_flash">Flash</string>
+
+    <!-- 多语言语义键 (little-fix: 消除数据源硬编码中文, 数据层产出 key, UI 层 stringResource 翻译) -->
+    <string name="source_unavailable">Unavailable</string>
+    <string name="gpu_integrated">Integrated</string>
+    <string name="gpu_discrete">Discrete</string>
+    <string name="source_cache">Cached</string>
+    <string name="source_detect_failed">Detection failed</string>
+    <string name="cpuidle_unavailable">cpuidle unavailable</string>
+    <string name="cpuidle_zero">cpuidle data is zero</string>
+    <string name="cpuidle_read_failed">cpuidle read failed</string>
+    <string name="cpu_temp_source_degraded">Battery temp (fallback)</string>
+    <string name="wifi_power_save_on">Power Save</string>
+    <string name="wifi_power_save_off">Normal</string>
+    <string name="battery_health_good">Good</string>
+    <string name="battery_health_overheat">Overheated</string>
+    <string name="battery_health_dead">Dead</string>
+    <string name="battery_health_overvoltage">Overvoltage</string>
+    <string name="battery_health_failure">Failure</string>
+    <string name="battery_health_cold">Cold</string>
+    <string name="battery_status_unknown">Unknown</string>
+    <string name="oem_cross_hyperconnect_enabled">HyperConnect (Enabled)</string>
+    <string name="oem_feature_punchhole">Punch-hole</string>
+    <string name="oem_feature_oddly_shaped">Oddly-shaped</string>
 </resources>

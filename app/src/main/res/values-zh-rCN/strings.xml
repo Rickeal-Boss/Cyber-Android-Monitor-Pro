@@ -1335,4 +1335,27 @@
     <string name="camera_facing_external">外置</string>
     <string name="camera_facing_unknown">未知</string>
     <string name="camera_flash">闪光灯</string>
+
+    <!-- 多语言语义键 (little-fix: 消除数据源硬编码中文) -->
+    <string name="source_unavailable">无法获取</string>
+    <string name="gpu_integrated">集成</string>
+    <string name="gpu_discrete">独立</string>
+    <string name="source_cache">缓存</string>
+    <string name="source_detect_failed">检测失败</string>
+    <string name="cpuidle_unavailable">cpuidle 不可用</string>
+    <string name="cpuidle_zero">cpuidle 数据为零</string>
+    <string name="cpuidle_read_failed">cpuidle 读取失败</string>
+    <string name="cpu_temp_source_degraded">电池温度 (降级方案)</string>
+    <string name="wifi_power_save_on">省电模式</string>
+    <string name="wifi_power_save_off">正常模式</string>
+    <string name="battery_health_good">良好</string>
+    <string name="battery_health_overheat">过热</string>
+    <string name="battery_health_dead">损坏</string>
+    <string name="battery_health_overvoltage">过压</string>
+    <string name="battery_health_failure">故障</string>
+    <string name="battery_health_cold">过冷</string>
+    <string name="battery_status_unknown">未知</string>
+    <string name="oem_cross_hyperconnect_enabled">HyperConnect (已启用)</string>
+    <string name="oem_feature_punchhole">挖孔屏</string>
+    <string name="oem_feature_oddly_shaped">异形屏</string>
 </resources>

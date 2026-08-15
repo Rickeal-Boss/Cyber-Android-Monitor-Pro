@@ -270,7 +270,12 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         safeViewModel.setGpsEnabled(gpsTabActive)
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        // ★ 修复(III): 将 displayCutout 纳入安全区, 使顶部药丸/覆盖层返回按钮不被刘海/挖孔遮挡
+        //   (窗口级 layoutInDisplayCutoutMode 已由 enableEdgeToEdge() 设置, 此处仅补足 Compose inset)
+        contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
+    ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             // ★ 固定软件背景光晕 — 根层一次性渲染, 不随卡片/页面/滚动重绘 (性能优化)
             AppGlowBackground()
@@ -520,7 +525,8 @@ private fun MainTabs(
         //   是双重动画 + 每个 page 额外重组，去掉后滑动更流畅且减少重组开销。
         // ★ StaggeredPageProvider v4: 每页 1 个共享弹簧(Animatable), 卡片读 State 做级联相位映射
         // pageSpacing=0 → 消除滑动时两页之间的黑边间隙
-        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize(), pageSpacing = 0.dp) { page ->
+        // ★ 修复(IV): Pager 改占 Column 剩余空间(weight(1f)), 避免与 64dp 头部叠加导致底部 ~64dp 内容被裁
+        HorizontalPager(state = pagerState, modifier = Modifier.fillMaxWidth().weight(1f), pageSpacing = 0.dp) { page ->
             // v4: 父层单弹簧 + CompositionLocal<State<Float>> 下发, 绘制层失效不重组
             StaggeredPageProvider(pagerState = pagerState, page = page) {
             val navigate: (Int) -> Unit = remember(scope, pagerState) {

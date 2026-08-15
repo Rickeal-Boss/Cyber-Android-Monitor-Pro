@@ -723,7 +723,7 @@ class GpuDataSource {
             info.vulkanDriverInfo = vulkanDriverInfo
             info.vulkanDeviceType = vulkanDeviceType
             info.vulkanDeviceName = vulkanDeviceName
-            info.vulkanSource = "缓存"
+            info.vulkanSource = "source_cache"
             return
         }
         vulkanCached = true
@@ -888,15 +888,15 @@ class GpuDataSource {
             // ── 方式6: GPU 型号推断设备类型 ──
             val model = info.model.lowercase()
             vulkanDeviceType = when {
-                model.contains("adreno") -> "集成 (Integrated)"
-                model.contains("mali") -> "集成 (Integrated)"
-                model.contains("powervr") -> "集成 (Integrated)"
-                model.contains("tegra") -> "集成 (Integrated)"
-                model.contains("nvidia") -> "独立 (Discrete)"
-                else -> "集成 (Integrated)"
+                model.contains("adreno") -> "gpu_integrated"
+                model.contains("mali") -> "gpu_integrated"
+                model.contains("powervr") -> "gpu_integrated"
+                model.contains("tegra") -> "gpu_integrated"
+                model.contains("nvidia") -> "gpu_discrete"
+                else -> "gpu_integrated"
             }
         } catch (_: Throwable) {
-            info.vulkanSource = "检测失败"
+            info.vulkanSource = "source_detect_failed"
         }
 
         // 写入缓存

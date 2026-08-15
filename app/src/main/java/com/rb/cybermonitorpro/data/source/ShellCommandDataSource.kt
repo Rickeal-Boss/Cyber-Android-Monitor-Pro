@@ -303,8 +303,8 @@ object ShellCommandDataSource {
     @JvmStatic
     fun extractWifiPowerSave(wifiOutput: String?): String {
         if (wifiOutput.isNullOrEmpty()) return ""
-        return if (Regex("""(?i)power.?save[=: ]+(on|enabled|true)""").containsMatchIn(wifiOutput)) "省电模式"
-        else if (Regex("""(?i)power.?save[=: ]+(off|disabled|false)""").containsMatchIn(wifiOutput)) "正常模式"
+        return if (Regex("""(?i)power.?save[=: ]+(on|enabled|true)""").containsMatchIn(wifiOutput)) "wifi_power_save_on"
+        else if (Regex("""(?i)power.?save[=: ]+(off|disabled|false)""").containsMatchIn(wifiOutput)) "wifi_power_save_off"
         else ""
     }
 

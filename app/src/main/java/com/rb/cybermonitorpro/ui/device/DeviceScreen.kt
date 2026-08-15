@@ -21,7 +21,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -470,7 +469,8 @@ fun DeviceScreen(
                             valueColor = NeonCyan)
                     }
                     if (hasSerial) {
-                        RowItem(stringResource(R.string.device_serial_number), detail!!.serialNumber,
+                        RowItem(stringResource(R.string.device_serial_number),
+                            detail!!.serialNumber.let { if (it == "common_unavailable") stringResource(R.string.common_unavailable) else it },
                             valueColor = NeonCyan)
                     }
                     if (hasHwSerial) {
@@ -549,8 +549,22 @@ fun DeviceScreen(
                         RowItem(stringResource(R.string.device_version), oem!!.miuiVersion.ifEmpty { "-" })
                         RowItem(stringResource(R.string.device_region), oem!!.miuiRegion.ifEmpty { "-" })
                         RowItem(stringResource(R.string.device_hardware_model), oem!!.miuiHardware.ifEmpty { "-" })
-                        oem!!.miuiFeatures.takeIf { it.isNotBlank() }?.let {
-                            RowItem(stringResource(R.string.device_features), it.trim())
+                        oem!!.miuiFeatures.takeIf { it.isNotBlank() }?.let { raw ->
+                            val translated = raw.split(" · ").joinToString(" · ") { seg ->
+                                when (seg) {
+                                    "oem_feature_realblur" -> stringResource(R.string.oem_feature_realblur)
+                                    "oem_feature_one_handed_mode" -> stringResource(R.string.oem_feature_one_handed_mode)
+                                    "oem_feature_notch" -> stringResource(R.string.oem_feature_notch)
+                                    "oem_feature_punchhole" -> stringResource(R.string.oem_feature_punchhole)
+                                    "oem_feature_oddly_shaped" -> stringResource(R.string.oem_feature_oddly_shaped)
+                                    "oem_feature_security_center" -> stringResource(R.string.oem_feature_security_center)
+                                    "oem_feature_advanced_textures" -> stringResource(R.string.oem_feature_advanced_textures)
+                                    "oem_feature_xiaoai" -> stringResource(R.string.oem_feature_xiaoai)
+                                    "oem_feature_hyperconnect" -> stringResource(R.string.oem_feature_hyperconnect)
+                                    else -> seg
+                                }
+                            }
+                            RowItem(stringResource(R.string.device_features), translated.trim())
                         }
                     }
 }

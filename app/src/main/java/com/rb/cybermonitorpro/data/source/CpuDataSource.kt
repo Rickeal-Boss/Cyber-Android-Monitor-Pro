@@ -283,11 +283,11 @@ class CpuDataSource(private val context: Context) {
         val batteryTemp = getBatteryTemperature()
         if (!batteryTemp.isNaN()) {
             Log.w(TAG, "CPU temp fallback to battery temp: $batteryTemp°C")
-            return Pair(batteryTemp, "电池温度 (降级方案)")
+            return Pair(batteryTemp, "cpu_temp_source_degraded")
         }
 
         Log.w(TAG, "All CPU temperature methods failed")
-        return Pair(Float.NaN, "无法获取")
+        return Pair(Float.NaN, "source_unavailable")
     }
 
     /** 兼容旧 API */
@@ -621,7 +621,7 @@ class CpuDataSource(private val context: Context) {
             }
 
             if (coresFound == 0 || allStates.isEmpty()) {
-                return Quadruple(Float.NaN, emptyList(), Float.NaN, "cpuidle 不可用")
+                return Quadruple(Float.NaN, emptyList(), Float.NaN, "cpuidle_unavailable")
             }
 
             // 聚合: 每个 C-State 取所有核心的 time 总和
@@ -639,7 +639,7 @@ class CpuDataSource(private val context: Context) {
             // C1 (浅眠) + C2/C3 (深度睡眠)
             val totalSleepTime = aggregated.sumOf { it.timeUs }
             if (totalSleepTime <= 0) {
-                return Quadruple(Float.NaN, emptyList(), Float.NaN, "cpuidle 数据为零")
+                return Quadruple(Float.NaN, emptyList(), Float.NaN, "cpuidle_zero")
             }
 
             // 深度睡眠: C2 及更深的睡眠状态
@@ -652,7 +652,7 @@ class CpuDataSource(private val context: Context) {
 
             return Quadruple(deepPct, aggregated, totalIdlePct, "cpuidle ($coresFound cores)")
         } catch (_: Throwable) {
-            return Quadruple(Float.NaN, emptyList(), Float.NaN, "cpuidle 读取失败")
+            return Quadruple(Float.NaN, emptyList(), Float.NaN, "cpuidle_read_failed")
         }
     }
 

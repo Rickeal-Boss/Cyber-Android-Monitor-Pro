@@ -771,7 +771,7 @@ class BatteryDataSource(private val context: Context) {
          *
          * 当电流读数为 0 且电量百分比有效、容量已知时, 启用 SoC-Δ 平均电流估计。
          * 覆盖两种 0 收口场景:
-         *   - source=="无法获取": 所有路径(sysfs/hidden API/dumpsys)均未命中
+         *   - source=="source_unavailable": 所有路径(sysfs/hidden API/dumpsys)均未命中
          *   - source=="BatteryManager binder": ColorOS 的 BATTERY_PROPERTY_CURRENT_NOW 返回 0
          *     (SELinux 拦截 sysfs 且 property 恒为 0), 原门控写死 "无法获取" 将其旁路
          *
@@ -787,7 +787,7 @@ class BatteryDataSource(private val context: Context) {
             effectiveChargeFullMAh: Long
         ): Boolean {
             return currentUA == 0L
-                && (currentSource == "无法获取" || currentSource == "BatteryManager binder")
+                && (currentSource == "source_unavailable" || currentSource == "BatteryManager binder")
                 && levelPercent in 1..100
                 && effectiveChargeFullMAh > 0
         }
@@ -951,8 +951,8 @@ class BatteryDataSource(private val context: Context) {
             } catch (_: Throwable) { /* fall through */ }
         }
 
-        // ⑤ 全部失败 → 0 + "无法获取" (caller 接 SoC-Δ 估计兜底, 见 getBatteryInfo)
-        return Pair(0L, "无法获取")
+        // ⑤ 全部失败 → 0 + "source_unavailable" (caller 接 SoC-Δ 估计兜底, 见 getBatteryInfo)
+        return Pair(0L, "source_unavailable")
     }
 
     /**
@@ -1688,7 +1688,7 @@ class BatteryDataSource(private val context: Context) {
             } catch (_: Throwable) { /* fall through */ }
         }
 
-        return Pair(-1, "无法获取")
+        return Pair(-1, "source_unavailable")
     }
 
     /** 兼容旧 API */
@@ -1878,21 +1878,21 @@ class BatteryDataSource(private val context: Context) {
     }
 
     private fun chargeStatusToString(status: Int): String = when (status) {
-        BatteryManager.BATTERY_STATUS_CHARGING -> "充电中"
-        BatteryManager.BATTERY_STATUS_DISCHARGING -> "放电中"
-        BatteryManager.BATTERY_STATUS_FULL -> "已充满"
-        BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "未充电"
-        else -> "未知"
+        BatteryManager.BATTERY_STATUS_CHARGING -> "battery_status_charging"
+        BatteryManager.BATTERY_STATUS_DISCHARGING -> "battery_status_discharging"
+        BatteryManager.BATTERY_STATUS_FULL -> "battery_status_full"
+        BatteryManager.BATTERY_STATUS_NOT_CHARGING -> "battery_status_not_charging"
+        else -> "battery_status_unknown"
     }
 
     private fun healthToString(health: Int): String = when (health) {
-        BatteryManager.BATTERY_HEALTH_GOOD -> "良好"
-        BatteryManager.BATTERY_HEALTH_OVERHEAT -> "过热"
-        BatteryManager.BATTERY_HEALTH_DEAD -> "损坏"
-        BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "过压"
-        BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE -> "故障"
-        BatteryManager.BATTERY_HEALTH_COLD -> "过冷"
-        else -> "未知"
+        BatteryManager.BATTERY_HEALTH_GOOD -> "battery_health_good"
+        BatteryManager.BATTERY_HEALTH_OVERHEAT -> "battery_health_overheat"
+        BatteryManager.BATTERY_HEALTH_DEAD -> "battery_health_dead"
+        BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE -> "battery_health_overvoltage"
+        BatteryManager.BATTERY_HEALTH_UNSPECIFIED_FAILURE -> "battery_health_failure"
+        BatteryManager.BATTERY_HEALTH_COLD -> "battery_health_cold"
+        else -> "battery_health_unknown"
     }
 
     // ========== Flow 流式电池脉冲 (2026-06-18) ==========

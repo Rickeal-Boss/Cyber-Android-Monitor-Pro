@@ -25,7 +25,8 @@ class BatteryViewModel(
     }
 
     fun formatChargingStatus(batteryInfo: BatteryInfo): String {
-        return if (batteryInfo.isCharging) "充电中" else "未充电"
+        // 产出语义 key (battery_status_*)，由 UI 层 stringResource 翻译
+        return if (batteryInfo.isCharging) "battery_status_charging" else "battery_status_not_charging"
     }
 
     fun formatBatteryTemp(celsius: Float): String {

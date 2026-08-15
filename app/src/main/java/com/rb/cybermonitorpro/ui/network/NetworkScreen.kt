@@ -114,7 +114,13 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
                 title = stringResource(R.string.network_wifi_chip_title),
                 value = FormatUtils.joinNonBlank("  ·  ",
                     wifiChipTemp?.let { "%.1f°C".format(it) },
-                    wifiPowerSave
+                    wifiPowerSave?.let { key ->
+                        when (key) {
+                            "wifi_power_save_on" -> stringResource(R.string.wifi_power_save_on)
+                            "wifi_power_save_off" -> stringResource(R.string.wifi_power_save_off)
+                            else -> key
+                        }
+                    }
                 ),
                 valueColor = NeonPurpleBright
             )

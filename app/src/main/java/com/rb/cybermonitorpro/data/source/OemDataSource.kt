@@ -4,8 +4,10 @@ import android.content.Context
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.hardware.display.DisplayManager
 import android.os.Build
 import android.util.Log
+import android.view.Display
 import com.rb.cybermonitorpro.data.model.OemInfo
 import com.rb.cybermonitorpro.data.model.OemPowerMode
 import java.io.File
@@ -272,12 +274,12 @@ class OemDataSource(private val context: Context? = null) {
                 val v = prop("ro.miui.ai.version", "")
                 if (v.isNotEmpty()) "HyperMind v$v" else "HyperMind (已启用)"
             }
-            prop("ro.miui.ai_assistant", "0") == "1" -> "小爱AI (已启用)"
+            prop("ro.miui.ai_assistant", "0") == "1" -> "oem_ai_xiaoai_enabled"
             else -> ""
         }
 
         info.hyperOsCrossDevice = when {
-            prop("ro.miui.hyperconnect.available", "0") == "1" -> "HyperConnect (已启用)"
+            prop("ro.miui.hyperconnect.available", "0") == "1" -> "oem_cross_hyperconnect_enabled"
             prop("ro.miui.casta.support", "0") == "1" -> "妙享互联"
             else -> ""
         }
@@ -286,18 +288,20 @@ class OemDataSource(private val context: Context? = null) {
 
         // → 特性列表
         val features = mutableListOf<String>()
-        if (prop("ro.miui.has_real_blur", "0") == "1") features.add("RealBlur动态模糊")
-        if (prop("ro.miui.has_handy_mode_sf", "0") == "1") features.add("单手模式")
-        if (prop("ro.miui.notch", "0") == "1") features.add("刘海屏")
-        if (prop("ro.miui.support_security_cta", "0") == "1") features.add("安全中心")
+        if (prop("ro.miui.has_real_blur", "0") == "1") features.add("oem_feature_realblur")
+        if (prop("ro.miui.has_handy_mode_sf", "0") == "1") features.add("oem_feature_one_handed_mode")
+        // ★ 修复(I): ro.miui.notch=1 仅代表"有挖槽区域", 不区分刘海/挖孔/灵动岛。
+        //   改用 DisplayCutout 实测缺口尺寸判定屏幕形态, 返回语义 key (pre-Q 回退维持 notch, 避免回归)。
+        detectScreenShapeFeature()?.let { features.add(it) }
+        if (prop("ro.miui.support_security_cta", "0") == "1") features.add("oem_feature_security_center")
         val hyperMind = prop("persist.sys.hypermind.enable", "0")
         if (hyperMind == "1") features.add("HyperMind")
         val advancedTextures = prop("ro.vendor.hyperos.advanced_textures", "0")
-        if (advancedTextures == "1") features.add("高级材质渲染")
+        if (advancedTextures == "1") features.add("oem_feature_advanced_textures")
         val aiAssistant = prop("ro.miui.ai_assistant", "0")
-        if (aiAssistant == "1") features.add("小爱AI")
+        if (aiAssistant == "1") features.add("oem_feature_xiaoai")
         val hyperConnect = prop("ro.miui.hyperconnect.available", "0")
-        if (hyperConnect == "1") features.add("HyperConnect互联")
+        if (hyperConnect == "1") features.add("oem_feature_hyperconnect")
         val otaVersion = prop("ro.build.version.ota")
         if (otaVersion.isNotEmpty()) features.add("OTA:$otaVersion")
         if (info.xiaomiSurgeChip.isNotEmpty()) features.add(info.xiaomiSurgeChip)
@@ -312,6 +316,48 @@ class OemDataSource(private val context: Context? = null) {
             info.osName = "HyperOS 2.0"
         }
     }
+
+    /**
+     * 通过 DisplayCutout 实测缺口尺寸判定屏幕挖槽形态, 返回语义 key。
+     * ro.miui.notch=1 只代表"存在挖槽区域", 不能区分刘海/挖孔/灵动岛:
+     *   - peridot (Redmi Turbo 3 / POCO F6, 前置居中挖孔) 该属性即为 1, 原逻辑误标为刘海屏。
+     * 判定阈值(单位 dp, 取最大缺口矩形):
+     *   - 宽≥56 且 高≥12 → 刘海/水滴/药丸 (oem_feature_notch)
+     *   - 宽≤42 且 高≤42 → 挖孔 (oem_feature_punchhole)
+     *   - 其它 → 异形屏/灵动岛 (oem_feature_oddly_shaped)
+     * 兼容: API<29 或拿不到 cutout 时回退到 ro.miui.notch 属性 (维持 oem_feature_notch, 避免回归)。
+     */
+    private fun detectScreenShapeFeature(): String? {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val dm = context?.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+                    ?: return fallbackNotch()
+                val display = dm.getDisplay(Display.DEFAULT_DISPLAY) ?: return fallbackNotch()
+                val cutout = display.cutout ?: return fallbackNotch()
+                val rects = cutout.boundingRects
+                if (rects.isEmpty()) return fallbackNotch()
+
+                val maxRect = rects.maxByOrNull { it.width() * it.height() } ?: return fallbackNotch()
+                val density = context?.resources?.displayMetrics?.density ?: return fallbackNotch()
+                if (density <= 0f) return fallbackNotch()
+
+                val wDp = maxRect.width() / density
+                val hDp = maxRect.height() / density
+                return when {
+                    wDp >= 56 && hDp >= 12 -> "oem_feature_notch"
+                    wDp <= 42 && hDp <= 42 -> "oem_feature_punchhole"
+                    else -> "oem_feature_oddly_shaped"
+                }
+            } catch (_: Throwable) {
+                return fallbackNotch()
+            }
+        }
+        return fallbackNotch()
+    }
+
+    /** pre-Q / 无 cutout 时的保守回退: ro.miui.notch=1 仍大概率为刘海/水滴, 维持 notch 不回归。 */
+    private fun fallbackNotch(): String? =
+        if (prop("ro.miui.notch", "0") == "1") "oem_feature_notch" else null
 
     // ═══════════════ OPPO ColorOS 13~16 ═══════════════
 

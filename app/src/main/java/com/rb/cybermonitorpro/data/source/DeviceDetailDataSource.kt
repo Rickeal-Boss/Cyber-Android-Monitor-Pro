@@ -820,8 +820,6 @@ class DeviceDetailDataSource(private val context: Context) {
             while (true) {
                 val maxFreq = SysFsReader.readFile("/sys/devices/system/cpu/cpu$cpuIndex/cpufreq/cpuinfo_max_freq")
                     .trim().toLongOrNull() ?: break
-                val current = SysFsReader.readFile("/sys/devices/system/cpu/cpu$cpuIndex/topology/cluster_id")
-                    .trim().toIntOrNull() ?: 0
                 val key = maxFreq
                 freqGroups[key] = (freqGroups[key] ?: 0) + 1
                 cpuIndex++
@@ -1011,20 +1009,31 @@ class DeviceDetailDataSource(private val context: Context) {
                 info.storageTypeSource = "property"
             }
 
-            // 策略2: /sys/block/sda/ 设备类型
+            // 策略2: /sys/block/sda (UFS 常见) / mmcblk0 (eMMC 常见)
+            // ★ 修复(II): SCSI 外设类型码中 0=Direct-Access(UFS 与 eMMC 均返回 0),
+            //   1=磁带机(Sequential-Access), 与 eMMC 无关; 原 "1"->"eMMC" 映射错误。
+            //   同时原仅查 sda, 漏检 eMMC(通常挂在 mmcblk0) → eMMC 机型显示空白。
             if (info.storageType.isEmpty()) {
-                val deviceType = SysFsReader.readFile("/sys/block/sda/device/type").trim()
-                val deviceModel = SysFsReader.readFile("/sys/block/sda/device/model").trim()
-                if (deviceModel.contains("UFS", ignoreCase = true)) {
-                    info.storageType = deviceModel
-                    info.storageTypeSource = "sysfs"
-                } else if (deviceType.isNotEmpty()) {
-                    info.storageType = when (deviceType) {
-                        "0" -> "UFS"
-                        "1" -> "eMMC"  // SCSI type
-                        else -> deviceType
+                val sdaExists = File("/sys/block/sda").exists()
+                val sdaModel = SysFsReader.readFile("/sys/block/sda/device/model").trim()
+                val sdaType = SysFsReader.readFile("/sys/block/sda/device/type").trim()
+                val hasMmcblk0 = File("/sys/block/mmcblk0").exists()
+
+                when {
+                    sdaModel.contains("UFS", ignoreCase = true) -> {
+                        info.storageType = sdaModel
+                        info.storageTypeSource = "sysfs"
                     }
-                    info.storageTypeSource = "sysfs"
+                    sdaExists && sdaType == "0" && sdaModel.isNotEmpty() -> {
+                        // sda 是块设备(type 0=Direct-Access)但型号未显式含 UFS,
+                        // 交予策略3(UFS 路径探测)进一步判断, 避免把 SATA/其它磁盘误标
+                    }
+                    // eMMC 通常挂在 mmcblk0; 仅当不存在 SCSI 磁盘(sda)时才判定为 eMMC,
+                    // 避免把 "UFS 主机 + SD 卡(mmcblk0/1)" 误标为 eMMC。
+                    hasMmcblk0 && !sdaExists -> {
+                        info.storageType = "eMMC"
+                        info.storageTypeSource = "sysfs:/sys/block/mmcblk0"
+                    }
                 }
             }
 
@@ -1453,7 +1462,7 @@ class DeviceDetailDataSource(private val context: Context) {
         try {
             val tm = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager ?: return
             info.simOperator = tm.simOperatorName ?: ""
-            info.simMccMnc = "${tm.simOperator}"
+            info.simMccMnc = tm.simOperator
             info.networkCountryIso = tm.networkCountryIso ?: ""
             info.phoneType = when (tm.phoneType) {
                 TelephonyManager.PHONE_TYPE_GSM -> "GSM"
@@ -1947,7 +1956,7 @@ class DeviceDetailDataSource(private val context: Context) {
             }
 
             // ── 最终兜底 ──
-            info.serialNumber = serial.ifBlank { "不可用" }
+            info.serialNumber = serial.ifBlank { "common_unavailable" }
         } catch (e: Throwable) { Log.w(TAG, "序列号读取失败", e) }
 
         // 硬件序列号 — 同样用 shell 优先策略 — ★ #11d: shell 部分复用会话缓存, 避免重复 fork
