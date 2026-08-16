@@ -82,7 +82,6 @@ fun Modifier.neonBorderGlow(
         ),
         shape = RoundedCornerShape(cornerRadius),
     )
-}
 
 /**
  * 霓虹动效分割线 — 极简版
