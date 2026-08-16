@@ -171,7 +171,7 @@ class PatchRenderer : GLSurfaceView.Renderer {
         // ════════════════════════════════════════════
         // 顶点着色器 — 全屏四边形，输出归一化 UV
         // ════════════════════════════════════════════
-        private const val VERT = """
+        const val VERT = """
 attribute vec2 aPos;
 varying vec2 vUv;
 void main() {
@@ -198,7 +198,7 @@ void main() {
         //   累积辉光贡献，最终经 PQ OETF 编码后输出。
         //   无贡献的像素 → alpha=0（黑色地板=0）。
         //
-        private const val FRAG = """
+        const val FRAG = """
 precision highp float;
 varying vec2 vUv;
 
