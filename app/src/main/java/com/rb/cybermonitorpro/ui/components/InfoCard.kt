@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.effects.revealLight
+import com.rb.cybermonitorpro.ui.nightlight.HdrMetricText
 import com.rb.cybermonitorpro.ui.theme.*
 
 /**

@@ -71,7 +71,6 @@ import com.rb.cybermonitorpro.ui.nightlight.CyberNightlightHost
 import com.rb.cybermonitorpro.ui.nightlight.HdrOverlayState
 import com.rb.cybermonitorpro.ui.nightlight.HdrPatchHost
 import com.rb.cybermonitorpro.ui.nightlight.hdrTabIndicatorPatch
-import androidx.compose.foundation.layout.matchParentSize
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -286,7 +285,6 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            val pqActive by HdrOverlayState.pqActive
             // ★ 固定软件背景光晕 — 根层一次性渲染, 不随卡片/页面/滚动重绘 (性能优化)
             AppGlowBackground()
             // ★ CyberNightlight TurboXDR：局部 HDR 增亮浮层（setZOrderOnTop 盖在 SDR UI 之上，
@@ -512,7 +510,7 @@ private fun MainTabs(
                         Modifier.tabIndicatorOffset(pos[pagerState.currentPage])
                             .hdrTabIndicatorPatch("topbar.indicator"),
                         // PQ 点亮时隐藏 SDR 指示条，由透明 PQ 浮层承担高亮（避免重影/过曝）
-                        color = if (pqActive) Color.Transparent else NeonPurple,
+                        color = if (HdrOverlayState.pqActive.value) Color.Transparent else NeonPurple,
                         height = 3.dp
                     )
                 }

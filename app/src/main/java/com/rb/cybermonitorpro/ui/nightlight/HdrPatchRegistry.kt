@@ -2,6 +2,7 @@ package com.rb.cybermonitorpro.ui.nightlight
 
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * 线程安全的 HDR 贴片注册表。
