@@ -2,36 +2,46 @@ package com.rb.cybermonitorpro.ui.nightlight
 
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
+import android.os.SystemClock
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 /**
- * CyberNightlight TurboXDR 的呼吸光晕渲染器。
+ * CyberNightlight TurboXDR 边缘闪光渲染器 —— 仿电子表夜光（一次性）。
  *
- * 设计要点（与 HdrTestSurfaceView 验证过的真 HDR 路径配合）：
- *  - 全屏四边形 + 片元着色器，绘制"中心留空、边缘呼吸"的霓虹光晕，
- *    仿电子表夜光 / 氛围背光，不遮挡中心 UI 内容。
- *  - 黑色地板 = 0：core 趋零处输出 vec4(0,0,0,0)（纯透明黑），不抬升下方 SDR UI；
- *    仅在光晕处叠加 HDR 高亮，配合 PQ surface 真正超过 SDR 峰值亮度。
- *  - uTime 驱动呼吸，uIntensity 由 CyberNightlightSwitch.intensity 注入（0..1）。
- *  - 分辨率无关：vUv 归一化，uResolution 仅用于潜在的长宽比修正（当前均匀）。
+ * 与 HdrTestSurfaceView 验证过的真 HDR 路径配合：
+ *  - 边缘薄霓虹环（紫→青），alpha 由 uFlash 驱动 1 → 0 缓出（约 800ms），
+ *    播完即停；不再持续呼吸。
+ *  - 黑色地板 = 0：闪光外区域与空闲帧输出 vec4(0,0,0,0)（纯透明黑），不抬升 SDR UI；
+ *    仅闪光期间输出高亮度 HDR alpha，配合 PQ surface 真正超过 SDR 峰值亮度。
+ *  - 开启后靠 SurfaceView 持续请求 RENDERMODE_CONTINUOUSLY 渲染闪光；
+ *    闪光结束后由 SurfaceView 切回 RENDERMODE_WHEN_DIRTY 待机。
+ *
+ * 强度语义：uFlash 仅承担"闪光 alpha"曲线，与 HDR 亮度倍数（1.0×–8.0×）无关。
+ * 亮度倍数由 HdrLumeSurfaceView.setDesiredHdrHeadroom 控制（System 级 headroom）。
  */
 class LumeRenderer : GLSurfaceView.Renderer {
 
-    @Volatile var intensity: Float = 0.6f
-        private set
-
-    /** 渲染总闸：false 时只清成纯透明黑（黑色地板=0），不绘制任何光晕。 */
+    /** 渲染总闸（仅 toggle 开启时为 true）。 */
     @Volatile var enabled: Boolean = false
         private set
 
+    /** 闪光开始时间锚（毫秒，SystemClock.uptimeMillis 基准）。0L 表示当前无闪光。 */
+    @Volatile private var flashStartMs: Long = 0L
+
+    /** 闪光持续时间（毫秒）。 */
+    var flashDurationMs: Long = 800L
+
     private var program: Int = 0
     private var aPos: Int = 0
-    private var uTime: Int = 0
-    private var uIntensity: Int = 0
-    private var uResolution: Int = 0
+    private var uFlash: Int = 0
     private var vbo: Int = 0
-    private val startTime = System.nanoTime()
+
+    /** 是否正在播闪光（surface 何时切回 WHEN_DIRTY 用）。 */
+    fun isFlashing(): Boolean = flashStartMs != 0L
+
+    /** 是否已经检测到当前闪光播完（用于通知 SurfaceView 切回 WHEN_DIRTY 节能）。 */
+    @Volatile private var flashExpiredFlag: Boolean = false
 
     // 全屏四边形（两个三角形组成的 TRIANGLE_STRIP）
     private val quad = floatArrayOf(
@@ -42,18 +52,16 @@ class LumeRenderer : GLSurfaceView.Renderer {
     )
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
-        // 黑色地板 = 0：透明黑清空，确保未点亮区域完全不显示。
+        // 黑色地板 = 0：透明黑清空，确保未点亮区域完全不显示
         GLES20.glClearColor(0f, 0f, 0f, 0f)
         GLES20.glDisable(GLES20.GL_DEPTH_TEST)
-        // 半透明合成：与下方 SDR UI 混合。
+        // 半透明合成：与下方 SDR UI 混合
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
         program = buildProgram(VERT, FRAG)
         aPos = GLES20.glGetAttribLocation(program, "aPos")
-        uTime = GLES20.glGetUniformLocation(program, "uTime")
-        uIntensity = GLES20.glGetUniformLocation(program, "uIntensity")
-        uResolution = GLES20.glGetUniformLocation(program, "uResolution")
+        uFlash = GLES20.glGetUniformLocation(program, "uFlash")
 
         // 上传全屏四边形到 VBO
         val buf = IntArray(1)
@@ -74,20 +82,28 @@ class LumeRenderer : GLSurfaceView.Renderer {
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         GLES20.glViewport(0, 0, width, height)
-        GLES20.glUseProgram(program)
-        GLES20.glUniform2f(uResolution, width.toFloat(), height.toFloat())
     }
 
     override fun onDrawFrame(gl: GL10?) {
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-        // 关闭时只清成纯透明黑（黑色地板=0），不留任何光晕残影。
-        if (!enabled) return
+        // 关闭时只清成纯透明黑（黑色地板=0），不留任何残影
+        if (!enabled || flashStartMs == 0L) return
+
+        val now = SystemClock.uptimeMillis()
+        val dt = now - flashStartMs
+        if (dt >= flashDurationMs) {
+            // 闪光已结束：清理状态，标记过期（SurfaceView 会切回 WHEN_DIRTY 节能）
+            flashStartMs = 0L
+            flashExpiredFlag = true
+            return
+        }
+
+        val t = dt.toFloat() / flashDurationMs.toFloat()  // 0..1
+        // 缓出三次方：起手强亮，尾段快速消失，模拟电子表夜光按一下闪一下
+        val flash = (1f - t) * (1f - t) * (1f - t)
 
         GLES20.glUseProgram(program)
-
-        val t = (System.nanoTime() - startTime) / 1_000_000_000f
-        GLES20.glUniform1f(uTime, t)
-        GLES20.glUniform1f(uIntensity, intensity)
+        GLES20.glUniform1f(uFlash, flash)
 
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, vbo)
         GLES20.glEnableVertexAttribArray(aPos)
@@ -96,12 +112,30 @@ class LumeRenderer : GLSurfaceView.Renderer {
         GLES20.glBindBuffer(GLES20.GL_ARRAY_BUFFER, 0)
     }
 
-    fun setIntensity(v: Float) {
-        intensity = v.coerceIn(0f, 1f)
+    /** 触发一次边缘闪光（toggle on / 切页面时调用）。 */
+    fun fireFlash() {
+        flashStartMs = SystemClock.uptimeMillis()
+        flashExpiredFlag = false
+    }
+
+    /**
+     * 轮询：当前闪光是否已播完（SurfaceView 在 onDrawFrame 后调用，
+     * 若返回 true 则把渲染模式切回 WHEN_DIRTY 节能）。
+     */
+    fun consumeFlashExpired(): Boolean {
+        if (flashExpiredFlag) {
+            flashExpiredFlag = false
+            return true
+        }
+        return false
     }
 
     fun setEnabled(on: Boolean) {
         enabled = on
+        if (!on) {
+            flashStartMs = 0L
+            flashExpiredFlag = false
+        }
     }
 
     private fun buildProgram(vsrc: String, fsrc: String): Int {
@@ -147,26 +181,21 @@ void main() {
 }
 """
 
-        // 黑色地板 = 0：光晕核心之外输出纯透明黑，不抬升 SDR UI。
+        // 边缘薄霓虹环（紫→青）；闪光外与空闲帧输出 vec4(0,0,0,0)。
         private const val FRAG = """
 precision highp float;
 varying vec2 vUv;
-uniform float uTime;
-uniform float uIntensity;
-uniform vec2 uResolution;
+uniform float uFlash;
 
 const vec3 NEON_PURPLE = vec3(0.486, 0.227, 0.929);
 const vec3 NEON_CYAN   = vec3(0.157, 0.824, 0.851);
 
 void main() {
     float r = distance(vUv, vec2(0.5));
-    // 边缘呼吸光晕：中心留空保证可读性，外围霓虹氛围背光
-    float rim = smoothstep(0.33, 0.72, r) * (1.0 - smoothstep(0.72, 0.98, r));
-    float breath = 0.55 + 0.45 * sin(uTime * 1.1);
-    float core = rim * uIntensity * breath;
-    vec3 col = mix(NEON_CYAN, NEON_PURPLE, smoothstep(0.33, 0.95, r));
-    // 黑色地板 = 0：core 趋零处输出纯透明黑
-    float alpha = clamp(core * 0.5, 0.0, 0.5);
+    // 边缘环：中心留空保证可读性；外侧贴近屏幕边缘
+    float rim = smoothstep(0.36, 0.74, r) * (1.0 - smoothstep(0.74, 0.995, r));
+    vec3 col = mix(NEON_CYAN, NEON_PURPLE, smoothstep(0.36, 0.95, r));
+    float alpha = clamp(rim * uFlash, 0.0, 0.85);
     gl_FragColor = vec4(col, alpha);
 }
 """

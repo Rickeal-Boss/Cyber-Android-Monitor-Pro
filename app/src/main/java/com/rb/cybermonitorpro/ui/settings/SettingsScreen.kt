@@ -519,8 +519,11 @@ private fun HapticSettingsCard() {
 /**
  * 仿电子表夜光：局部 HDR 增亮。复用 CyberJoystickSwitch 样式；默认关闭。
  * 即时生效：写 AppSettings + 同步 CyberNightlightSwitch（渲染层消费）。
- * 内含 HDR 强度滑条（用户要求放在设置页）—— 控制夜光条 HDR 亮度，始终可拖（便于预设），
- * 下方提示仅在开启时生效。
+ *
+ * HDR 强度滑条（用户要求放在设置页）—— 范围 1.0×..8.0×，直接映射
+ * SurfaceView.setDesiredHdrHeadroom(1.0..8.0)。受设备"实际可用倍率"上限约束
+ * （参考 qr.txt：Xiaomi Android 16 上 "Maximum supported: 8.0×"）。
+ * 始终可拖（便于预设 8.0× 后再开开关），下方提示仅在开启时生效。
  */
 @Composable
 private fun CyberNightlightTurboXdrSettingsCard() {
@@ -564,7 +567,7 @@ private fun CyberNightlightTurboXdrSettingsCard() {
                 )
             }
 
-            // ═══ HDR 强度滑条 ═══
+            // ═══ HDR 强度滑条（1.0×..8.0×，对应 setDesiredHdrHeadroom）═══
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically) {
@@ -572,7 +575,7 @@ private fun CyberNightlightTurboXdrSettingsCard() {
                     Text(stringResource(R.string.device_hdr_intensity), fontSize = 14.sp, color = TextPrimary)
                     Text(stringResource(R.string.device_hdr_intensity_hint), fontSize = 11.sp, color = TextSecondary)
                 }
-                Text("${(intensity * 100).toInt()}%", fontSize = 14.sp,
+                Text(String.format("%.1fx", intensity), fontSize = 14.sp,
                     color = NeonPurpleBright, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(4.dp))
@@ -583,8 +586,8 @@ private fun CyberNightlightTurboXdrSettingsCard() {
                     settings.cyberNightlightTurboXdrIntensity = intensity
                     CyberNightlightSwitch.intensity = intensity
                 },
-                valueRange = 0f..1f,
-                steps = 0,
+                valueRange = 1f..8f,
+                steps = 69,  // 0.1× 步长 → (8-1)/0.1 - 1 = 69 个中间挡
                 modifier = Modifier.fillMaxWidth(),
                 colors = SliderDefaults.colors(
                     thumbColor = NeonPurpleBright,
@@ -592,6 +595,10 @@ private fun CyberNightlightTurboXdrSettingsCard() {
                     inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
                 )
             )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("1.0×", fontSize = 10.sp, color = NeonSteelBlue.copy(alpha = 0.7f))
+                Text("8.0×", fontSize = 10.sp, color = NeonSteelBlue.copy(alpha = 0.7f))
+            }
             if (!enabled) {
                 Text(stringResource(R.string.device_hdr_intensity_off),
                     fontSize = 11.sp, color = NeonSteelBlue.copy(alpha = 0.7f))

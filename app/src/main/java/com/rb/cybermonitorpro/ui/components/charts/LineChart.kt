@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
-import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.theme.ChartAreaPurple
 import com.rb.cybermonitorpro.ui.theme.DividerCyber
 import com.rb.cybermonitorpro.ui.theme.ChartLinePurple
@@ -71,7 +70,6 @@ fun LineChart(
     showGrid: Boolean = true,
     gridLines: Int = 5,
     useGradient: Boolean = false,
-    turboXdr: Boolean = CyberNightlightSwitch.enabled
 ) {
     if (data.isEmpty()) return
 
@@ -160,17 +158,10 @@ fun LineChart(
                 val cx = xs[i - 1] + (xs[i] - xs[i - 1]) * 0.5f
                 linePath.cubicTo(cx, ys[i - 1], cx, ys[i], xs[i], ys[i])
             }
-            // 真 HDR：先画一层更宽、低透明的同色光晕，再画清晰线（图表线"发光"）
-            if (turboXdr) {
-                drawPath(linePath, gradientBrush, style = Stroke(8f, cap = StrokeCap.Round), alpha = 0.35f)
-            }
             drawPath(linePath, gradientBrush, style = Stroke(3.5f, cap = StrokeCap.Round))
         }
 
         // 尾点
-        if (turboXdr) {
-            drawCircle(lineColor, 7f, Offset(xs[visibleCount - 1], ys[visibleCount - 1]), alpha = 0.4f)
-        }
         drawCircle(lineColor, 4f, Offset(xs[visibleCount - 1], ys[visibleCount - 1]))
     }
 }
@@ -190,7 +181,6 @@ fun DualLineChart(
     gridLines: Int = 5,
     useGradient1: Boolean = false,
     useGradient2: Boolean = false,
-    turboXdr: Boolean = CyberNightlightSwitch.enabled,
 ) {
     if (data1.isEmpty() || data2.isEmpty()) return
 
@@ -244,8 +234,8 @@ fun DualLineChart(
         // 原代码 drawOneLine 内部各自计算 xStep = cw/(pointCount-1)，
         // 两条线数据量不同时 X 分布不同，导致同一时间点坐标错位。
         val xStep = cw / (maxLen - 1).coerceAtLeast(1).toFloat()
-        drawOneLine(data1, visibleCount, brush1, lineColor1, xs, ys, pad, cw, ch, path, xStep, turboXdr)
-        drawOneLine(data2, visibleCount, brush2, lineColor2, xs, ys, pad, cw, ch, path, xStep, turboXdr)
+        drawOneLine(data1, visibleCount, brush1, lineColor1, xs, ys, pad, cw, ch, path, xStep)
+        drawOneLine(data2, visibleCount, brush2, lineColor2, xs, ys, pad, cw, ch, path, xStep)
     }
 }
 
@@ -260,7 +250,6 @@ private fun DrawScope.drawOneLine(
     pad: Float, cw: Float, ch: Float,
     path: Path,
     xStep: Float,  // unified xStep for dual-line alignment
-    turboXdr: Boolean = false,
 ) {
     if (rawData.size == 1) {
         val safeV = sanitize(rawData[0])
@@ -282,10 +271,6 @@ private fun DrawScope.drawOneLine(
         for (i in 1 until take) {
             val cx = xs[i - 1] + (xs[i] - xs[i - 1]) * 0.5f
             path.cubicTo(cx, ys[i - 1], cx, ys[i], xs[i], ys[i])
-        }
-        // 真 HDR：同色更宽低透明光晕（图表线"发光"）
-        if (turboXdr) {
-            drawPath(path, brush, style = Stroke(6f, cap = StrokeCap.Round), alpha = 0.35f)
         }
         drawPath(path, brush, style = Stroke(2f, cap = StrokeCap.Round))
     }

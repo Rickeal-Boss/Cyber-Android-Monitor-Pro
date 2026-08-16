@@ -5,24 +5,31 @@ import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.opengl.GLSurfaceView
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
 import android.view.Display
 
 /**
- * CyberNightlight TurboXDR 的局部 HDR 增亮浮层（全屏呼吸光晕）。
+ * CyberNightlight TurboXDR 的局部 HDR 增亮浮层 —— 全屏一次性边缘闪光 + 持续 headroom。
  *
- * 关键约束（与已验证的 HdrTestSurfaceView 完全一致，这是 Android 16 / 8–12bit 屏上
+ * 关键约束（与已验证的 HdrTestSurfaceView 完全一致，是 Android 16 / 8–12bit 屏上
  * 真正激发 HDR 的钥匙）：
  *  1. EGL 选 10/10/10/2 config + 注入 BT.2020 PQ colorspace，常量必须用 **0x3340**
  *     （旧值 0x3531 是错的，EGL 静默忽略，surface 永不标 PQ → 永远 8-bit SDR）。
  *  2. PixelFormat.RGBA_1010102（HDR 设备）提供 10-bit + 2-bit alpha 半透明合成。
- *  3. setZOrderOnTop(true) + isClickable=false：浮层盖在 SDR UI 之上但不拦截触摸
- *     （沿用 bright-qr v3 T5）。
+ *  3. setZOrderOnTop(true) + isClickable=false：浮层盖在 SDR UI 之上但不拦截触摸。
  *  4. preserveEGLContextOnPause = true：离开-返回不丢 EGL/PQ 状态。
- *  5. 构造即不申请 HDR 余量；由 setActive(true) 按需 setDesiredHdrHeadroom。
+ *  5. 构造即不申请 HDR 余量；由 setActive(true) 按需 setDesiredHdrHeadroom(slider)。
  *
- * 渲染策略：setActive(true) 时 RENDERMODE_CONTINUOUSLY 跑呼吸动画；关闭时切回
- * RENDERMODE_WHEN_DIRTY 并补一帧纯透明（黑色地板=0，不留残影）。
+ * 渲染策略（仿电子表夜光）：
+ *  - setActive(true)：触发一次性边缘闪光（fireFlash）；HDR 余量 = slider (1.0×–8.0×)；
+ *    切到 RENDERMODE_CONTINUOUSLY 驱动闪光播放；闪光播完自动切回 RENDERMODE_WHEN_DIRTY。
+ *  - setActive(false)：余量归 1.0、闪光清零、补一帧透明。
+ *  - fireFlash()：可由 Compose 层在 toggle on / 切页面时调用，复用同一边缘闪光。
+ *
+ * 空闲帧：Surface 输出 vec4(0,0,0,0)（纯透明黑）；PQ surface 自身保留，使
+ * setDesiredHdrHeadroom 持续作用于底层 SDR UI —— slider 调多少，整屏 HDR 化多少倍。
  */
 class HdrLumeSurfaceView @JvmOverloads constructor(
     context: Context,
@@ -47,6 +54,9 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
 
     @Volatile private var active: Boolean = false
 
+    /** 当前 HDR 强度倍数 ∈ [1.0, 8.0]（来自 slider）；toggle 关闭时强制 1.0。 */
+    @Volatile private var intensityMultiplier: Float = 1.0f
+
     init {
         val fmt = if (displaySupportsHdr) PixelFormat.RGBA_1010102 else PixelFormat.RGBA_8888
         if (Build.VERSION.SDK_INT >= 33) runCatching { holder.setFormat(fmt) }
@@ -64,19 +74,18 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
     }
 
     /**
-     * 由 CyberNightlightHost 调用：开启 = 申请 HDR 余量并连续渲染呼吸光晕；
-     * 关闭 = 余量归 1.0 并补一帧纯透明。
+     * 由 CyberNightlightHost 调用：开启 = 申请 HDR 余量 + 触发一次性边缘闪光；
+     * 关闭 = 余量归 1.0 并补一帧透明。
      */
     fun setActive(enabled: Boolean) {
         active = enabled
         lumeRenderer.setEnabled(enabled)
         if (Build.VERSION.SDK_INT >= 35) {
-            val headroom = if (enabled) {
-                HdrCapabilityDetector.computeHeadroom(display, true)
-            } else 1f
+            val headroom = if (enabled) intensityMultiplier else 1f
             runCatching { setDesiredHdrHeadroom(headroom) }
         }
         if (enabled) {
+            lumeRenderer.fireFlash()
             renderMode = RENDERMODE_CONTINUOUSLY
         } else {
             renderMode = RENDERMODE_WHEN_DIRTY
@@ -84,8 +93,33 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
         }
     }
 
+    /**
+     * 设定 HDR 强度倍数 ∈ [1.0×, 8.0×]，直接对应 SurfaceView.setDesiredHdrHeadroom。
+     * 参考 qr.txt: Xiaomi 24069RA21C / Android 16 上 "Maximum supported: 8.0×"。
+     */
     fun setIntensity(v: Float) {
-        lumeRenderer.setIntensity(v)
+        val clamped = v.coerceIn(1.0f, 8.0f)
+        intensityMultiplier = clamped
+        if (Build.VERSION.SDK_INT >= 35 && active) {
+            runCatching { setDesiredHdrHeadroom(clamped) }
+        }
+    }
+
+    /**
+     * 触发一次性边缘闪光（页面切换、toggle on 时由 Compose 调用）。
+     * 仅在 active=true 时生效；空闲态只是丢弃。闪光播完自动切回 RENDERMODE_WHEN_DIRTY 节能。
+     */
+    fun fireFlash() {
+        if (!active) return
+        lumeRenderer.fireFlash()
+        renderMode = RENDERMODE_CONTINUOUSLY
+        // 闪光播完后切回节能模式（PQ surface 仍保留，headroom 持续作用于 UI）
+        mainHandler.removeCallbacksAndMessages(FLASH_END_TOKEN)
+        mainHandler.postDelayed({
+            if (active && !lumeRenderer.isFlashing()) {
+                renderMode = RENDERMODE_WHEN_DIRTY
+            }
+        }, lumeRenderer.flashDurationMs + 50L)
     }
 
     /** PQ 表面是否真正激活（运行时真相，可上送诊断/QA）。 */
@@ -95,6 +129,12 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         if (Build.VERSION.SDK_INT >= 35) runCatching { setDesiredHdrHeadroom(1f) }
+        mainHandler.removeCallbacksAndMessages(FLASH_END_TOKEN)
         super.onDetachedFromWindow()
+    }
+
+    private companion object {
+        private val mainHandler = Handler(Looper.getMainLooper())
+        private const val FLASH_END_TOKEN = 0xCAFE_F1A5.toInt()
     }
 }
