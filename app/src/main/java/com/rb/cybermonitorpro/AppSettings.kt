@@ -68,13 +68,10 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getBoolean("cyber_nightlight_turboxdr_enabled", false)
         set(value) = prefs.edit { putBoolean("cyber_nightlight_turboxdr_enabled", value) }
 
-    // HDR 强度倍数 ∈ [1.0, 8.0] → 直接映射 SurfaceView.setDesiredHdrHeadroom(1.0..8.0)。
-    // 参考 qr.txt 中 Xiaomi 24069RA21C / Android 16 真机的 "Maximum supported: 8.0×"。
-    // 1.0× = 关闭真 HDR（与不开浮层同效）；越大越亮，受设备实际可用倍率上限约束。
-    // 默认 1.0×（最小值，避免用户意外开到很亮烧屏）。
+    // 强度 ∈ [0,1] → 映射 PQ 白码值（呼吸幅度），默认 0.6f
     var cyberNightlightTurboXdrIntensity: Float
-        get() = prefs.getFloat("cyber_nightlight_turboxdr_intensity", 1.0f).coerceIn(1.0f, 8.0f)
-        set(value) = prefs.edit { putFloat("cyber_nightlight_turboxdr_intensity", value.coerceIn(1.0f, 8.0f)) }
+        get() = prefs.getFloat("cyber_nightlight_turboxdr_intensity", 0.6f).coerceIn(0f, 1f)
+        set(value) = prefs.edit { putFloat("cyber_nightlight_turboxdr_intensity", value.coerceIn(0f, 1f)) }
 
     // ── 震动反馈 ──
     var hapticEnabled: Boolean

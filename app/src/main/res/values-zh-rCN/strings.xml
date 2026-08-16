@@ -1071,7 +1071,7 @@
     <string name="device_hdr_lab_entry_value">打开 ›</string>
 
     <string name="device_hdr_intensity">HDR 强度</string>
-    <string name="device_hdr_intensity_hint">夜光条 HDR 亮度倍数（1.0×–8.0×）</string>
+    <string name="device_hdr_intensity_hint">调节夜光条 HDR 亮度</string>
     <string name="device_hdr_intensity_off">仅在 CyberNightlight TurboXDR 开启时生效</string>
     <string name="hdr_lab_title">HDR 实验室 · 局部 EDR 测试</string>
     <string name="hdr_lab_potential_headroom">潜在 EDR 亮度余量</string>

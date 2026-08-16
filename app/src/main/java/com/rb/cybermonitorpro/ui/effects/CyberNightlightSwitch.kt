@@ -18,6 +18,5 @@ import androidx.compose.runtime.setValue
  */
 object CyberNightlightSwitch {
     var enabled by mutableStateOf(false)
-    /** HDR 强度倍数 ∈ [1.0, 8.0] → setDesiredHdrHeadroom。默认 1.0×（最小值）。 */
-    var intensity by mutableFloatStateOf(1.0f)
+    var intensity by mutableFloatStateOf(0.6f)
 }

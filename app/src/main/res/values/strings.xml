@@ -1079,7 +1079,7 @@
     <string name="device_hdr_lab_entry_value">Open ›</string>
 
     <string name="device_hdr_intensity">HDR Intensity</string>
-    <string name="device_hdr_intensity_hint">Lume strip HDR brightness multiplier (1.0×–8.0×)</string>
+    <string name="device_hdr_intensity_hint">Adjusts lume strip HDR brightness</string>
     <string name="device_hdr_intensity_off">Only effective when CyberNightlight TurboXDR is enabled</string>
     <string name="hdr_lab_title">HDR Lab · Local EDR Test</string>
     <string name="hdr_lab_potential_headroom">Potential EDR headroom</string>

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.GpsSatelliteInfo
+import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlin.math.*
 
@@ -38,6 +39,7 @@ fun SatelliteSkyView(
     satellites: List<GpsSatelliteInfo>,
     modifier: Modifier = Modifier,
     title: String? = null,
+    turboXdr: Boolean = CyberNightlightSwitch.enabled
 ) {
     val localeIndependentDefault = stringResource(R.string.gps_sky_view_default)
     val displayTitle = when {
@@ -68,7 +70,7 @@ fun SatelliteSkyView(
                     .aspectRatio(1f)
                     .padding(8.dp)
             ) {
-                drawSkyPlot(satellites, size.minDimension)
+                drawSkyPlot(satellites, size.minDimension, turboXdr)
             }
 
             // 图例
@@ -80,7 +82,7 @@ fun SatelliteSkyView(
     }
 }
 
-private fun DrawScope.drawSkyPlot(satellites: List<GpsSatelliteInfo>, canvasSize: Float) {
+private fun DrawScope.drawSkyPlot(satellites: List<GpsSatelliteInfo>, canvasSize: Float, turboXdr: Boolean = false) {
     val cx = size.width / 2f
     val cy = size.height / 2f
     val radius = (canvasSize / 2f) * 0.92f
@@ -154,13 +156,15 @@ private fun DrawScope.drawSkyPlot(satellites: List<GpsSatelliteInfo>, canvasSize
 
         val satColor = constellationColor(sat.constellationType)
         val dotRadius = if (sat.usedInFix) 5.dp.toPx() else 3.5.dp.toPx()
-        val dotAlpha = if (sat.usedInFix) 1f else 0.6f
+        val dotAlpha = if (sat.usedInFix) 1f else (if (turboXdr) 0.85f else 0.6f)
 
-        // 外圈光环（usedInFix 卫星）
-        if (sat.usedInFix) {
+        // 外圈光环（usedInFix 卫星；TurboXDR 下所有星点都加光晕并增强）
+        val haloAlpha = if (turboXdr) 0.55f else 0.3f
+        val haloRadius = dotRadius + (if (turboXdr) 4.dp.toPx() else 2.dp.toPx())
+        if (sat.usedInFix || turboXdr) {
             drawCircle(
-                color = satColor.copy(alpha = 0.3f),
-                radius = dotRadius + 2.dp.toPx(),
+                color = satColor.copy(alpha = haloAlpha),
+                radius = haloRadius,
                 center = Offset(sx, sy)
             )
         }
@@ -171,6 +175,16 @@ private fun DrawScope.drawSkyPlot(satellites: List<GpsSatelliteInfo>, canvasSize
             radius = dotRadius,
             center = Offset(sx, sy)
         )
+
+        // 真 HDR：usedInFix 星点再叠一层亮芯，色点"发光"
+        if (turboXdr && sat.usedInFix) {
+            drawCircle(
+                color = satColor.copy(alpha = 0.9f),
+                radius = dotRadius + 1.5.dp.toPx(),
+                center = Offset(sx, sy),
+                style = Stroke(width = 1.5.dp.toPx())
+            )
+        }
 
         // SNR > 30 的卫星画小十字标记
         if (sat.snr > 30f) {
