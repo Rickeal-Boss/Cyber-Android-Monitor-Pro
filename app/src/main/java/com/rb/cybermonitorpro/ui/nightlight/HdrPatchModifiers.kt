@@ -78,9 +78,9 @@ fun Modifier.hdrCardBorderPatch(key: String, cornerPx: Float, strokePx: Float): 
             HdrPatchRegistry.remove(key)
             return@onGloballyPositioned
         }
-        val pos = coords.positionInWindow()
+        val pos = coords.localToWindow(Offset.Zero)
         val b = android.graphics.RectF(
-            pos.x, pos.y, pos.x + coords.size.width, pos.y + coords.size.height
+            pos.x, pos.y, pos.x + coords.size.width.toFloat(), pos.y + coords.size.height.toFloat()
         )
         HdrPatchRegistry.upsert(
             HdrPatch(
@@ -104,9 +104,9 @@ fun Modifier.hdrTabIndicatorPatch(key: String): Modifier = this
             HdrPatchRegistry.remove(key)
             return@onGloballyPositioned
         }
-        val pos = coords.positionInWindow()
+        val pos = coords.localToWindow(Offset.Zero)
         val b = android.graphics.RectF(
-            pos.x, pos.y, pos.x + coords.size.width, pos.y + coords.size.height
+            pos.x, pos.y, pos.x + coords.size.width.toFloat(), pos.y + coords.size.height.toFloat()
         )
         HdrPatchRegistry.upsert(
             HdrPatch(
@@ -152,9 +152,9 @@ fun HdrMetricText(
                     HdrPatchRegistry.remove(key)
                     return@onGloballyPositioned
                 }
-                val pos = coords.positionInWindow()
+                val pos = coords.localToWindow(Offset.Zero)
                 val b = android.graphics.RectF(
-                    pos.x, pos.y, pos.x + coords.size.width, pos.y + coords.size.height
+                    pos.x, pos.y, pos.x + coords.size.width.toFloat(), pos.y + coords.size.height.toFloat()
                 )
                 val textSizePx = with(density) { fontSize.toPx() }
                 val lsEm = if (fontSize.value > 0f) letterSpacing.value / fontSize.value else 0f
@@ -240,10 +240,10 @@ fun Modifier.hdrChartPatches(
     }
 
     Modifier.onGloballyPositioned { coords ->
-        holder.winX = coords.positionInWindow().x
-        holder.winY = coords.positionInWindow().y
-        holder.w = coords.size.width
-        holder.h = coords.size.height
+        holder.winX = coords.localToWindow(Offset.Zero).x
+        holder.winY = coords.localToWindow(Offset.Zero).y
+        holder.w = coords.size.width.toFloat()
+        holder.h = coords.size.height.toFloat()
         report()
     }
 }
