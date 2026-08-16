@@ -227,7 +227,7 @@ fun HdrLabScreen(onBack: () -> Unit = {}) {
                                         factory = { c ->
                                             HdrTestSurfaceView(c).also {
                                                 hdrView.value = it
-                                                it.applyHeadroom(desired)   // 初始即请求 HDR 余量
+                                                it.applyRequestedHeadroom(desired)   // 初始即请求 HDR 余量
                                             }
                                         },
                                         modifier = Modifier.fillMaxSize()
@@ -277,7 +277,7 @@ fun HdrLabScreen(onBack: () -> Unit = {}) {
                                 value = desired,
                                 onValueChange = { v ->
                                     desired = v
-                                    hdrView.value?.applyHeadroom(v)
+                                    hdrView.value?.applyRequestedHeadroom(v)
                                 },
                                 valueRange = 0f..sliderMax,
                                 enabled = canControl,
@@ -405,7 +405,7 @@ fun HdrLabScreen(onBack: () -> Unit = {}) {
                     factory = { c ->
                         HdrTestSurfaceView(c).also {
                             fsView.value = it
-                            it.applyHeadroom(fsHeadroom)
+                            it.applyRequestedHeadroom(fsHeadroom)
                         }
                     },
                     modifier = Modifier.fillMaxSize()
