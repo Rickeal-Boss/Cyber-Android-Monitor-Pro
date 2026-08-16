@@ -26,6 +26,7 @@ import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonMagenta
+import com.rb.cybermonitorpro.ui.nightlight.hdrChartPatches
 
 // ═══════ 安全 coerceIn — 防御 minimum > maximum ═══════
 
@@ -70,6 +71,8 @@ fun LineChart(
     showGrid: Boolean = true,
     gridLines: Int = 5,
     useGradient: Boolean = false,
+    /** 局部 HDR：非空时把折线本体 + 网格线画进 PQ surface（行业首创 HDR 引入 UI）。 */
+    hdrKey: String? = null,
 ) {
     if (data.isEmpty()) return
 
@@ -106,10 +109,18 @@ fun LineChart(
         if (!showGrid) null else Pair(gridLines, DividerCyber)
     }
 
-    Canvas(modifier = modifier
-        .fillMaxWidth().height(120.dp)
-        .graphicsLayer { }
-    ) {
+    // 局部 HDR 贴片：hdrKey 非空时把折线 + 网格上报至 HdrPatchRegistry（窗口坐标，与绘制公式一致）
+    val chartModifier = if (hdrKey != null)
+        modifier
+            .fillMaxWidth().height(120.dp)
+            .graphicsLayer { }
+            .then(Modifier.hdrChartPatches(hdrKey, data, lineColor, gridLines, showGrid))
+    else
+        modifier
+            .fillMaxWidth().height(120.dp)
+            .graphicsLayer { }
+
+    Canvas(modifier = chartModifier) {
         val w = size.width; val h = size.height; val pad = 8.dp.toPx()
         val cw = w - pad * 2; val ch = h - pad * 2
 

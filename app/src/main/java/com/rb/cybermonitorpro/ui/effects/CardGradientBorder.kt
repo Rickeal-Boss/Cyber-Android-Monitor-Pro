@@ -1,5 +1,7 @@
 package com.rb.cybermonitorpro.ui.effects
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
@@ -8,12 +10,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
+import com.rb.cybermonitorpro.ui.nightlight.hdrCardBorderPatch
 import com.rb.cybermonitorpro.ui.theme.DeepRedAlert
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
 import com.rb.cybermonitorpro.ui.theme.TitaniumGold
+import java.util.UUID
 
 /**
  * 卡片渐变描边光晕（静态，一次绘制，无动画开销）。
@@ -31,13 +37,21 @@ import com.rb.cybermonitorpro.ui.theme.TitaniumGold
  *                     Modifier，每卡少一层 drawWithContent）。位置与旧实现像素级一致
  *                     （内层 Box 填满 Card，坐标系重合），z-order 保持旧序：高光在最底层
  */
+@Composable
 fun Modifier.cardGradientBorder(
     cornerDp: Dp = 20.dp,
     bandWidth: Dp = 4.dp,
     dynamicColor: Color? = null,
     hdrHighlight: Boolean = false,
-): Modifier = this.drawWithContent {
-    drawContent()
+): Modifier {
+    val key = remember { "card:" + UUID.randomUUID().toString() }
+    val cornerPx = with(LocalDensity.current) { cornerDp.toPx() }
+    val strokePx = with(LocalDensity.current) { 2.dp.toPx() }
+    return this
+        // 行业首创：TurboXDR 开启时把卡片描边本体上报为 HDR 贴片（SDF 圆角描边），叠加增亮
+        .then(if (CyberNightlightSwitch.enabled) Modifier.hdrCardBorderPatch(key, cornerPx, strokePx) else Modifier)
+        .drawWithContent {
+            drawContent()
 
     val bandPx = bandWidth.toPx()
     val halfPx = bandPx / 2f
@@ -87,6 +101,7 @@ fun Modifier.cardGradientBorder(
         cornerRadius = CornerRadius((cornerPx - halfPx * 1.5f).coerceAtLeast(0f)),
         style = Stroke(width = halfPx)
     )
+}
 }
 
 // 内半环静态阴影色：近黑的深紫黑，低透明度，只做层次不做存在

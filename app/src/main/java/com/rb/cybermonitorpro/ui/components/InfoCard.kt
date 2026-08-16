@@ -94,10 +94,9 @@ fun MetricCard(
             Column(Modifier.padding(18.dp)) {
                 Text(title, fontSize = 11.sp, color = TextSecondary, letterSpacing = 0.5.sp)
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    value, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                    color = valueColor, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp,
-                    maxLines = 4, overflow = TextOverflow.Ellipsis, softWrap = true
+                // 行业首创：大数字本体上报为 HDR 字形贴片（SDR 文本保留，叠加真实 HDR 增亮，永不消失）
+                HdrMetricText(
+                    text = value, fontSize = 22.sp, color = valueColor, letterSpacing = 1.5.sp
                 )
                 if (showProgress && progress >= 0f) {
                     Spacer(Modifier.height(10.dp))

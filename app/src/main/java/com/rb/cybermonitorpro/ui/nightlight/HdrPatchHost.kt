@@ -1,0 +1,61 @@
+package com.rb.cybermonitorpro.ui.nightlight
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
+import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
+import kotlinx.coroutines.CoroutineScope
+
+/**
+ * 行业首创「局部 HDR 增亮」的 Compose 宿主：把 [HdrPatchSurfaceView] 挂进组合树。
+ *
+ * 点亮真 HDR 的最终闸门 = 开关开启 && 覆盖层不可见 && 未被门控抑制：
+ *  - CyberNightlightSwitch.enabled：设置页 TurboXDR 总开关（默认关）。
+ *  - hidden：设置/悬浮窗/HDR实验室/传感器详情等覆盖层打开时隐藏。
+ *  - NightlightState.suppressed：省电/发热时抑制。
+ *
+ * 与 CyberNightlightHost 同级挂载（同一根 Box，matchParentSize），共享同一 TurboXDR 开关闸门；
+ * 贴片由各 UI 元素经 onGloballyPositioned 上报至 HdrPatchRegistry，本宿主订阅后推给渲染器。
+ */
+@Composable
+fun HdrPatchHost(
+    hidden: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val enabled = CyberNightlightSwitch.enabled
+    val suppressed by NightlightState.suppressed
+    val scope = rememberCoroutineScope()
+    val viewRef = remember { mutableStateOf<HdrPatchSurfaceView?>(null) }
+
+    AndroidView(
+        modifier = modifier,
+        factory = { ctx ->
+            HdrPatchSurfaceView(ctx).also {
+                viewRef.value = it
+                it.attachRegistry(scope)
+            }
+        }
+    )
+
+    // 主动作：闸门变化 → setActive（开启即申请余量 + 持续渲染；关闭补一帧透明）
+    val effective = enabled && !hidden && !suppressed
+    LaunchedEffect(effective) {
+        viewRef.value?.setActive(effective)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            // 卸载时清空全局贴片，避免幽灵贴片残留
+            HdrPatchRegistry.clear()
+            viewRef.value?.detachRegistry()
+        }
+    }
+}

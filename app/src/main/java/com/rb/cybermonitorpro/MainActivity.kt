@@ -68,6 +68,10 @@ import com.rb.cybermonitorpro.ui.effects.acrylic
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.AppGlowBackground
 import com.rb.cybermonitorpro.ui.nightlight.CyberNightlightHost
+import com.rb.cybermonitorpro.ui.nightlight.HdrOverlayState
+import com.rb.cybermonitorpro.ui.nightlight.HdrPatchHost
+import com.rb.cybermonitorpro.ui.nightlight.hdrTabIndicatorPatch
+import androidx.compose.foundation.layout.matchParentSize
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -282,11 +286,14 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
+            val pqActive by HdrOverlayState.pqActive
             // ★ 固定软件背景光晕 — 根层一次性渲染, 不随卡片/页面/滚动重绘 (性能优化)
             AppGlowBackground()
             // ★ CyberNightlight TurboXDR：局部 HDR 增亮浮层（setZOrderOnTop 盖在 SDR UI 之上，
             //   触摸穿透；覆盖层打开时 hidden=true 隐藏；当前 Tab 变化时触发一次性边缘闪光）
             CyberNightlightHost(hidden = overlayVisible, currentPage = pagerState.currentPage)
+            // ★ 行业首创：局部 UI 元素级真 HDR 增亮浮层（卡片描边 / Tab 指示条 / 大数字 / 折线+网格）
+            HdrPatchHost(hidden = overlayVisible, modifier = Modifier.matchParentSize())
             // ★ Windows 10 风格全局光照 — 包裹全部内容以捕获指针事件
             GlobalLightProvider {
             // ★ 主 Tab 页始终保持在 composition 中，保留所有滚动状态
@@ -502,8 +509,10 @@ private fun MainTabs(
                 divider = {},
                 indicator = { pos ->
                     TabRowDefaults.Indicator(
-                        Modifier.tabIndicatorOffset(pos[pagerState.currentPage]),
-                        color = NeonPurple,
+                        Modifier.tabIndicatorOffset(pos[pagerState.currentPage])
+                            .hdrTabIndicatorPatch("topbar.indicator"),
+                        // PQ 点亮时隐藏 SDR 指示条，由透明 PQ 浮层承担高亮（避免重影/过曝）
+                        color = if (pqActive) Color.Transparent else NeonPurple,
                         height = 3.dp
                     )
                 }
