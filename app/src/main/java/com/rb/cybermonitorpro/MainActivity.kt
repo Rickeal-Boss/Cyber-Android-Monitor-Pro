@@ -27,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +73,9 @@ import com.rb.cybermonitorpro.ui.nightlight.CyberNightlightHost
 import com.rb.cybermonitorpro.ui.nightlight.HdrOverlayState
 import com.rb.cybermonitorpro.ui.nightlight.HdrPatchHost
 import com.rb.cybermonitorpro.ui.nightlight.hdrTabIndicatorPatch
+import com.rb.cybermonitorpro.ui.nightlight.hdrTabIconPatch
+import com.rb.cybermonitorpro.ui.nightlight.HdrMetricText
+import com.rb.cybermonitorpro.ui.nightlight.HdrPatchRegistry
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -489,6 +494,11 @@ private fun MainTabs(
                 .height(64.dp)
                 .revealLight(radius = 200.dp, intensity = 0.15f)
                 .neonBorderGlow()
+                // ★ 修复(顶撞): 记录药丸头部+Tab 行底部（根坐标），供渲染器减去 surfaceRoot 后裁剪内容贴片
+                .onGloballyPositioned { coords ->
+                    val rootY = coords.localToRoot(Offset.Zero).y
+                    HdrPatchRegistry.contentClipTop = rootY + coords.size.height
+                }
         ) {
             // 底层: 动效装饰 (渐变光晕 + 内发光边框 + 粒子) — 独立剪裁，不影响 TabRow indicator
             NeonHeaderDecoration(Modifier.matchParentSize().clip(RoundedCornerShape(26.dp)))
@@ -522,15 +532,30 @@ private fun MainTabs(
                 Tab(
                     selected = pagerState.currentPage == i,
                     onClick = onTabClick,
-                        text = {
-                            Text(tab.title, fontSize = 12.sp,
-                                fontWeight = if (pagerState.currentPage == i) FontWeight.Bold else FontWeight.Normal,
-                                maxLines = 1)
-                        },
-                        icon = { Icon(painterResource(tab.iconRes), null, Modifier.size(16.dp)) },
-                        selectedContentColor = NeonPurple,
-                        unselectedContentColor = NeonSteelBlue.copy(alpha = 0.7f)
-                    )
+                    text = {
+                        // ★ 修复(Tab 标签无 HDR): 选中项标签以 TEXT_GLYPH 点亮（topZone 绕过顶撞裁剪）
+                        HdrMetricText(
+                            text = tab.title,
+                            fontSize = 12.sp,
+                            color = if (pagerState.currentPage == i) NeonPurple else NeonSteelBlue.copy(alpha = 0.7f),
+                            letterSpacing = 0.sp,
+                            topZone = true,
+                            gate = pagerState.currentPage == i,
+                            monospace = false,
+                            fontWeight = if (pagerState.currentPage == i) FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    icon = {
+                        // ★ 修复(Tab 图标无 HDR): 选中项矢量图标外圈霓虹光环（topZone 绕过顶撞裁剪）
+                        Icon(
+                            painterResource(tab.iconRes), null,
+                            Modifier.size(16.dp)
+                                .hdrTabIconPatch("tab.icon.$i", selected = pagerState.currentPage == i)
+                        )
+                    },
+                    selectedContentColor = NeonPurple,
+                    unselectedContentColor = NeonSteelBlue.copy(alpha = 0.7f)
+                )
                 }
             }
 

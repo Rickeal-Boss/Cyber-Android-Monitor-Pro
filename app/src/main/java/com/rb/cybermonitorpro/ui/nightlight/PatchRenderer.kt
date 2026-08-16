@@ -44,6 +44,7 @@ class PatchRenderer(
     private var uCorner = 0
     private var uStroke = 0
     private var uTex = 0
+    private var uOffset = 0
 
     @Volatile private var _enabled = false
     private var patches: List<HdrPatch> = emptyList()
@@ -88,14 +89,22 @@ class PatchRenderer(
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
         GLES20.glUseProgram(program)
         GLES20.glUniform2f(uRes, surfaceW.toFloat(), surfaceH.toFloat())
+        // surface 根偏移：把根坐标贴片转为 surface 像素坐标（消除状态栏/内边距下移）
+        GLES20.glUniform2f(uOffset, HdrPatchRegistry.surfaceRootX, HdrPatchRegistry.surfaceRootY)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glUniform1i(uTex, 0)
 
-        for (p in patches) {
-            if (!p.visible) continue
-            val b = p.bounds
-            // 屏外裁剪： bounds 与窗口矩形不相交则跳过
-            if (b.right < 0 || b.bottom < 0 || b.left > surfaceW || b.top > surfaceH) continue
+        val ox = HdrPatchRegistry.surfaceRootX
+        val oy = HdrPatchRegistry.surfaceRootY
+
+        // 屏外裁剪（surface 相对坐标）：与 surface 矩形不相交则跳过
+        fun offscreen(b: RectF): Boolean {
+            val l = b.left - ox; val t = b.top - oy
+            val r = b.right - ox; val bo = b.bottom - oy
+            return r < 0 || bo < 0 || l > surfaceW || t > surfaceH
+        }
+
+        fun drawPatch(p: HdrPatch) {
             when (p.type) {
                 HdrPatchType.CARD_BORDER -> drawSdfBorder(p)
                 HdrPatchType.TAB_INDICATOR -> drawSolid(p)
@@ -104,6 +113,26 @@ class PatchRenderer(
                 HdrPatchType.CHART_GRID -> drawGrid(p)
             }
         }
+
+        // 第一段：顶部 Tab 区贴片（topZone），不做 scissor 裁剪，确保指示条/图标/标签正常点亮
+        for (p in patches) {
+            if (!p.visible || !p.topZone) continue
+            if (offscreen(p.bounds)) continue
+            drawPatch(p)
+        }
+
+        // 第二段：内容贴片，scissor 裁剪掉顶部 Tab 区（contentClipTop 以上），
+        // 避免垂直滚动时卡片描边顶撞/盖过固定 Tab 栏。
+        GLES20.glEnable(GLES20.GL_SCISSOR_TEST)
+        val clipTop = (HdrPatchRegistry.contentClipTop - oy).coerceAtLeast(0f)
+        val clipH = (surfaceH - clipTop).toInt().coerceAtLeast(0)
+        GLES20.glScissor(0, 0, surfaceW, clipH)
+        for (p in patches) {
+            if (!p.visible || p.topZone) continue
+            if (offscreen(p.bounds)) continue
+            drawPatch(p)
+        }
+        GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
     }
 
     // ── 绘制 ──
@@ -291,6 +320,7 @@ class PatchRenderer(
         uCorner = GLES20.glGetUniformLocation(program, "uCorner")
         uStroke = GLES20.glGetUniformLocation(program, "uStroke")
         uTex = GLES20.glGetUniformLocation(program, "uTex")
+        uOffset = GLES20.glGetUniformLocation(program, "uOffset")
     }
 
     private fun compile(type: Int, src: String): Int {
@@ -306,10 +336,13 @@ class PatchRenderer(
         private const val VERT = """
             attribute vec2 aPos;
             uniform vec2 uRes;
+            uniform vec2 uOffset;
             varying vec2 vPix;
             void main() {
                 vPix = aPos;
-                vec2 clip = vec2(aPos.x / uRes.x * 2.0 - 1.0, 1.0 - aPos.y / uRes.y * 2.0);
+                // 贴片坐标为根坐标，减去 surface 根偏移得到 surface 像素坐标
+                vec2 sp = aPos - uOffset;
+                vec2 clip = vec2(sp.x / uRes.x * 2.0 - 1.0, 1.0 - sp.y / uRes.y * 2.0);
                 gl_Position = vec4(clip, 0.0, 1.0);
             }
         """

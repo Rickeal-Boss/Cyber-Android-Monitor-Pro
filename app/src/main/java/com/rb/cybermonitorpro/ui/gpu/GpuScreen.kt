@@ -106,7 +106,7 @@ fun GpuScreen(
                     Text("%.0f%%".format(effectiveUtil), fontSize = 12.sp, color = SuccessNeon)
                 }
             }
-            LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth())
+            LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth(), hdrKey = "gpu.load.chart")
         }
 
         // GPU 频率 (DVFS 感知)
@@ -120,12 +120,12 @@ fun GpuScreen(
                 else stringResource(R.string.gpu_subtitle_max_normal, it)
             } ?: ""
         ) {
-            LineChart(data = gpuFreqChart, modifier = Modifier.fillMaxWidth())
+            LineChart(data = gpuFreqChart, modifier = Modifier.fillMaxWidth(), hdrKey = "gpu.freq.chart")
         }
 
         // GPU 温度
         MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU temperature", value = temp, valueColor = NeonPurpleBright) {
-            LineChart(data = gpuTempChart, modifier = Modifier.fillMaxWidth())
+            LineChart(data = gpuTempChart, modifier = Modifier.fillMaxWidth(), hdrKey = "gpu.temp.chart")
         }
 
         // 调速器信息

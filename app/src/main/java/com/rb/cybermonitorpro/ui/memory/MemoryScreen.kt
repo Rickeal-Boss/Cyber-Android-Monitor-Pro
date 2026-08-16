@@ -73,7 +73,7 @@ fun MemoryScreen(
 
         if (zramUsed > 0) {
             MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "ZRAM used", value = FormatUtils.formatBytes(zramUsed * 1024), valueColor = NeonPurpleBright) {
-                LineChart(data = ramChart, modifier = Modifier.fillMaxWidth())
+                LineChart(data = ramChart, modifier = Modifier.fillMaxWidth(), hdrKey = "mem.zram.chart")
             }
         }
 
@@ -92,11 +92,11 @@ fun MemoryScreen(
         }
 
         MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Memory available", value = FormatUtils.formatBytes(availableKB * 1024), valueColor = NeonPurpleBright) {
-            LineChart(data = ramChart, modifier = Modifier.fillMaxWidth())
+            LineChart(data = ramChart, modifier = Modifier.fillMaxWidth(), hdrKey = "mem.available.chart")
         }
 
         MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Memory used", value = FormatUtils.formatBytes(usedKB * 1024), valueColor = NeonPurpleBright) {
-            LineChart(data = ramChart, modifier = Modifier.fillMaxWidth())
+            LineChart(data = ramChart, modifier = Modifier.fillMaxWidth(), hdrKey = "mem.used.chart")
         }
 
         // === P2: 进程统计 Top 5 ===

@@ -18,6 +18,21 @@ object HdrPatchRegistry {
     private val _flow = MutableStateFlow<List<HdrPatch>>(emptyList())
     val flow: StateFlow<List<HdrPatch>> = _flow.asStateFlow()
 
+    /**
+     * 顶部 Tab 区底部在【内容根坐标】(localToRoot) 下的 y 值。由主界面顶部药丸头部经
+     * onGloballyPositioned 写入。渲染器据此对内容贴片做 scissor 裁剪，避免内容（卡片描边等）
+     * 在垂直滚动时顶撞/盖过固定 Tab 栏。默认 0 = 不裁剪。
+     */
+    @Volatile var contentClipTop: Float = 0f
+
+    /**
+     * HDR surface（HdrPatchHost）左上角在【内容根坐标】(localToRoot) 下的值。由宿主经
+     * onGloballyPositioned 写入。贴片上报的是根坐标，渲染器绘制时统一减去该偏移得到
+     * surface 像素坐标（与 surface 像素原点对齐，消除状态栏/内边距导致的整体下移）。
+     */
+    @Volatile var surfaceRootX: Float = 0f
+    @Volatile var surfaceRootY: Float = 0f
+
     fun upsert(p: HdrPatch) = synchronized(mutex) {
         map[p.id] = p
         _flow.value = map.values.toList()

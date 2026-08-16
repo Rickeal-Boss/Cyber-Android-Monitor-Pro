@@ -9,6 +9,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
@@ -36,7 +38,13 @@ fun HdrPatchHost(
     val viewRef = remember { mutableStateOf<HdrPatchSurfaceView?>(null) }
 
     AndroidView(
-        modifier = modifier,
+        modifier = modifier
+            // 上报 surface 左上角的根坐标，供渲染器把贴片根坐标统一转为 surface 像素坐标
+            .onGloballyPositioned { coords ->
+                val root = coords.localToRoot(Offset.Zero)
+                HdrPatchRegistry.surfaceRootX = root.x
+                HdrPatchRegistry.surfaceRootY = root.y
+            },
         factory = { ctx ->
             HdrPatchSurfaceView(ctx).also {
                 viewRef.value = it

@@ -192,6 +192,8 @@ fun DualLineChart(
     gridLines: Int = 5,
     useGradient1: Boolean = false,
     useGradient2: Boolean = false,
+    /** 局部 HDR：非空时把两条折线 + 网格线画进 PQ surface（行业首创 HDR 引入 UI）。 */
+    hdrKey: String? = null,
 ) {
     if (data1.isEmpty() || data2.isEmpty()) return
 
@@ -228,6 +230,12 @@ fun DualLineChart(
     Canvas(modifier = modifier
         .fillMaxWidth().height(120.dp)
         .graphicsLayer { }
+        .let { m ->
+            if (hdrKey != null)
+                m.hdrChartPatches(hdrKey, data1, lineColor1, gridLines, showGrid)
+                    .hdrChartPatches(hdrKey + ".b", data2, lineColor2, gridLines, false)
+            else m
+        }
     ) {
         val w = size.width; val h = size.height; val pad = 8.dp.toPx()
         val cw = w - pad * 2; val ch = h - pad * 2

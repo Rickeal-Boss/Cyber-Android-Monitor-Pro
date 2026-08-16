@@ -54,7 +54,12 @@ data class HdrPatch(
     /** CHART_LINE/CHART_GRID：窗口坐标点 [x0,y0,x1,y1,...] */
     val points: FloatArray? = null,
     val tailDotRadiusPx: Float = 0f,
-    val visible: Boolean = true
+    val visible: Boolean = true,
+    /**
+     * 是否位于顶部 Tab 区。true 时两段式渲染中绕过"顶撞裁剪"（scissor），
+     * 用于 TAB_INDICATOR / 选中 Tab 图标光环 / 选中 Tab 标签字形；其余内容贴片默认裁剪。
+     */
+    val topZone: Boolean = false
 ) {
     // 注册表按 id 键控、整体替换，故 equals/hashCode 仅依赖引用/id，避免 FloatArray 内容参与比对。
     override fun equals(other: Any?) = this === other

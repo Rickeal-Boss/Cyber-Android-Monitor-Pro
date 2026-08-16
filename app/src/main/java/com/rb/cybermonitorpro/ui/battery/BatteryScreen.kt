@@ -366,7 +366,7 @@ fun BatteryScreen(
                         value = "${level}%",
                         valueColor = NeonPurpleBright
                     ) {
-                        LineChart(data = battLevelChart, modifier = Modifier.fillMaxWidth())
+                        LineChart(data = battLevelChart, modifier = Modifier.fillMaxWidth(), hdrKey = "batt.level.chart")
                     }
                 }
             }
@@ -377,7 +377,7 @@ fun BatteryScreen(
                         value = "${(power / 1000f).let { "%.1f".format(it) }} W",
                         valueColor = NeonPurpleBright
                     ) {
-                        LineChart(data = battPowerChart, modifier = Modifier.fillMaxWidth())
+                        LineChart(data = battPowerChart, modifier = Modifier.fillMaxWidth(), hdrKey = "batt.power.chart")
                     }
                 }
             }
@@ -433,7 +433,7 @@ fun BatteryScreen(
                         valueColor = NeonPurpleBright,
                         borderColor = batteryTempBorderColor(temp)
                     ) {
-                        LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth())
+                        LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth(), hdrKey = "batt.temp.chart")
                     }
                 }
             }
