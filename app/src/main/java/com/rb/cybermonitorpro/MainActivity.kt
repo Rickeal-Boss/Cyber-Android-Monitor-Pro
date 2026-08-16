@@ -67,7 +67,6 @@ import com.rb.cybermonitorpro.ui.effects.StaggeredPageProvider
 import com.rb.cybermonitorpro.ui.effects.acrylic
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.AppGlowBackground
-import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.nightlight.CyberNightlightHost
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.CancellationException
@@ -286,8 +285,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             // ★ 固定软件背景光晕 — 根层一次性渲染, 不随卡片/页面/滚动重绘 (性能优化)
             AppGlowBackground()
             // ★ CyberNightlight TurboXDR：局部 HDR 增亮浮层（setZOrderOnTop 盖在 SDR UI 之上，
-            //   触摸穿透；覆盖层打开时 hidden=true 隐藏；默认关 + 省电/发热门控）
-            CyberNightlightHost(hidden = overlayVisible)
+            //   触摸穿透；覆盖层打开时 hidden=true 隐藏；当前 Tab 变化时触发一次性边缘闪光）
+            CyberNightlightHost(hidden = overlayVisible, currentPage = pagerState.currentPage)
             // ★ Windows 10 风格全局光照 — 包裹全部内容以捕获指针事件
             GlobalLightProvider {
             // ★ 主 Tab 页始终保持在 composition 中，保留所有滚动状态
@@ -463,7 +462,6 @@ private fun MainTabs(
     // 智能 GPS: 仅"网络" (index 5) 和 "GPS" (index 6) Tab 启用定位
     val currentPage = pagerState.currentPage
     val ctx = LocalContext.current
-    val turboXdr = CyberNightlightSwitch.enabled
     LaunchedEffect(currentPage) {
         val isGpsRelated = currentPage == 5 || currentPage == 6
         onGpsTabChanged(isGpsRelated)
@@ -505,9 +503,8 @@ private fun MainTabs(
                 indicator = { pos ->
                     TabRowDefaults.Indicator(
                         Modifier.tabIndicatorOffset(pos[pagerState.currentPage]),
-                        // 真 HDR（TurboXDR）：Tab 指示条切青色并加粗，边框"点亮"
-                        color = if (turboXdr) NeonCyan else NeonPurple,
-                        height = if (turboXdr) 4.dp else 3.dp
+                        color = NeonPurple,
+                        height = 3.dp
                     )
                 }
             ) {
