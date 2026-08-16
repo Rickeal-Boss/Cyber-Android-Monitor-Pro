@@ -742,6 +742,11 @@
     <string name="settings_globallight_desc">卡片指標跟隨光照效果；入門裝置關閉可降低 GPU 光柵開銷</string>
     <string name="settings_globallight_on">已開啟</string>
     <string name="settings_globallight_off">已關閉</string>
+
+    <string name="settings_turboxdr">CyberNightlight TurboXDR</string>
+    <string name="settings_turboxdr_desc">仿電子錶夜光：刻度/光條以最大 HDR 亮度發光，不抬高整屏亮度</string>
+    <string name="settings_turboxdr_on">已開啟</string>
+    <string name="settings_turboxdr_off">已關閉</string>
     <string name="settings_app_name">Cyber Android Monitor Pro</string>
     <string name="settings_app_version">v5.0.0</string>
     <string name="settings_app_tech">Kotlin 2.2.10 · Compose · Bat Theme</string>
@@ -1069,6 +1074,10 @@
     <!-- ★ 2026-08-16: HDR 實驗室 — 區域 EDR 實機驗證（詳情頁二層） -->
     <string name="device_hdr_lab_entry">HDR 實驗室（EDR 測試）</string>
     <string name="device_hdr_lab_entry_value">開啟 ›</string>
+
+    <string name="device_hdr_intensity">HDR 強度</string>
+    <string name="device_hdr_intensity_hint">調節夜光條 HDR 亮度</string>
+    <string name="device_hdr_intensity_off">僅在 CyberNightlight TurboXDR 開啟時生效</string>
     <string name="hdr_lab_title">HDR 實驗室 · 區域 EDR 測試</string>
     <string name="hdr_lab_potential_headroom">潛在 EDR 亮度餘量</string>
     <string name="hdr_lab_headroom_unavailable">此數值需 Android 16+ 才能查詢</string>

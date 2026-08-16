@@ -56,6 +56,11 @@
     <string name="settings_globallight_desc">Pointer-follow reveal lighting on cards; turn off to cut GPU raster cost on low-end devices</string>
     <string name="settings_globallight_on">On</string>
     <string name="settings_globallight_off">Off</string>
+
+    <string name="settings_turboxdr">CyberNightlight TurboXDR</string>
+    <string name="settings_turboxdr_desc">Watch-lume style glow — lume strips hit max HDR brightness without lifting whole-screen brightness</string>
+    <string name="settings_turboxdr_on">On</string>
+    <string name="settings_turboxdr_off">Off</string>
     <string name="settings_app_name">Cyber Android Monitor Pro</string>
     <string name="settings_app_version">v5.0.0</string>
     <string name="settings_app_tech">Kotlin 2.2.10 · Compose · Bat Theme</string>
@@ -1072,6 +1077,10 @@
     <!-- ★ 2026-08-16: HDR Lab — local EDR real-device verification (device detail 2nd-level page) -->
     <string name="device_hdr_lab_entry">HDR Lab (EDR Test)</string>
     <string name="device_hdr_lab_entry_value">Open ›</string>
+
+    <string name="device_hdr_intensity">HDR Intensity</string>
+    <string name="device_hdr_intensity_hint">Adjusts lume strip HDR brightness</string>
+    <string name="device_hdr_intensity_off">Only effective when CyberNightlight TurboXDR is enabled</string>
     <string name="hdr_lab_title">HDR Lab · Local EDR Test</string>
     <string name="hdr_lab_potential_headroom">Potential EDR headroom</string>
     <string name="hdr_lab_headroom_unavailable">Querying this value requires Android 16+</string>

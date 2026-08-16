@@ -41,6 +41,7 @@ import com.rb.cybermonitorpro.LocaleManager
 import com.rb.cybermonitorpro.ui.components.CyberIcons
 import com.rb.cybermonitorpro.ui.components.CyberJoystickSwitch
 import com.rb.cybermonitorpro.ui.effects.GlobalLightSwitch
+import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
@@ -112,6 +113,9 @@ fun SettingsScreen(viewModel: SettingsViewModel = koinViewModel()) {
 
         // ═══ 全局光照 ═══
         GlobalLightSettingsCard()
+
+        // ═══ CyberNightlight TurboXDR（仿电子表夜光 / 局部 HDR 增亮）═══
+        CyberNightlightTurboXdrSettingsCard()
 
         // ═══ App 信息 ═══
         Card(
@@ -506,6 +510,91 @@ private fun HapticSettingsCard() {
                         Text(it, fontSize = 10.sp, color = NeonSteelBlue.copy(alpha = 0.7f))
                     }
                 }
+            }
+        }
+    }
+}
+
+// ═══════ CyberNightlight TurboXDR 卡片 ═══════
+/**
+ * 仿电子表夜光：局部 HDR 增亮。复用 CyberJoystickSwitch 样式；默认关闭。
+ * 即时生效：写 AppSettings + 同步 CyberNightlightSwitch（渲染层消费）。
+ * 内含 HDR 强度滑条（用户要求放在设置页）—— 控制夜光条 HDR 亮度，始终可拖（便于预设），
+ * 下方提示仅在开启时生效。
+ */
+@Composable
+private fun CyberNightlightTurboXdrSettingsCard() {
+    val ctx = LocalContext.current
+    val settings = remember { AppSettings.getInstance(ctx) }
+    var enabled by remember { mutableStateOf(CyberNightlightSwitch.enabled) }
+    var intensity by remember { mutableFloatStateOf(CyberNightlightSwitch.intensity) }
+
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = NeonPurple.copy(alpha = 0.08f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Icon(CyberIcons.Light, null, tint = NeonPurpleBright, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.size(8.dp))
+                    Column {
+                        Text(stringResource(R.string.settings_turboxdr), fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Text(stringResource(R.string.settings_turboxdr_desc), fontSize = 11.sp, color = TextSecondary)
+                        Text(
+                            if (enabled) stringResource(R.string.settings_turboxdr_on)
+                            else stringResource(R.string.settings_turboxdr_off),
+                            fontSize = 11.sp, color = TextSecondary)
+                    }
+                }
+                CyberJoystickSwitch(
+                    checked = enabled,
+                    onCheckedChange = { v ->
+                        enabled = v
+                        settings.cyberNightlightTurboXdrEnabled = v
+                        CyberNightlightSwitch.enabled = v   // 即时生效，无需重启
+                    },
+                )
+            }
+
+            // ═══ HDR 强度滑条 ═══
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text(stringResource(R.string.device_hdr_intensity), fontSize = 14.sp, color = TextPrimary)
+                    Text(stringResource(R.string.device_hdr_intensity_hint), fontSize = 11.sp, color = TextSecondary)
+                }
+                Text("${(intensity * 100).toInt()}%", fontSize = 14.sp,
+                    color = NeonPurpleBright, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(4.dp))
+            Slider(
+                value = intensity,
+                onValueChange = { intensity = it },
+                onValueChangeFinished = {
+                    settings.cyberNightlightTurboXdrIntensity = intensity
+                    CyberNightlightSwitch.intensity = intensity
+                },
+                valueRange = 0f..1f,
+                steps = 0,
+                modifier = Modifier.fillMaxWidth(),
+                colors = SliderDefaults.colors(
+                    thumbColor = NeonPurpleBright,
+                    activeTrackColor = NeonPurple,
+                    inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
+                )
+            )
+            if (!enabled) {
+                Text(stringResource(R.string.device_hdr_intensity_off),
+                    fontSize = 11.sp, color = NeonSteelBlue.copy(alpha = 0.7f))
             }
         }
     }

@@ -10,8 +10,11 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.theme.DeepRedAlert
+import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
+import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
 import com.rb.cybermonitorpro.ui.theme.TitaniumGold
 
@@ -30,12 +33,16 @@ import com.rb.cybermonitorpro.ui.theme.TitaniumGold
  * @param hdrHighlight 是否在同一次 draw 中合并绘制 HDR 白色细高光（替代独立的 hdrHighlight
  *                     Modifier，每卡少一层 drawWithContent）。位置与旧实现像素级一致
  *                     （内层 Box 填满 Card，坐标系重合），z-order 保持旧序：高光在最底层
+ * @param turboXdr     真 HDR 边框（CyberNightlight TurboXDR）。开启时在边缘叠加一条
+ *                     紫→青高亮霓虹环，与 hdrHighlight 的"假 HDR 白色细线"区分（后者保持原样）。
+ *                     默认跟随 CyberNightlightSwitch.enabled —— 开关打开即全 App 卡片边框点亮。
  */
 fun Modifier.cardGradientBorder(
     cornerDp: Dp = 20.dp,
     bandWidth: Dp = 4.dp,
     dynamicColor: Color? = null,
     hdrHighlight: Boolean = false,
+    turboXdr: Boolean = CyberNightlightSwitch.enabled,
 ): Modifier = this.drawWithContent {
     drawContent()
 
@@ -87,6 +94,21 @@ fun Modifier.cardGradientBorder(
         cornerRadius = CornerRadius((cornerPx - halfPx * 1.5f).coerceAtLeast(0f)),
         style = Stroke(width = halfPx)
     )
+
+    // ── 真 HDR 边框（TurboXDR）：边缘叠加紫→青高亮霓虹环，区别于 fake HDR 白线 ──
+    if (turboXdr) {
+        drawRoundRect(
+            brush = Brush.linearGradient(
+                colors = listOf(NeonPurpleBright, NeonCyan, NeonPurpleBright),
+                start = Offset.Zero,
+                end = Offset(size.width, size.height)
+            ),
+            topLeft = Offset(1f, 1f),
+            size = size.copy(width = size.width - 2f, height = size.height - 2f),
+            cornerRadius = CornerRadius(cornerPx.coerceAtLeast(1f)),
+            style = Stroke(width = 2.dp.toPx())
+        )
+    }
 }
 
 // 内半环静态阴影色：近黑的深紫黑，低透明度，只做层次不做存在

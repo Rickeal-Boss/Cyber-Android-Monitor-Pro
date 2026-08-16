@@ -61,6 +61,18 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getBoolean("global_light_enabled", true)
         set(value) = prefs.edit { putBoolean("global_light_enabled", value) }
 
+    // ── CyberNightlight TurboXDR（仿电子表夜光 / 局部 HDR 增亮）──
+    // false = 默认关闭（用户明确要求默认关），开启后由 CyberNightlightSwitch 在运行期消费。
+    // 仅控制「局部 HDR 增亮」效果；低版本（<API 35）设备开关可开但渲染层静默降级（不崩、不提亮）。
+    var cyberNightlightTurboXdrEnabled: Boolean
+        get() = prefs.getBoolean("cyber_nightlight_turboxdr_enabled", false)
+        set(value) = prefs.edit { putBoolean("cyber_nightlight_turboxdr_enabled", value) }
+
+    // 强度 ∈ [0,1] → 映射 PQ 白码值（呼吸幅度），默认 0.6f
+    var cyberNightlightTurboXdrIntensity: Float
+        get() = prefs.getFloat("cyber_nightlight_turboxdr_intensity", 0.6f).coerceIn(0f, 1f)
+        set(value) = prefs.edit { putFloat("cyber_nightlight_turboxdr_intensity", value.coerceIn(0f, 1f)) }
+
     // ── 震动反馈 ──
     var hapticEnabled: Boolean
         get() = prefs.getBoolean("haptic_enabled", true)
