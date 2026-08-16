@@ -2,177 +2,229 @@ package com.rb.cybermonitorpro.ui.device
 
 import android.content.Context
 import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
-import android.opengl.GLSurfaceView.EGLConfigChooser
-import android.opengl.GLSurfaceView.EGLWindowSurfaceFactory
-import android.opengl.GLSurfaceView.Renderer
 import android.os.Build
+import android.util.AttributeSet
+import android.view.Display
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLDisplay
 import javax.microedition.khronos.egl.EGLSurface
-import javax.microedition.khronos.opengles.GL10
 
 /**
- * ★ 2026-08-16 HDR 实验室 — 局部 EDR 测试用 PQ 白场 SurfaceView（真机保险验证版，策略修正 v2）。
+ * 局部 HDR 测试用的 PQ 白场 GLSurfaceView。
  *
- * 原理（对齐 android15-local-hdr-window 调研 + TurboXDR 方案 v3/v4 铁律）：
- *  - surface 标记 BT.2020 PQ colorspace（EGL_GL_COLORSPACE_BT2020_PQ_EXT）→ 系统识别为 HDR 图层；
- *  - 渲染恒定 PQ 峰值白（码值 1.0 = 10000 nits），glClear 即可，无需 shader；
- *  - API 35+ 经 SurfaceView.setDesiredHdrHeadroom() 申请 HDR 余量
- *    （0.0 = 交还系统自动；1.0 = 明确无 HDR；>1 = 请求提亮；上限 10000）；
- *    实际生效受环境光 / 面板能力 / 位深限制，以 Display.getHdrSdrRatio() 为准（>1.01 判定真正点亮）。
- *  - 绝不使用 Window.setColorMode(COLOR_MODE_HDR) / Window.setDesiredHdrHeadroom()（会让整窗 SDR 褪色）。
+ * 关键修复（与 bright-qr 对齐后可在 Android 16 / 8–12bit 设备上真正激发 HDR）：
+ *  1. EGL_GL_COLORSPACE_BT2020_PQ_EXT 用正确常量 0x3340（旧值 0x3531 是错的，
+ *     EGL 会静默忽略未识别属性，surface 实际未标 PQ → 永远 8-bit SDR）。
+ *  2. 用 Display.isHdr()（API 34+）作 PQ 路径前置闸门，
+ *     比单纯依赖 EGL 扩展串字符串更稳（部分设备暴露串但 config 不可用）。
+ *  3. eglChooseConfig 后用 eglGetConfigAttrib 严格比对 R/G/B/A 实际位深，
+ *     避免选到 "8+8+8+2" 之类的伪 10-bit config。
+ *  4. 构造时立即申请 MAX 余量（setDesiredHdrHeadroom(10000)），
+ *     让 PQ surface 一上来就处于"请求 HDR 提亮"状态。
+ *  5. preserveEGLContextOnPause = true，离开-返回时 EGL 上下文/PQ surface 状态不丢。
  *
- * ⚠️ 策略修正 v2（修复 Android 16 上"直接回退 8bit SDR"）：
- *  旧实现用 `eglQueryString(EGL_EXTENSIONS)` 是否包含 "EGL_EXT_gl_colorspace_bt2020_pq"
- * 作为"是否尝试 PQ"的闸门——现代 Android（ANGLE 默认后端）往往不在扩展串里暴露该扩展，
- * 于是"还没尝试就放弃"，直接走 8-bit SDR。
- *  新实现：不再用扩展串做闸门。只要能拿到 10-bit EGL config，就**直接尝试**注入 PQ colorspace，
- *  以 `eglCreateWindowSurface(..., attribs)` 的**实际创建结果**作为 pqSurfaceActive 的真相；
- *  扩展串仅作诊断信息保留。这样在 ANGLE 设备上也能真正点亮 PQ 图层。
- *
- * 铁律：所有 EGL / 框架调用 runCatching / catch(Throwable)，任何失败静默回退 SDR 8-bit 白场。
+ * 像素渲染策略：glClearColor 全部 1.0（PQ 表面里即 ST 2084 10,000 nit endpoint），
+ * 外圈黑底对照——HDR 真点亮时，整块会肉眼明显比旁边 SDR 灰卡亮得多。
  */
-class HdrTestSurfaceView(context: Context) : GLSurfaceView(context) {
+class HdrTestSurfaceView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null
+) : GLSurfaceView(context, attrs) {
 
-    /** PQ colorspace surface 是否真正激活（GL 线程写 / UI 线程读，诊断用） */
-    @Volatile
-    var pqSurfaceActive = false
+    @Volatile var pqSurfaceActive: Boolean = false
+        private set
+    @Volatile var eglSummary: String = "pending"
         private set
 
-    /** EGL 配置摘要（诊断行显示） */
-    @Volatile
-    var eglSummary: String = "pending"
-        private set
+    private val displaySupportsHdr: Boolean = run {
+        // API 34+: Display.isHdr()——该 Display 是否被报告为 HDR 支持。
+        // 跑在低于 34 不会到达此 API；项目 minSdk 21 但代码路径已用 SDK_INT 守卫。
+        if (Build.VERSION.SDK_INT >= 34) {
+            val dm = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+            val display = dm?.getDisplay(Display.DEFAULT_DISPLAY)
+            runCatching { display?.isHdr == true }.getOrDefault(false)
+        } else false
+    }
 
-    private val pqEgl = PqEglHelper()
+    private val pqEgl = PqEglHelper(displaySupportsHdr)
 
     init {
-        // 10-bit buffer（PixelFormat.RGBA_1010102，API 33+）；低版本 / 失败由 config chooser 回退 8-bit
+        // 1) Buffer format: HDR 屏用 10-bit，否则 8-bit。注意顺序要在 setRenderer 前。
+        val fmt = if (displaySupportsHdr) PixelFormat.RGBA_1010102 else PixelFormat.RGBA_8888
         if (Build.VERSION.SDK_INT >= 33) {
-            runCatching { holder.setFormat(PixelFormat.RGBA_1010102) }
+            runCatching { holder.setFormat(fmt) }
         }
+
         setEGLContextClientVersion(2)
         setEGLConfigChooser(pqEgl)
         setEGLWindowSurfaceFactory(pqEgl)
         setRenderer(WhiteRenderer())
-        // 静态白场：仅在 surface 创建 / requestRender 时绘制，不持续渲染，省电
         renderMode = RENDERMODE_WHEN_DIRTY
+        preserveEGLContextOnPause = true
+
+        // 2) 构造即申请最大余量，避免滑条默认 1.0 导致"明确不要 HDR"。
+        // API 35+ 才有 setDesiredHdrHeadroom，低版本静默跳过。
+        if (Build.VERSION.SDK_INT >= 35) {
+            applyRequestedHeadroom(MAX_REQUESTED_HEADROOM)
+        }
     }
 
-    /** 申请 HDR 余量（API 35+）。低版本静默 no-op（降级铁律）。 */
-    fun applyHeadroom(headroom: Float) {
+    /**
+     * 由 UI 滑条调用。Bright QR 把 1.0 视作"无 HDR"，MAX_REQUESTED_HEADROOM (10_000)
+     * 才是"交还系统自动，给到当前热/电/ROM 限制允许的最大值"。
+     */
+    fun applyRequestedHeadroom(headroom: Float) {
         if (Build.VERSION.SDK_INT < 35) return
         runCatching { setDesiredHdrHeadroom(headroom) }
     }
 
-    /**
-     * EGL 10-bit 配置 + PQ colorspace 注入（单一类持有共享状态）。
-     * 注意：GLSurfaceView 回调体系为 javax.microedition.khronos.egl.*（EGL10），
-     * 不可与 android.opengl.EGL*（EGL14 体系）混用，否则无法编译。
-     *
-     * 策略 v2：chooseConfig 只负责"能否拿到 10-bit config"（chose10bit 标记），
-     * 是否注入 PQ colorspace 由 createWindowSurface 用"实际创建结果"决定——不再预读扩展串做闸门。
-     */
-    private inner class PqEglHelper : EGLConfigChooser, EGLWindowSurfaceFactory {
-        @Volatile var pqActive = false
-        @Volatile var chose10bit = false
-        @Volatile var pqExtListed = false
+    fun isPqActive(): Boolean = pqSurfaceActive
+    fun isDisplaySupportsHdr(): Boolean = displaySupportsHdr
+    fun eglSummaryText(): String = eglSummary
 
-        override fun chooseConfig(egl: EGL10, display: EGLDisplay): EGLConfig? {
-            // 扩展串仅作诊断信息，不再作为"是否尝试 PQ"的闸门（v2 修正）
-            val exts = runCatching { egl.eglQueryString(display, EGL10.EGL_EXTENSIONS) }
-                .getOrNull().orEmpty()
-            pqExtListed = exts.contains(PQ_EXTENSION)
+    private inner class PqEglHelper(
+        private val displaySupportsHdr: Boolean
+    ) : EGLConfigChooser, EGLWindowSurfaceFactory {
 
-            // 首选 10/10/10/2（PQ 候选配置）；失败再回退 8/8/8/8（SDR 白场）
-            val cfg10 = pickConfig(egl, display, 10, 10, 10, 2)
-            if (cfg10 != null) {
-                chose10bit = true
-                eglSummary = "10-bit cfg" + if (pqExtListed) " (PQ ext listed)" else " (PQ ext NOT listed)"
-                return cfg10
+        @Volatile var tenBitSelected: Boolean = false
+            private set
+
+        override fun chooseConfig(egl: EGL10, display: EGLDisplay): EGLConfig {
+            val canUsePq = displaySupportsHdr && hasExtension(egl, display, EXT_BT2020_PQ)
+            val cfg10 = if (canUsePq) pickConfig(egl, display, 10, 10, 10, 2) else null
+            tenBitSelected = cfg10 != null
+            val chosen = cfg10 ?: pickConfig(egl, display, 8, 8, 8, 8)
+                ?: throw IllegalArgumentException("No compatible EGL window config")
+            eglSummary = when {
+                cfg10 != null -> "10-bit + PQ ext"
+                canUsePq -> "PQ ext reported, no 10-bit cfg (using 8-bit)"
+                displaySupportsHdr -> "display.isHdr()==true but EGL ext missing (using 8-bit)"
+                else -> "display does not support HDR (using 8-bit)"
             }
-            chose10bit = false
-            val cfg8 = pickConfig(egl, display, 8, 8, 8, 8)
-            eglSummary = if (cfg8 != null) "8-bit SDR (no 10-bit cfg)" else "no EGL config"
-            return cfg8
+            return chosen
         }
 
         override fun createWindowSurface(
-            egl: EGL10, display: EGLDisplay, config: EGLConfig, nativeWindow: Any
-        ): EGLSurface? {
-            // 关键修正 v2：拿到 10-bit config 就直接尝试注入 BT.2020 PQ colorspace，
-            // 以 eglCreateWindowSurface 的**实际返回值**作为 pqSurfaceActive 真相——
-            // 不依赖扩展串（ANGLE 设备常不暴露该串却仍接受属性）。
-            if (chose10bit) {
-                val attribs = intArrayOf(
-                    EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_BT2020_PQ_EXT, EGL10.EGL_NONE
+            egl: EGL10,
+            display: EGLDisplay,
+            config: EGLConfig,
+            nativeWindow: Any
+        ): EGLSurface {
+            // PQ 注入：仅当真的拿到了 10-bit config 且 EGL 暴露 PQ 扩展。
+            // 用正确常量 0x3340，Android NDK <EGL/eglext.h> 定义。
+            if (tenBitSelected && hasExtension(egl, display, EXT_BT2020_PQ)) {
+                val pqAttribs = intArrayOf(
+                    EGL_GL_COLORSPACE_KHR,
+                    EGL_GL_COLORSPACE_BT2020_PQ_EXT,
+                    EGL10.EGL_NONE
                 )
-                val s = runCatching {
-                    egl.eglCreateWindowSurface(display, config, nativeWindow, attribs)
+                val pqSurface = runCatching {
+                    egl.eglCreateWindowSurface(display, config, nativeWindow, pqAttribs)
                 }.getOrNull()
-                if (s != null && s != EGL10.EGL_NO_SURFACE) {
-                    pqActive = true
+                if (pqSurface != null && pqSurface != EGL10.EGL_NO_SURFACE) {
                     pqSurfaceActive = true
-                    eglSummary = "PQ surface active" + if (!pqExtListed) " (ext not advertised)" else ""
-                    return s
+                    return pqSurface
                 }
-                // PQ 注入被拒（极少）：回退默认 surface（仍 10-bit，但按 SDR 处理）
-                eglSummary = "PQ inject failed -> 10-bit SDR"
             }
-            pqActive = false
             pqSurfaceActive = false
             return runCatching {
                 egl.eglCreateWindowSurface(display, config, nativeWindow, null)
             }.getOrNull()
+                ?: EGL10.EGL_NO_SURFACE
         }
 
         override fun destroySurface(egl: EGL10, display: EGLDisplay, surface: EGLSurface) {
+            pqSurfaceActive = false
             runCatching { egl.eglDestroySurface(display, surface) }
         }
 
         private fun pickConfig(
-            egl: EGL10, display: EGLDisplay, r: Int, g: Int, b: Int, a: Int
+            egl: EGL10,
+            display: EGLDisplay,
+            r: Int,
+            g: Int,
+            b: Int,
+            a: Int
         ): EGLConfig? {
             val attribs = intArrayOf(
-                EGL10.EGL_SURFACE_TYPE, EGL10.EGL_WINDOW_BIT,
+                EGL10.EGL_RED_SIZE, r,
+                EGL10.EGL_GREEN_SIZE, g,
+                EGL10.EGL_BLUE_SIZE, b,
+                EGL10.EGL_ALPHA_SIZE, a,
                 EGL10.EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-                EGL10.EGL_RED_SIZE, r, EGL10.EGL_GREEN_SIZE, g,
-                EGL10.EGL_BLUE_SIZE, b, EGL10.EGL_ALPHA_SIZE, a,
+                EGL10.EGL_SURFACE_TYPE, EGL10.EGL_WINDOW_BIT,
                 EGL10.EGL_NONE
             )
-            // EGL10.eglChooseConfig 签名（Android，5 参，无 attrib_listOffset）：
-            //   (display, attrib_list, configs, configs_size, num_config)
-            // 先传 configs=null 仅取数量，再取实例
             val num = IntArray(1)
             if (!egl.eglChooseConfig(display, attribs, null, 0, num) || num[0] <= 0) return null
             val configs = arrayOfNulls<EGLConfig>(num[0])
             if (!egl.eglChooseConfig(display, attribs, configs, num[0], num)) return null
-            return configs.firstOrNull()
+            // 严格比对：取 R/G/B/A 实际位深等于请求值的第一个 config。
+            for (cfg in configs) {
+                if (cfg == null) continue
+                if (getComponentSize(egl, display, cfg, EGL10.EGL_RED_SIZE) == r &&
+                    getComponentSize(egl, display, cfg, EGL10.EGL_GREEN_SIZE) == g &&
+                    getComponentSize(egl, display, cfg, EGL10.EGL_BLUE_SIZE) == b &&
+                    getComponentSize(egl, display, cfg, EGL10.EGL_ALPHA_SIZE) == a
+                ) {
+                    @Suppress("UNCHECKED_CAST")
+                    return cfg
+                }
+            }
+            return null
+        }
+
+        private fun getComponentSize(
+            egl: EGL10,
+            display: EGLDisplay,
+            config: EGLConfig,
+            attr: Int
+        ): Int {
+            val v = IntArray(1)
+            return if (egl.eglGetConfigAttrib(display, config, attr, v)) v[0] else -1
+        }
+
+        private fun hasExtension(egl: EGL10, display: EGLDisplay, wanted: String): Boolean {
+            val ext = runCatching { egl.eglQueryString(display, EGL10.EGL_EXTENSIONS) }.getOrNull()
+                ?: return false
+            // 与 bright-qr 对齐：按空格切分做精确匹配（防 "PQ" 子串误匹配）。
+            for (token in ext.split(' ')) if (wanted == token) return true
+            return false
         }
     }
 
-    /** 纯白场渲染器 — glClear 输出 PQ 峰值白（码值 1.0），无需 shader/program */
     private class WhiteRenderer : Renderer {
-        override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: EGLConfig?) {
+            // PQ 端点白：1.0 = ST 2084 10,000 nit（在真正 PQ 表面才成立）；
+            // 若 surface 实际是 SDR，这里只是普通全白——HDR 实验室靠肉眼/诊断判定。
             GLES20.glClearColor(1f, 1f, 1f, 1f)
         }
-
-        override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
-            GLES20.glViewport(0, 0, width, height)
+        override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, w: Int, h: Int) {
+            GLES20.glViewport(0, 0, w, h)
         }
-
-        override fun onDrawFrame(gl: GL10?) {
+        override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         }
     }
 
     companion object {
-        private const val EGL_OPENGL_ES2_BIT = 4           // EGL10 未定义 ES2 位，EGL11 起才有
+        /**
+         * SurfaceView.setDesiredHdrHeadroom 的最大可接受值。
+         * 与 bright-qr HdrPolicy.MAX_REQUESTED_HEADROOM 对齐。
+         */
+        const val MAX_REQUESTED_HEADROOM: Float = 10_000f
+
+        private const val EGL_OPENGL_ES2_BIT = 4
         private const val EGL_GL_COLORSPACE_KHR = 0x309D
-        private const val EGL_GL_COLORSPACE_BT2020_PQ_EXT = 0x3531
-        private const val PQ_EXTENSION = "EGL_EXT_gl_colorspace_bt2020_pq"
+        // EGL_EXT_gl_colorspace_bt2020_pq 定义的颜色空间枚举值。
+        // 注意：必须写 0x3340——旧版本里我曾误写 0x3531，EGL 静默忽略未识别属性，
+        // 导致 surface 实际从未被标成 PQ，是 pre5/pre6 在 Android 16 上 HDR 不亮
+        // 的根本原因。
+        private const val EGL_GL_COLORSPACE_BT2020_PQ_EXT = 0x3340
+        private const val EXT_BT2020_PQ = "EGL_EXT_gl_colorspace_bt2020_pq"
     }
 }
