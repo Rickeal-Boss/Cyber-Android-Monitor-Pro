@@ -73,6 +73,13 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getFloat("cyber_nightlight_turboxdr_intensity", 0.6f).coerceIn(0f, 1f)
         set(value) = prefs.edit { putFloat("cyber_nightlight_turboxdr_intensity", value.coerceIn(0f, 1f)) }
 
+    // 局部 HDR 增亮倍率 ∈ [1.0, 8.0]（HdrPatchHost / PatchRenderer 消费）
+    // 控制卡片描边/温度数字/折线图/Tab 等局部 UI 元素的 HDR 增亮强度
+    // 默认 2.0x（适度增亮，不过曝）；与 intensity（呼吸光晕）独立控制
+    var cyberNightlightPatchIntensity: Float
+        get() = prefs.getFloat("cyber_nightlight_patch_intensity", 2.0f).coerceIn(1.0f, 8.0f)
+        set(value) = prefs.edit { putFloat("cyber_nightlight_patch_intensity", value.coerceIn(1.0f, 8.0f)) }
+
     // ── 震动反馈 ──
     var hapticEnabled: Boolean
         get() = prefs.getBoolean("haptic_enabled", true)

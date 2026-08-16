@@ -98,6 +98,7 @@ class DeviceApplication : Application() {
         val nightlightSettings = AppSettings.getInstance(this@DeviceApplication)
         CyberNightlightSwitch.enabled = nightlightSettings.cyberNightlightTurboXdrEnabled
         CyberNightlightSwitch.intensity = nightlightSettings.cyberNightlightTurboXdrIntensity
+        CyberNightlightSwitch.patchIntensity = nightlightSettings.cyberNightlightPatchIntensity
 
         // 启动阶段汇总日志异步写入（不阻塞主线程）
         startupScope.launch {

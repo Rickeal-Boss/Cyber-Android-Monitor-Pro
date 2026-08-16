@@ -1081,6 +1081,9 @@
     <string name="device_hdr_intensity">HDR Intensity</string>
     <string name="device_hdr_intensity_hint">Adjusts lume strip HDR brightness</string>
     <string name="device_hdr_intensity_off">Only effective when CyberNightlight TurboXDR is enabled</string>
+    <string name="settings_patch_intensity">Local HDR Brightness</string>
+    <string name="settings_patch_intensity_hint">Boosts UI elements (tabs, cards, numbers, charts)</string>
+    <string name="settings_patch_intensity_desc">Higher = brighter element glow. Text stays sharp (SDR), only bloom is HDR.</string>
     <string name="hdr_lab_title">HDR Lab · Local EDR Test</string>
     <string name="hdr_lab_potential_headroom">Potential EDR headroom</string>
     <string name="hdr_lab_headroom_unavailable">Querying this value requires Android 16+</string>

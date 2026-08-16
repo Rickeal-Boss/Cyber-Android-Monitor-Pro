@@ -45,6 +45,7 @@ import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
+import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.TextPrimary
 import com.rb.cybermonitorpro.ui.theme.TextSecondary
 import com.rb.cybermonitorpro.AppSettings
@@ -595,6 +596,43 @@ private fun CyberNightlightTurboXdrSettingsCard() {
             if (!enabled) {
                 Text(stringResource(R.string.device_hdr_intensity_off),
                     fontSize = 11.sp, color = NeonSteelBlue.copy(alpha = 0.7f))
+            }
+
+            // ═══ 局部 HDR 增亮子滑块（仅 TurboXDR 开启时显示）═══
+            if (enabled) {
+                var patchIntensity by remember { mutableFloatStateOf(CyberNightlightSwitch.patchIntensity) }
+                Spacer(Modifier.height(16.dp))
+                // 分隔线
+                Box(Modifier.fillMaxWidth().height(1.dp).background(NeonSteelBlue.copy(alpha = 0.15f)))
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text(stringResource(R.string.settings_patch_intensity), fontSize = 14.sp, color = TextPrimary)
+                        Text(stringResource(R.string.settings_patch_intensity_hint), fontSize = 11.sp, color = TextSecondary)
+                    }
+                    Text("${patchIntensity.toInt()}x", fontSize = 14.sp,
+                        color = NeonPurpleBright, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(4.dp))
+                Slider(
+                    value = patchIntensity,
+                    onValueChange = { patchIntensity = it },
+                    onValueChangeFinished = {
+                        settings.cyberNightlightPatchIntensity = patchIntensity
+                        CyberNightlightSwitch.patchIntensity = patchIntensity
+                    },
+                    valueRange = 1f..8f,
+                    steps = 13,  // 0.5x 步进：1.0, 1.5, 2.0, ... 8.0
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = NeonCyan,
+                        activeTrackColor = NeonCyan.copy(alpha = 0.7f),
+                        inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
+                    )
+                )
+                Text(stringResource(R.string.settings_patch_intensity_desc),
+                    fontSize = 11.sp, color = NeonSteelBlue.copy(alpha = 0.6f))
             }
         }
     }

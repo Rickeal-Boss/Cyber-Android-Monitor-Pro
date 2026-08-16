@@ -1073,6 +1073,9 @@
     <string name="device_hdr_intensity">HDR 强度</string>
     <string name="device_hdr_intensity_hint">调节夜光条 HDR 亮度</string>
     <string name="device_hdr_intensity_off">仅在 CyberNightlight TurboXDR 开启时生效</string>
+    <string name="settings_patch_intensity">局部 HDR 增亮</string>
+    <string name="settings_patch_intensity_hint">增亮 UI 元素（Tab、卡片、数字、图表）</string>
+    <string name="settings_patch_intensity_desc">数值越高元素辉光越强。文字保持锐利（SDR），仅光晕为 HDR。</string>
     <string name="hdr_lab_title">HDR 实验室 · 局部 EDR 测试</string>
     <string name="hdr_lab_potential_headroom">潜在 EDR 亮度余量</string>
     <string name="hdr_lab_headroom_unavailable">该数值需 Android 16+ 才能查询</string>

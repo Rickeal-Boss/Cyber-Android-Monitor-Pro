@@ -69,6 +69,8 @@ import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.AppGlowBackground
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.nightlight.CyberNightlightHost
+import com.rb.cybermonitorpro.ui.nightlight.HdrPatchHost
+import com.rb.cybermonitorpro.ui.nightlight.hdrTabIndicatorPatch
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -288,6 +290,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             // ★ CyberNightlight TurboXDR：局部 HDR 增亮浮层（setZOrderOnTop 盖在 SDR UI 之上，
             //   触摸穿透；覆盖层打开时 hidden=true 隐藏；默认关 + 省电/发热门控）
             CyberNightlightHost(hidden = overlayVisible)
+            // ★ 局部 HDR 元素增亮浮层（与 CyberNightlightHost 并列，同一闸门、同一 headroom；
+            //   负责点亮 Tab 选中项、卡片描边、温度数字、折线图等 UI 元素的 HDR 辉光）
+            HdrPatchHost(hidden = overlayVisible)
             // ★ Windows 10 风格全局光照 — 包裹全部内容以捕获指针事件
             GlobalLightProvider {
             // ★ 主 Tab 页始终保持在 composition 中，保留所有滚动状态
@@ -518,6 +523,10 @@ private fun MainTabs(
                 Tab(
                     selected = pagerState.currentPage == i,
                     onClick = onTabClick,
+                    // ★ 局部 HDR：仅选中 Tab 项点亮（TAB_INDICATOR 贴片：底部高亮条 + 微弱背景辉光）
+                    modifier = if (pagerState.currentPage == i)
+                        Modifier.hdrTabIndicatorPatch(color = NeonCyan, intensity = 0.5f)
+                    else Modifier,
                         text = {
                             Text(tab.title, fontSize = 12.sp,
                                 fontWeight = if (pagerState.currentPage == i) FontWeight.Bold else FontWeight.Normal,
