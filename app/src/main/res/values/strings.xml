@@ -1087,6 +1087,15 @@
     <string name="hdr_lab_pq_active">active</string>
     <string name="hdr_lab_pq_fallback">fallback (8-bit SDR)</string>
     <string name="hdr_lab_hint_screenshot">Note: screenshots are tone-mapped to SDR by the system — verify brightness differences with your eyes on a real device, not via screenshots.</string>
+    <string name="hdr_lab_headroom_auto">Automatic (system)</string>
+    <string name="hdr_lab_headroom_scale_hint">0 = system auto; &gt;1 requests HDR boost (real result is ratio&gt;1.01)</string>
+    <string name="hdr_lab_fullscreen_btn">Full-screen HDR verify</string>
+    <string name="hdr_lab_coverage_note">Note: a PQ surface being created ≠ HDR actually lit. ratio&gt;1.01 requires HDR content to cover enough screen area (~50%) to trigger panel boost. A small block may not trigger it — use full-screen verify.</string>
+    <string name="hdr_lab_fullscreen_hint_title">Full-screen HDR verify</string>
+    <string name="hdr_lab_fullscreen_exit">Exit</string>
+    <string name="hdr_lab_fullscreen_lit">Lit (ratio %1$.2f &gt; 1.01) — HDR confirmed</string>
+    <string name="hdr_lab_fullscreen_notlit">Not lit yet (ratio ≤ 1.01) — check device HDR support / brightness</string>
+    <string name="hdr_lab_fullscreen_hint">Whole-screen PQ layer crosses the area threshold; ratio&gt;1.01 + visibly brighter = truly lit.</string>
     <string name="device_section_drm">DRM / Widevine</string>
     <string name="device_section_gpu">GPU Graphics</string>
     <string name="device_section_identifiers">Device Identifiers</string>

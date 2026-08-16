@@ -1079,6 +1079,15 @@
     <string name="hdr_lab_pq_active">已激活</string>
     <string name="hdr_lab_pq_fallback">已回退（8-bit SDR）</string>
     <string name="hdr_lab_hint_screenshot">注：截图会被系统色调映射到 SDR，亮度差异请以真机肉眼为准，勿凭截图判断。</string>
+    <string name="hdr_lab_headroom_auto">自动（系统）</string>
+    <string name="hdr_lab_headroom_scale_hint">0 = 系统自动；&gt;1 请求 HDR 提亮（以 ratio&gt;1.01 为准）</string>
+    <string name="hdr_lab_fullscreen_btn">全屏 HDR 验证</string>
+    <string name="hdr_lab_coverage_note">注意：PQ 图层创建成功 ≠ HDR 已点亮。ratio&gt;1.01 需 HDR 内容覆盖足够屏幕面积（约 50%）以触发面板高亮；小块对比未必触发，请用全屏验证。</string>
+    <string name="hdr_lab_fullscreen_hint_title">全屏 HDR 验证</string>
+    <string name="hdr_lab_fullscreen_exit">退出</string>
+    <string name="hdr_lab_fullscreen_lit">已点亮（ratio %1$.2f &gt; 1.01）—— HDR 确认</string>
+    <string name="hdr_lab_fullscreen_notlit">尚未点亮（ratio ≤ 1.01）—— 请确认设备 HDR 支持/亮度</string>
+    <string name="hdr_lab_fullscreen_hint">整屏 PQ 图层越过面积阈值；ratio&gt;1.01 且肉眼明显更亮 = 真正点亮。</string>
     <string name="device_section_drm">DRM / Widevine</string>
     <string name="device_section_gpu">GPU 图形</string>
     <string name="device_section_identifiers">设备标识符</string>

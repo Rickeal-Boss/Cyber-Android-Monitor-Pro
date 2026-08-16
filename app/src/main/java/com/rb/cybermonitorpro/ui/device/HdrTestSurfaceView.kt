@@ -15,15 +15,23 @@ import javax.microedition.khronos.egl.EGLSurface
 import javax.microedition.khronos.opengles.GL10
 
 /**
- * ★ 2026-08-16 HDR 实验室 — 局部 EDR 测试用 PQ 白场 SurfaceView（真机保险验证版）。
+ * ★ 2026-08-16 HDR 实验室 — 局部 EDR 测试用 PQ 白场 SurfaceView（真机保险验证版，策略修正 v2）。
  *
  * 原理（对齐 android15-local-hdr-window 调研 + TurboXDR 方案 v3/v4 铁律）：
- *  - surface 标记 BT.2020 PQ colorspace（EGL_EXT_gl_colorspace_bt2020_pq）→ 系统识别为 HDR 图层；
+ *  - surface 标记 BT.2020 PQ colorspace（EGL_GL_COLORSPACE_BT2020_PQ_EXT）→ 系统识别为 HDR 图层；
  *  - 渲染恒定 PQ 峰值白（码值 1.0 = 10000 nits），glClear 即可，无需 shader；
  *  - API 35+ 经 SurfaceView.setDesiredHdrHeadroom() 申请 HDR 余量
- *    （≥1.0；1.0 = 无 HDR；0.0 = 交还系统默认）；
+ *    （0.0 = 交还系统自动；1.0 = 明确无 HDR；>1 = 请求提亮；上限 10000）；
  *    实际生效受环境光 / 面板能力 / 位深限制，以 Display.getHdrSdrRatio() 为准（>1.01 判定真正点亮）。
  *  - 绝不使用 Window.setColorMode(COLOR_MODE_HDR) / Window.setDesiredHdrHeadroom()（会让整窗 SDR 褪色）。
+ *
+ * ⚠️ 策略修正 v2（修复 Android 16 上"直接回退 8bit SDR"）：
+ *  旧实现用 `eglQueryString(EGL_EXTENSIONS)` 是否包含 "EGL_EXT_gl_colorspace_bt2020_pq"
+ * 作为"是否尝试 PQ"的闸门——现代 Android（ANGLE 默认后端）往往不在扩展串里暴露该扩展，
+ * 于是"还没尝试就放弃"，直接走 8-bit SDR。
+ *  新实现：不再用扩展串做闸门。只要能拿到 10-bit EGL config，就**直接尝试**注入 PQ colorspace，
+ *  以 `eglCreateWindowSurface(..., attribs)` 的**实际创建结果**作为 pqSurfaceActive 的真相；
+ *  扩展串仅作诊断信息保留。这样在 ANGLE 设备上也能真正点亮 PQ 图层。
  *
  * 铁律：所有 EGL / 框架调用 runCatching / catch(Throwable)，任何失败静默回退 SDR 8-bit 白场。
  */
@@ -64,41 +72,41 @@ class HdrTestSurfaceView(context: Context) : GLSurfaceView(context) {
      * EGL 10-bit 配置 + PQ colorspace 注入（单一类持有共享状态）。
      * 注意：GLSurfaceView 回调体系为 javax.microedition.khronos.egl.*（EGL10），
      * 不可与 android.opengl.EGL*（EGL14 体系）混用，否则无法编译。
+     *
+     * 策略 v2：chooseConfig 只负责"能否拿到 10-bit config"（chose10bit 标记），
+     * 是否注入 PQ colorspace 由 createWindowSurface 用"实际创建结果"决定——不再预读扩展串做闸门。
      */
     private inner class PqEglHelper : EGLConfigChooser, EGLWindowSurfaceFactory {
         @Volatile var pqActive = false
+        @Volatile var chose10bit = false
+        @Volatile var pqExtListed = false
 
         override fun chooseConfig(egl: EGL10, display: EGLDisplay): EGLConfig? {
+            // 扩展串仅作诊断信息，不再作为"是否尝试 PQ"的闸门（v2 修正）
             val exts = runCatching { egl.eglQueryString(display, EGL10.EGL_EXTENSIONS) }
                 .getOrNull().orEmpty()
-            val pqSupported = exts.contains(PQ_EXTENSION)
+            pqExtListed = exts.contains(PQ_EXTENSION)
 
-            // 首选 10/10/10/2（PQ 候选配置）
-            if (pqSupported) {
-                val cfg10 = pickConfig(egl, display, 10, 10, 10, 2)
-                if (cfg10 != null) {
-                    eglSummary = "10-bit + PQ ext"
-                    return cfg10
-                }
-                eglSummary = "PQ ext, no 10-bit cfg"
-            } else {
-                eglSummary = "no PQ ext"
+            // 首选 10/10/10/2（PQ 候选配置）；失败再回退 8/8/8/8（SDR 白场）
+            val cfg10 = pickConfig(egl, display, 10, 10, 10, 2)
+            if (cfg10 != null) {
+                chose10bit = true
+                eglSummary = "10-bit cfg" + if (pqExtListed) " (PQ ext listed)" else " (PQ ext NOT listed)"
+                return cfg10
             }
-            // 回退 8/8/8/8（SDR 白场，功能不缺失只是无 HDR 提亮）
+            chose10bit = false
             val cfg8 = pickConfig(egl, display, 8, 8, 8, 8)
-            if (cfg8 != null) eglSummary = "8-bit SDR (${
-                if (pqSupported) "no 10-bit cfg" else "no PQ ext"
-            })"
+            eglSummary = if (cfg8 != null) "8-bit SDR (no 10-bit cfg)" else "no EGL config"
             return cfg8
         }
 
         override fun createWindowSurface(
             egl: EGL10, display: EGLDisplay, config: EGLConfig, nativeWindow: Any
         ): EGLSurface? {
-            // 已选 10-bit config → 注入 BT.2020 PQ colorspace；失败静默回退默认 surface
-            // （注意：surface 重建时 chooseConfig 会重跑并刷新 eglSummary，此处不得再叠加 pqActive 状态位判断，
-            //   否则重建后会错误地走回退分支丢失 PQ）
-            if (eglSummary.startsWith("10-bit")) {
+            // 关键修正 v2：拿到 10-bit config 就直接尝试注入 BT.2020 PQ colorspace，
+            // 以 eglCreateWindowSurface 的**实际返回值**作为 pqSurfaceActive 真相——
+            // 不依赖扩展串（ANGLE 设备常不暴露该串却仍接受属性）。
+            if (chose10bit) {
                 val attribs = intArrayOf(
                     EGL_GL_COLORSPACE_KHR, EGL_GL_COLORSPACE_BT2020_PQ_EXT, EGL10.EGL_NONE
                 )
@@ -108,8 +116,11 @@ class HdrTestSurfaceView(context: Context) : GLSurfaceView(context) {
                 if (s != null && s != EGL10.EGL_NO_SURFACE) {
                     pqActive = true
                     pqSurfaceActive = true
+                    eglSummary = "PQ surface active" + if (!pqExtListed) " (ext not advertised)" else ""
                     return s
                 }
+                // PQ 注入被拒（极少）：回退默认 surface（仍 10-bit，但按 SDR 处理）
+                eglSummary = "PQ inject failed -> 10-bit SDR"
             }
             pqActive = false
             pqSurfaceActive = false
