@@ -1069,6 +1069,24 @@
     <string name="device_section_connection">Connectivity</string>
     <string name="device_section_cpu_cache">CPU Cache Architecture</string>
     <string name="device_section_display">Display</string>
+    <!-- ★ 2026-08-16: HDR Lab — local EDR real-device verification (device detail 2nd-level page) -->
+    <string name="device_hdr_lab_entry">HDR Lab (EDR Test)</string>
+    <string name="device_hdr_lab_entry_value">Open ›</string>
+    <string name="hdr_lab_title">HDR Lab · Local EDR Test</string>
+    <string name="hdr_lab_potential_headroom">Potential EDR headroom</string>
+    <string name="hdr_lab_headroom_unavailable">Querying this value requires Android 16+</string>
+    <string name="hdr_lab_sdr">SDR</string>
+    <string name="hdr_lab_hdr">HDR</string>
+    <string name="hdr_lab_brightness">HDR brightness: %1$.1f×</string>
+    <string name="hdr_lab_needs_api35">The headroom slider requires Android 15+ — the HDR block stays at system default on this device</string>
+    <string name="hdr_lab_diag_title">Diagnostics</string>
+    <string name="hdr_lab_actual_ratio">Current HDR/SDR ratio</string>
+    <string name="hdr_lab_layer_state">HDR layer state</string>
+    <string name="hdr_lab_ratio_lit">Lit (ratio &gt; 1.01)</string>
+    <string name="hdr_lab_ratio_unlit">Not lit</string>
+    <string name="hdr_lab_pq_active">active</string>
+    <string name="hdr_lab_pq_fallback">fallback (8-bit SDR)</string>
+    <string name="hdr_lab_hint_screenshot">Note: screenshots are tone-mapped to SDR by the system — verify brightness differences with your eyes on a real device, not via screenshots.</string>
     <string name="device_section_drm">DRM / Widevine</string>
     <string name="device_section_gpu">GPU Graphics</string>
     <string name="device_section_identifiers">Device Identifiers</string>

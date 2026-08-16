@@ -1061,6 +1061,24 @@
     <string name="device_section_connection">连接</string>
     <string name="device_section_cpu_cache">CPU 缓存架构</string>
     <string name="device_section_display">显示</string>
+    <!-- ★ 2026-08-16: HDR 实验室 — 局部 EDR 真机验证（详情页二层） -->
+    <string name="device_hdr_lab_entry">HDR 实验室（EDR 测试）</string>
+    <string name="device_hdr_lab_entry_value">打开 ›</string>
+    <string name="hdr_lab_title">HDR 实验室 · 局部 EDR 测试</string>
+    <string name="hdr_lab_potential_headroom">潜在 EDR 亮度余量</string>
+    <string name="hdr_lab_headroom_unavailable">该数值需 Android 16+ 才能查询</string>
+    <string name="hdr_lab_sdr">SDR</string>
+    <string name="hdr_lab_hdr">HDR</string>
+    <string name="hdr_lab_brightness">HDR 亮度：%1$.1f×</string>
+    <string name="hdr_lab_needs_api35">亮度滑条需 Android 15+——本机 HDR 块将保持系统默认状态</string>
+    <string name="hdr_lab_diag_title">诊断</string>
+    <string name="hdr_lab_actual_ratio">当前实际 HDR/SDR 比</string>
+    <string name="hdr_lab_layer_state">HDR 图层状态</string>
+    <string name="hdr_lab_ratio_lit">已点亮（ratio &gt; 1.01）</string>
+    <string name="hdr_lab_ratio_unlit">未点亮</string>
+    <string name="hdr_lab_pq_active">已激活</string>
+    <string name="hdr_lab_pq_fallback">已回退（8-bit SDR）</string>
+    <string name="hdr_lab_hint_screenshot">注：截图会被系统色调映射到 SDR，亮度差异请以真机肉眼为准，勿凭截图判断。</string>
     <string name="device_section_drm">DRM / Widevine</string>
     <string name="device_section_gpu">GPU 图形</string>
     <string name="device_section_identifiers">设备标识符</string>

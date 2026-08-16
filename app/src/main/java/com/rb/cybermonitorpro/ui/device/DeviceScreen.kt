@@ -49,7 +49,8 @@ import com.rb.cybermonitorpro.R
 @Composable
 fun DeviceScreen(
     viewModel: DeviceViewModel = koinViewModel(),
-    oemViewModel: OemViewModel = koinViewModel()
+    oemViewModel: OemViewModel = koinViewModel(),
+    onOpenHdrLab: () -> Unit = {}
 ) {
     val detail by viewModel.detail.observeAsState()
     val oem by oemViewModel.oemInfo.observeAsState()
@@ -248,6 +249,13 @@ fun DeviceScreen(
                     "touch_none" -> stringResource(R.string.touch_none)
                     else -> detail?.touchscreenType ?: ""
                 })
+                // ★ 2026-08-16: HDR 实验室（局部 EDR 真机验证）二层页入口
+                RowItemClickable(
+                    label = stringResource(R.string.device_hdr_lab_entry),
+                    value = stringResource(R.string.device_hdr_lab_entry_value),
+                    onClick = onOpenHdrLab,
+                    valueColor = NeonCyan
+                )
             }
 }
 

@@ -53,6 +53,7 @@ import com.rb.cybermonitorpro.ui.components.neonBorderGlow
 import com.rb.cybermonitorpro.ui.cpu.CpuScreen
 import com.rb.cybermonitorpro.ui.dashboard.DashboardScreen
 import com.rb.cybermonitorpro.ui.device.DeviceScreen
+import com.rb.cybermonitorpro.ui.device.HdrLabScreen
 import com.rb.cybermonitorpro.ui.floatwindow.FloatingWindowScreen
 import com.rb.cybermonitorpro.ui.gps.GpsScreen
 import com.rb.cybermonitorpro.ui.gpu.GpuScreen
@@ -214,6 +215,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     var showFloatConfig by remember { mutableStateOf(false) }
     var showSensorDetail by remember { mutableStateOf<Boolean>(false) }
     var selectedSensorForDetail by remember { mutableStateOf<com.rb.cybermonitorpro.data.model.SensorItemInfo?>(null) }
+    // ★ 2026-08-16: HDR 实验室（详情页二层 — 局部 EDR 真机验证）
+    var showHdrLab by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // pagerState 提升到 SystemMonitorApp 层级 — 确保覆盖层返回时 Tab 位置不被重置
@@ -224,7 +227,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     // GPS 智能开关状态 — 仅在需要时请求定位权限
     var gpsTabActive by remember { mutableStateOf(false) }
 
-    val overlayVisible = showSettings || showFloatConfig || showSensorDetail
+    val overlayVisible = showSettings || showFloatConfig || showSensorDetail || showHdrLab
 
     // ★ 预测性返回手势进度 (2026-06-19): 驱动覆盖层缩放/位移，替代纯 alpha 动画
     //   手指拖拽返回时 progress 0→1，覆盖层缩小+右移模拟"被拽走"；
@@ -254,6 +257,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             when {
                 showSettings -> showSettings = false
                 showFloatConfig -> showFloatConfig = false
+                showHdrLab -> showHdrLab = false
                 showSensorDetail -> {
                     showSensorDetail = false
                     selectedSensorForDetail = null
@@ -292,7 +296,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 onOpenSensorDetail = { sensor ->
                     selectedSensorForDetail = sensor
                     showSensorDetail = true
-                }
+                },
+                onOpenHdrLab = { showHdrLab = true }
             )
 
             // ── 覆盖层 (graphicsLayer 透明动画, 保持 composition 存活) ──
@@ -367,6 +372,37 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
+            // ── HDR 实验室（详情页二层 — 局部 EDR 真机验证）──
+            val hdrLabAlpha by animateFloatAsState(
+                targetValue = if (showHdrLab) 1f else 0f,
+                animationSpec = tween(300), label = "hdrLabAlpha"
+            )
+            if (hdrLabAlpha > 0.01f || showHdrLab) {
+                Box(Modifier.fillMaxSize()
+                    .graphicsLayer {
+                        val p = backProgress.value
+                        alpha = hdrLabAlpha * (1f - p * 0.3f)
+                        scaleX = 1f - p * 0.06f
+                        scaleY = 1f - p * 0.06f
+                        translationX = size.width * p * 0.25f
+                    }
+                    .acrylic(
+                        tintColor = CyberCardStart,
+                        tintOpacity = 0.85f,
+                        noiseOpacity = 0.04f,
+                        borderColor = NeonPurple.copy(alpha = 0.25f),
+                        enableNoise = false  // ★ 同设置页：全屏覆盖层禁用噪点（性能）
+                    )
+                ) {
+                    HdrLabScreen(onBack = { showHdrLab = false })
+                    LightCircleBackButton(
+                        onClick = { showHdrLab = false },
+                        btnSize = 48.dp,
+                        modifier = Modifier.padding(top = 8.dp, start = 16.dp).align(Alignment.TopStart)
+                    )
+                }
+            }
+
             // ── 传感器详情 ──
             val sensorAlpha by animateFloatAsState(
                 targetValue = if (showSensorDetail) 1f else 0f,
@@ -415,7 +451,8 @@ private fun MainTabs(
     onOpenSettings: () -> Unit,
     onOpenFloat: () -> Unit,
     onGpsTabChanged: (Boolean) -> Unit = {},
-    onOpenSensorDetail: (com.rb.cybermonitorpro.data.model.SensorItemInfo) -> Unit = {}
+    onOpenSensorDetail: (com.rb.cybermonitorpro.data.model.SensorItemInfo) -> Unit = {},
+    onOpenHdrLab: () -> Unit = {}
 ) {
     val topTabs = rememberTopTabs()
     // 智能 GPS: 仅"网络" (index 5) 和 "GPS" (index 6) Tab 启用定位
@@ -543,7 +580,7 @@ private fun MainTabs(
                 7 -> SensorsScreen(
                     onNavigateToSensor = onOpenSensorDetail
                 )
-                8 -> DeviceScreen()
+                8 -> DeviceScreen(onOpenHdrLab = onOpenHdrLab)
             }
             } // end StaggeredPageProvider (per-page)
         }
