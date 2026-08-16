@@ -118,6 +118,10 @@ class HdrTestSurfaceView(context: Context) : GLSurfaceView(context) {
             }.getOrNull()
         }
 
+        override fun destroySurface(egl: EGL10, display: EGLDisplay, surface: EGLSurface) {
+            runCatching { egl.eglDestroySurface(display, surface) }
+        }
+
         private fun pickConfig(
             egl: EGL10, display: EGLDisplay, r: Int, g: Int, b: Int, a: Int
         ): EGLConfig? {
@@ -128,12 +132,13 @@ class HdrTestSurfaceView(context: Context) : GLSurfaceView(context) {
                 EGL10.EGL_BLUE_SIZE, b, EGL10.EGL_ALPHA_SIZE, a,
                 EGL10.EGL_NONE
             )
-            // EGL10.eglChooseConfig 签名：(display, attrib_list, attrib_listOffset, configs, configs_size, num_config)
-            // 共 6 参 —  attrib_listOffset=0；先传 configs=null 仅取数量，再取实例
+            // EGL10.eglChooseConfig 签名（Android，5 参，无 attrib_listOffset）：
+            //   (display, attrib_list, configs, configs_size, num_config)
+            // 先传 configs=null 仅取数量，再取实例
             val num = IntArray(1)
-            if (!egl.eglChooseConfig(display, attribs, 0, null, 0, num) || num[0] <= 0) return null
+            if (!egl.eglChooseConfig(display, attribs, null, 0, num) || num[0] <= 0) return null
             val configs = arrayOfNulls<EGLConfig>(num[0])
-            if (!egl.eglChooseConfig(display, attribs, 0, configs, num[0], num)) return null
+            if (!egl.eglChooseConfig(display, attribs, configs, num[0], num)) return null
             return configs.firstOrNull()
         }
     }
