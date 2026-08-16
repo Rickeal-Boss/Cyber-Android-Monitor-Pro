@@ -127,7 +127,7 @@ fun HdrTextBloom(
 
     Box(
         modifier = modifier.onGloballyPositioned { coords = it },
-        content = content
+        content = { content() }
     )
 }
 

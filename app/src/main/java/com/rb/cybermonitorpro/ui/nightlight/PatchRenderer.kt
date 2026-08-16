@@ -51,7 +51,7 @@ class PatchRenderer : GLSurfaceView.Renderer {
         GLES20.glEnable(GLES20.GL_BLEND)
         GLES20.glBlendFunc(GLES20.GL_SRC_ALPHA, GLES20.GL_ONE_MINUS_SRC_ALPHA)
 
-        program = buildProgram(VERT, FRAG)
+        program = buildProgram(Shaders.VERT, Shaders.FRAG)
         aPos = GLES20.glGetAttribLocation(program, "aPos")
         uResolution = GLES20.glGetUniformLocation(program, "uResolution")
         uIntensity = GLES20.glGetUniformLocation(program, "uIntensity")
@@ -167,7 +167,7 @@ class PatchRenderer : GLSurfaceView.Renderer {
         return GLES20.glGetUniformLocation(program, name)
     }
 
-    companion object {
+    private object Shaders {
         // ════════════════════════════════════════════
         // 顶点着色器 — 全屏四边形，输出归一化 UV
         // ════════════════════════════════════════════
