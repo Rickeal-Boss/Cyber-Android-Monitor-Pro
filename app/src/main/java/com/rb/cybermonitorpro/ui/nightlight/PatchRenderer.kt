@@ -182,9 +182,9 @@ class PatchRenderer(
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
 
-    /** 上传/复用 Compose 侧传入的位图掩码纹理（白色=不透明）。 */
-    private fun ensureBitmapTex(p: HdrPatch): Int? {
-        val bmp = p.bitmap ?: return null
+    /** 上传/复用 Compose 侧传入的位图掩码纹理（白色=不透明）。仅在 p.bitmap != null 时调用。 */
+    private fun ensureBitmapTex(p: HdrPatch): Int {
+        val bmp = p.bitmap!!
         val cached = bitmapTexCache[p.id]
         if (cached != null && cached.first === bmp) return cached.second
         if (cached != null) GLES20.glDeleteTextures(1, intArrayOf(cached.second), 0)

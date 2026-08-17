@@ -39,6 +39,7 @@ import com.rb.cybermonitorpro.ui.theme.DividerCyber
 import com.rb.cybermonitorpro.data.model.GpsSatelliteInfo
 import com.rb.cybermonitorpro.ui.components.constellationColor
 import android.graphics.Bitmap
+import android.graphics.Paint
 import android.graphics.Typeface
 import java.util.UUID
 import kotlin.math.pow
@@ -548,7 +549,9 @@ private fun buildTextBitmap(
         letterSpacing = letterSpacing
     )
     val layout = measurer.measure(
-        text, style, Constraints(), softWrap = true, overflow = TextOverflow.Ellipsis, maxLines = 4
+        text, style,
+        softWrap = true, overflow = TextOverflow.Ellipsis, maxLines = 4,
+        constraints = Constraints()
     )
     val ss = 2
     val w = (layout.size.width * ss).coerceAtLeast(1)
