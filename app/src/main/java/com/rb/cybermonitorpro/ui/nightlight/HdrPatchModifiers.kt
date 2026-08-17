@@ -47,7 +47,9 @@ import android.graphics.Typeface
 import java.util.UUID
 import kotlin.math.pow
 
-// ── 各贴片亮度倍率（线性光，相对 SDR 白；真机微调）──
+// ── 各贴片「设计峰值」亮度倍率（线性光，相对 SDR 白；真机微调）──
+// 作为 HdrPatch.bias 传入渲染器；最终亮度 = 线性光 × effMult(bias, 滑块)，其中
+// effMult 在 滑块 1.0× 时=1（恰 SDR 白，真·关闭）、滑块 8.0× 时=bias（保留原设计峰值）。
 // 建议值见可执行方案 §5.4：描边 3–5×、指示条 5–7×、数字 4–6×、折线 4–6×、网格 1.3–1.8×。
 const val HDR_CARD_MULT: Float = 4.0f
 const val HDR_TAB_MULT: Float = 6.0f
@@ -76,14 +78,14 @@ fun pqOETF(L: Float): Float {
 }
 
 /**
- * 把 sRGB 颜色按倍率换算成**线性光**三元组（相对 SDR 白=1.0，可 >1 表示超亮）。
+ * 把 sRGB 颜色换算成**线性光**三元组（相对 SDR 白=1.0）。
  *
- * 注意：本函数**不再**做 ST 2084 PQ OETF —— PQ 编码改由 [PatchRenderer] 在每帧绘制时、
- * 按当前 TurboXDR 强度 [CyberNightlightSwitch.intensity] 统一施加（见 pqEnc）。
- * 这样滑块调节 intensity 能实时改变局部 HDR 贴片亮度，且亮度倍率始终处于线性光域，
- * 与原有各 HDR_*_MULT 标定一致。
+ * 注意：本函数**不再**做 ST 2084 PQ OETF，也**不再预乘**任何类型倍率 —— 倍率由
+ * [HdrPatch.bias] 携带、[PatchRenderer.pqEnc] 按当前 TurboXDR 强度 [CyberNightlightSwitch.intensity]
+ * 线性插值施加。这样 1.0× 滑块即输出恰 SDR 白（真·关闭），且亮度倍率始终处于线性光域。
+ * 默认 [mult]=1f：仅产出 SDR 白（1.0×）基准线性光；[bias] 字段承载各类型设计峰值。
  */
-fun encodePq(color: Color, mult: Float): FloatArray {
+fun encodePq(color: Color, mult: Float = 1f): FloatArray {
     val s = mult * SDR_WHITE_L
     return floatArrayOf(
         srgbToLinear(color.red) * s,
@@ -118,8 +120,9 @@ fun Modifier.hdrCardBorderPatch(key: String, cornerPx: Float, strokePx: Float): 
                 id = key,
                 type = HdrPatchType.CARD_BORDER,
                 bounds = b,
-                color0 = encodePq(NeonPurpleBright, HDR_CARD_MULT),
-                color1 = encodePq(NeonCyan, HDR_CARD_MULT),
+                color0 = encodePq(NeonPurpleBright),
+                color1 = encodePq(NeonCyan),
+                bias = HDR_CARD_MULT,
                 cornerRadiusPx = cornerPx,
                 strokeWidthPx = strokePx
             )
@@ -151,7 +154,8 @@ fun Modifier.hdrTabIndicatorPatch(key: String): Modifier = composed {
                 id = key,
                 type = HdrPatchType.TAB_INDICATOR,
                 bounds = b,
-                color0 = encodePq(NeonCyan, HDR_TAB_MULT),
+                color0 = encodePq(NeonCyan),
+                bias = HDR_TAB_MULT,
                 topZone = true
             )
         )
@@ -189,8 +193,9 @@ fun Modifier.hdrTabBarBorderPatch(
                 id = key,
                 type = HdrPatchType.CARD_BORDER,
                 bounds = b,
-                color0 = encodePq(NeonPurpleBright, HDR_CARD_MULT),
-                color1 = encodePq(NeonCyan, HDR_CARD_MULT),
+                color0 = encodePq(NeonPurpleBright),
+                color1 = encodePq(NeonCyan),
+                bias = HDR_CARD_MULT,
                 cornerRadiusPx = with(density) { cornerDp.toPx() },
                 strokeWidthPx = with(density) { strokeDp.toPx() },
                 topZone = true
@@ -260,7 +265,8 @@ fun HdrMetricText(
                 id = key,
                 type = HdrPatchType.TEXT_GLYPH,
                 bounds = pos,
-                color0 = encodePq(color, HDR_TEXT_MULT),
+                color0 = encodePq(color),
+                bias = HDR_TEXT_MULT,
                 bitmap = bmp,
                 topZone = topZone
             )
@@ -407,7 +413,8 @@ private fun reportChartPatches(
                 id = chartKey + ".line",
                 type = HdrPatchType.CHART_LINE,
                 bounds = bounds,
-                color0 = encodePq(lineColor, HDR_LINE_MULT),
+                color0 = encodePq(lineColor),
+                bias = HDR_LINE_MULT,
                 points = pts,
                 strokeWidthPx = 3.5f,
                 tailDotRadiusPx = 4f
@@ -433,7 +440,8 @@ private fun reportChartPatches(
                 id = chartKey + ".grid",
                 type = HdrPatchType.CHART_GRID,
                 bounds = bounds,
-                color0 = encodePq(DividerCyber, HDR_GRID_MULT),
+                color0 = encodePq(DividerCyber),
+                bias = HDR_GRID_MULT,
                 points = gpts
             )
         )
@@ -493,7 +501,8 @@ fun Modifier.hdrLinearProgressPatch(
                 id = key,
                 type = HdrPatchType.TAB_INDICATOR,
                 bounds = b,
-                color0 = encodePq(color, mult),
+                color0 = encodePq(color),
+                bias = mult,
                 cornerRadiusPx = corner,
                 strokeWidthPx = corner
             )
@@ -547,7 +556,8 @@ fun Modifier.hdrTabIconPatch(key: String, selected: Boolean, iconRes: Int): Modi
                 id = key,
                 type = HdrPatchType.TEXT_GLYPH,
                 bounds = pos,
-                color0 = encodePq(NeonPurple, HDR_TAB_MULT),
+                color0 = encodePq(NeonPurple),
+                bias = HDR_TAB_MULT,
                 bitmap = bmp,
                 topZone = true
             )
@@ -612,7 +622,8 @@ fun Modifier.hdrSatSkyPatch(satellites: List<GpsSatelliteInfo>): Modifier = comp
                     id = id,
                     type = HdrPatchType.CARD_BORDER,
                     bounds = android.graphics.RectF(gx - dotR, gy - dotR, gx + dotR, gy + dotR),
-                    color0 = encodePq(constellationColor(sat.constellationType), HDR_DOT_MULT),
+                    color0 = encodePq(constellationColor(sat.constellationType)),
+                    bias = HDR_DOT_MULT,
                     cornerRadiusPx = dotR,
                     strokeWidthPx = dotR * 2f
                 )
@@ -690,7 +701,8 @@ fun Modifier.hdrVectorIconPatch(
                 id = key,
                 type = HdrPatchType.TEXT_GLYPH,
                 bounds = pos,
-                color0 = encodePq(NeonPurpleBright, HDR_TAB_MULT),
+                color0 = encodePq(NeonPurpleBright),
+                bias = HDR_TAB_MULT,
                 bitmap = bmp,
                 topZone = false
             )

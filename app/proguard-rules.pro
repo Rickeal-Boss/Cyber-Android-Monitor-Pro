@@ -86,7 +86,11 @@
 # "未被调用"剥掉 → EGL/GL 初始化失败 → 主界面闪退（debug 不瘦身故正常）。
 # 故对整包 + 框架回调接口实现显式保留，禁止 R8 缩减/优化。
 -keep class com.rb.cybermonitorpro.ui.nightlight.** { *; }
--keep class com.rb.cybermonitorpro.ui.components.CyberIcons { *; }
+# ★ 现象A-4：-dontobfuscate 不阻止 R8 行内/类合并；MainActivity 的 Compose 入口
+#   (MainActivityKt) 与 ui.components.**（LineChart 的 hdrChartPatches 调用点、CyberIcons 等）
+#   虽非 GLSurfaceView 回调，但被 HDR 链路间接引用，行内后可能丢失可达性 → release 差异。
+-keep class com.rb.cybermonitorpro.MainActivityKt { *; }
+-keep class com.rb.cybermonitorpro.ui.components.** { *; }
 -keep class com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch { *; }
 -keep class com.rb.cybermonitorpro.ui.effects.NightlightBarSwitch { *; }
 -keepclassmembers class * implements android.opengl.GLSurfaceView$Renderer { *; }

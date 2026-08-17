@@ -34,11 +34,13 @@ object HdrOverlayState {
  *
  * @param bounds  窗口坐标像素（onGloballyPositioned → positionInWindow）。surface 全屏覆盖根 Box，
  *                 故窗口坐标 == surface 像素坐标。
- * @param color0/color1 **线性光**（相对 SDR 白=1.0，可>1 表示超亮），由 [encodePq] 产出；
- *                 真正的 ST 2084 PQ OETF 由 [PatchRenderer] 在每帧绘制时按当前 TurboXDR
- *                 强度 [CyberNightlightSwitch.intensity] 统一施加（见 pqEnc），实现滑块实时调亮。
+ * @param color0/color1 **线性光**（相对 SDR 白=1.0，由 [encodePq] 产出，倍率恒为 1.0×），
+ *                 真正的「设计峰值倍率」由 [bias] 携带；最终亮度 = 线性光 × effMult(bias, 滑块)，
+ *                 其中 effMult 在 滑块 1.0× 时=1（恰 SDR 白，真·关闭）、滑块 8.0× 时=bias（保留原设计峰值），
+ *                 由 [PatchRenderer.pqEnc] 按当前 TurboXDR 强度 [CyberNightlightSwitch.intensity] 统一施加。
  *                 单色时 color1 缺省等于 color0。
- * @param intensity 亮度倍率（相对 SDR 白），仅用于诊断/微调（实际亮度倍率由 color0 的 mult 与 TurboXDR intensity 共同决定）。
+ * @param bias     该类型贴片的设计峰值亮度倍率（相对 SDR 白，如 CARD=4× / TAB=6× / TEXT=5× / LINE=5× / GRID=1.5× / DOT=5×）。
+ *                 仅用于诊断/微调；与滑块线性插值得到 effMult，保证 1.0×=SDR 白、8.0×=峰值。
  */
 data class HdrPatch(
     val id: String,
@@ -46,7 +48,8 @@ data class HdrPatch(
     val bounds: RectF,
     val color0: FloatArray,
     val color1: FloatArray = color0,
-    val intensity: Float = 1f,
+    /** 设计峰值亮度倍率（相对 SDR 白），与滑块线性插值得到 effMult。默认 1.0×。 */
+    val bias: Float = 1f,
     val cornerRadiusPx: Float = 0f,
     val strokeWidthPx: Float = 0f,
     val text: String? = null,

@@ -59,6 +59,13 @@ class PatchRenderer(
     private val bitmapTexCache = HashMap<String, Pair<Bitmap, Int>>()
     // 折线几何缓存：key = patch.id → (源 points 引用, 几何)
     private val lineCache = HashMap<String, Pair<FloatArray, LineGeom>>()
+    // ★ 现象A-3：顶点 FloatBuffer 缓存（按 patch.id），避免每帧 allocateDirect（治 GC 风暴）
+    private val quadBufCache = HashMap<String, FloatBuffer>()
+
+    // ★ 现象A-3：isHdrLayerObserved 结果缓存 1 秒，避免每帧跨进程/驱动查询
+    @Volatile private var cachedRatioOk = false
+    @Volatile private var cachedRatioTs = 0L
+    private val RATIO_CACHE_MS = 1000L
 
     private val emptyGeom = LineGeom(floatArrayOf(), RectF(), 0f)
 
@@ -67,21 +74,65 @@ class PatchRenderer(
     fun setPatches(list: List<HdrPatch>) { patches = list }
 
     /**
+     * ★ 现象A-2：surface 销毁（宿主 onDetachedFromWindow，UI 线程）时调用。
+     *   仅清空 CPU 侧缓存 map —— 不在此处调 glDeleteTextures（GL 调用必须走 GL 线程，
+     *   且 EGL context 即将销毁，驱动会自动回收纹理）。真正的 GL 纹理删除在 GL 线程的
+     *   [clearGpuCaches]（onSurfaceCreated/onSurfaceChanged）中完成，避免跨线程 GL 竞态。
+     */
+    fun releaseGpuResources() {
+        bitmapTexCache.clear()
+        glyphCache.clear()
+        lineCache.clear()
+        quadBufCache.clear()
+    }
+
+    /**
      * 当前 TurboXDR 强度（1.0×–8.0×），由设置页 / HDR 实验室滑块实时写入 [CyberNightlightSwitch.intensity]。
      * 渲染器每帧读取 → 滑块拖动即时反映到局部 HDR 贴片亮度（无需重编码/重组）。
      */
     private val turboIntensity: Float get() = CyberNightlightSwitch.intensity
 
-    /** 线性光（相对 SDR 白）→ ST 2084 PQ 码值，并叠加当前 TurboXDR 强度倍率。 */
-    private fun pqEnc(lin: Float): Float = pqOETF(lin * turboIntensity)
+    /**
+     * 线性光（相对 SDR 白，已不含任何类型倍率，由 [encodePq] 产出 SDR 白基准）→ ST 2084 PQ 码值。
+     *
+     * 亮度倍率 = 类型设计峰值 [bias] 与滑块 [turboIntensity] 的线性插值：
+     *   effMult = 1f + (bias - 1f) * (turboIntensity - 1f) / 7f
+     *  → 滑块 1.0× 时 effMult = 1（恰 SDR 白，真·关闭，与开关关闭一致）
+     *  → 滑块 8.0× 时 effMult = bias（保留原设计峰值，不再撞面板 8× 上限）
+     * 这样滑块从 1.0× 拉到 8.0× 时贴片亮度线性连续变化，肉眼可辨（治 现象B）。
+     */
+    private fun pqEnc(lin: Float, bias: Float): Float {
+        val effMult = 1f + (bias - 1f) * (turboIntensity - 1f) / 7f
+        return pqOETF(lin * effMult)
+    }
 
     override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
         buildProgram()
+        // ★ 现象A-2：EGL context（含旧 GL 纹理 id）已重建，清空所有 CPU 侧缓存，
+        //   避免引用悬空旧纹理 id 导致 GL 错误累积 → native 崩。
+        clearGpuCaches()
     }
 
     override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, w: Int, h: Int) {
         surfaceW = w
         surfaceH = h
+        // ★ 现象A-2：surface 尺寸变化（旋转/分屏/窗口化）同样重建了帧缓冲，清缓存保一致。
+        clearGpuCaches()
+    }
+
+    /**
+     * ★ 现象A-2：清空并删除全部 GL 资源缓存。
+     *  - glyphCache / bitmapTexCache / lineCache / quadBufCache：删对应 GL 纹理 + 清空 map。
+     *  在 onSurfaceCreated / onSurfaceChanged（context 重建）以及 surface 销毁时调用，
+     *  防止旧纹理 id 在 context 丢失后变成悬空引用 → GL 错误积累 → 闪退。
+     */
+    private fun clearGpuCaches() {
+        for ((_, tex) in bitmapTexCache) runCatching { GLES20.glDeleteTextures(1, intArrayOf(tex), 0) }
+        for ((_, tex) in glyphCache) runCatching { GLES20.glDeleteTextures(1, intArrayOf(tex), 0) }
+        bitmapTexCache.clear()
+        glyphCache.clear()
+        lineCache.clear()
+        quadBufCache.clear()
     }
 
     override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
@@ -90,8 +141,14 @@ class PatchRenderer(
 
         val pq = egl.pqSurfaceActive
         val active = _enabled && pq && patches.isNotEmpty()
-        // 权威确认：Display.getHdrSdrRatio() > 1.01（API 34+）
-        val ratioOk = pq && HdrCapabilityDetector.isHdrLayerObserved(display)
+        // ★ 现象A-3：isHdrLayerObserved 结果缓存 1 秒（避免每帧跨进程/驱动查询加重抖动）。
+        //   权威确认：Display.getHdrSdrRatio() > 1.01（API 34+）。
+        val now = System.currentTimeMillis()
+        if (now - cachedRatioTs >= RATIO_CACHE_MS) {
+            cachedRatioOk = HdrCapabilityDetector.isHdrLayerObserved(display)
+            cachedRatioTs = now
+        }
+        val ratioOk = pq && cachedRatioOk
         onState(pq, ratioOk)
 
         if (!active) return
@@ -162,9 +219,9 @@ class PatchRenderer(
     // ── 绘制 ──
 
     private fun drawSolid(p: HdrPatch) {
-        bindQuad(rectVerts(p.bounds))
-        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
-        GLES20.glUniform4f(uColor1, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+        bindQuad(p.id, rectVerts(p.bounds))
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
+        GLES20.glUniform4f(uColor1, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
         if (p.cornerRadiusPx > 0f) {
             // 圆角实心填充（进度条等）：复用 SDF round box，填充内部而非描边
             GLES20.glUniform1i(uMode, 3)
@@ -178,9 +235,9 @@ class PatchRenderer(
 
     private fun drawSdfBorder(p: HdrPatch) {
         val b = p.bounds
-        bindQuad(rectVerts(b))
-        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
-        GLES20.glUniform4f(uColor1, pqEnc(p.color1[0]), pqEnc(p.color1[1]), pqEnc(p.color1[2]), 1f)
+        bindQuad(p.id, rectVerts(b))
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
+        GLES20.glUniform4f(uColor1, pqEnc(p.color1[0], p.bias), pqEnc(p.color1[1], p.bias), pqEnc(p.color1[2], p.bias), 1f)
         GLES20.glUniform1i(uMode, 1)
         GLES20.glUniform4f(uRect, b.left, b.top, b.width(), b.height())
         GLES20.glUniform1f(uCorner, p.cornerRadiusPx)
@@ -191,8 +248,8 @@ class PatchRenderer(
     private fun drawGlyph(p: HdrPatch) {
         // 优先使用 Compose 侧精确栅格化的位图掩码（文字/图标本体）；否则回退现场字形生成。
         val texId = if (p.bitmap != null) ensureBitmapTex(p) else ensureGlyph(p) ?: return
-        bindQuad(rectVerts(p.bounds))
-        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+        bindQuad(p.id, rectVerts(p.bounds))
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
         GLES20.glUniform1i(uMode, 2)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
         GLES20.glUniform4f(uRect, p.bounds.left, p.bounds.top, p.bounds.width(), p.bounds.height())
@@ -219,9 +276,9 @@ class PatchRenderer(
 
     private fun drawGrid(p: HdrPatch) {
         val pts = p.points ?: return
-        bindQuad(pts)
-        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
-        GLES20.glUniform4f(uColor1, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+        bindQuad(p.id, pts)
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
+        GLES20.glUniform4f(uColor1, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
         GLES20.glUniform1i(uMode, 0)
         GLES20.glLineWidth(1f)
         GLES20.glDrawArrays(GLES20.GL_LINES, 0, pts.size / 2)
@@ -230,16 +287,16 @@ class PatchRenderer(
     private fun drawLine(p: HdrPatch) {
         val geom = lineGeom(p)
         if (geom.lineVerts.isEmpty()) return
-        bindQuad(geom.lineVerts)
-        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
-        GLES20.glUniform4f(uColor1, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+        bindQuad(p.id, geom.lineVerts)
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
+        GLES20.glUniform4f(uColor1, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
         GLES20.glUniform1i(uMode, 0)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, geom.lineVerts.size / 2)
         // 尾点（实心圆 via SDF 全填充）
         if (geom.dotR > 0f) {
-            bindQuad(rectVerts(geom.dotBounds))
-            GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
-            GLES20.glUniform4f(uColor1, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+            bindQuad(p.id + ".dot", rectVerts(geom.dotBounds))
+            GLES20.glUniform4f(uColor, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
+            GLES20.glUniform4f(uColor1, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
             GLES20.glUniform1i(uMode, 1)
             GLES20.glUniform4f(uRect, geom.dotBounds.left, geom.dotBounds.top, geom.dotBounds.width(), geom.dotBounds.height())
             GLES20.glUniform1f(uCorner, geom.dotR)
@@ -298,18 +355,22 @@ class PatchRenderer(
         return g
     }
 
-    private fun bindQuad(verts: FloatArray) {
-        val buf = floatBuffer(verts)
+    /**
+     * ★ 现象A-3：绑定顶点缓冲。按 [id] 复用 FloatBuffer，仅在容量不足时 allocateDirect，
+     *   否则 rewind + 覆盖内容 —— 杜绝每帧分配 direct buffer（GC 风暴主因）。
+     */
+    private fun bindQuad(id: String, verts: FloatArray) {
+        var buf = quadBufCache[id]
+        if (buf == null || buf.capacity() < verts.size) {
+            val bb = ByteBuffer.allocateDirect(verts.size * 4).order(ByteOrder.nativeOrder())
+            buf = bb.asFloatBuffer()
+            quadBufCache[id] = buf
+        }
+        buf.clear()
+        buf.put(verts)
+        buf.position(0)
         GLES20.glEnableVertexAttribArray(aPos)
         GLES20.glVertexAttribPointer(aPos, 2, GLES20.GL_FLOAT, false, 0, buf)
-    }
-
-    private fun floatBuffer(arr: FloatArray): FloatBuffer {
-        val bb = ByteBuffer.allocateDirect(arr.size * 4).order(ByteOrder.nativeOrder())
-        val fb = bb.asFloatBuffer()
-        fb.put(arr)
-        fb.position(0)
-        return fb
     }
 
     // ── 字形纹理 ──

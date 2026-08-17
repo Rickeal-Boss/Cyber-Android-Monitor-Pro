@@ -53,10 +53,18 @@ fun HdrPatchHost(
         }
     )
 
-    // 主动作：闸门变化 → setActive（开启即申请余量 + 持续渲染；关闭补一帧透明）
+    // 主动作：闸门变化 → setActive（开启即申请余量 + 事件驱动渲染；关闭补一帧透明）
     val effective = enabled && !hidden && !suppressed
     LaunchedEffect(effective) {
         viewRef.value?.setActive(effective)
+    }
+
+    // 强度同步：slider 实时写入贴片 surface 的 headroom（1.0×–8.0×），
+    // 对齐 CyberNightlightHost 的 LaunchedEffect(intensity)。贴片内容亮度由
+    // PatchRenderer.pqEnc 按 p.bias × intensity 线性插值施加（治 现象B）。
+    val intensity = CyberNightlightSwitch.intensity
+    LaunchedEffect(intensity) {
+        viewRef.value?.setIntensity(intensity)
     }
 
     DisposableEffect(Unit) {

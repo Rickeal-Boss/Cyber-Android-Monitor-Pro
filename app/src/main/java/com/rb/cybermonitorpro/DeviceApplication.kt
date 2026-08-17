@@ -2,7 +2,10 @@ package com.rb.cybermonitorpro
 
 import android.app.Application
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
+import android.widget.Toast
 import android.util.Log
 import com.rb.cybermonitorpro.data.repository.DeviceRepository
 import com.rb.cybermonitorpro.data.source.SysFsCapabilityProbe
@@ -39,10 +42,23 @@ class DeviceApplication : Application() {
         private const val TAG = "DeviceApp"
         // ★ 启动诊断协程 scope — 后台 IO，不阻塞主线程
         private val startupScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+        // ── 崩溃盾（治「闪退一次永久崩」现象A）──
+        // 连续崩溃次数：每次未捕获崩溃 +1，每次 onCreate 干净跑完归零。
+        private const val PREF_TURBOXDR_CRASH_STREAK = "turboxdr_crash_streak"
+        // 触发自动关闭的连续崩溃阈值
+        private const val CRASH_STREAK_THRESHOLD = 2
+        // 距上次崩溃 30s 内再次启动也算崩溃循环候选
+        private const val CRASH_RECENT_MS = 30_000L
     }
 
     val deviceRepository: DeviceRepository by lazy {
         org.koin.core.context.GlobalContext.get().get()
+    }
+
+    // ★ 崩溃盾：共享 SP（与 AppSettings 同一文件，便于读写 TurboXDR/夜光条开关与崩溃计数）
+    private val prefs: android.content.SharedPreferences by lazy {
+        getSharedPreferences("device_info_viewer_settings", android.content.Context.MODE_PRIVATE)
     }
 
     override fun onCreate() {
@@ -96,6 +112,9 @@ class DeviceApplication : Application() {
 
         // ★ CyberNightlight TurboXDR — 从 AppSettings 注入运行期状态（局部 HDR 增亮贴片）
         val nightlightSettings = AppSettings.getInstance(this@DeviceApplication)
+        // ★ 崩溃盾：若此前 TurboXDR/夜光条进入崩溃循环（连续崩溃或 30s 内崩溃），
+        //   强制关掉两者并写回 SP + 注入 false，一次性治愈「闪退一次永久崩」。
+        maybeAutoDisableTurboXdrOnCrashLoop(nightlightSettings)
         CyberNightlightSwitch.enabled = nightlightSettings.cyberNightlightTurboXdrEnabled
         CyberNightlightSwitch.intensity = nightlightSettings.cyberNightlightTurboXdrIntensity
         // 顶部夜光条独立开关（与 TurboXDR 解耦）
@@ -106,6 +125,11 @@ class DeviceApplication : Application() {
         startupScope.launch {
             writeStartupStage(startTime)
         }
+
+        // ★ 崩溃盾：本次 onCreate 干净跑完 → 清除连续崩溃计数。
+        //   无论本次是否因崩溃循环被强制关闭都清零：下次若仍崩，handler 会重新 +1，
+        //   由 recentCrash(30s)/streak≥2 再次触发；避免永久压制用户手动重开意图。
+        prefs.edit { putInt(PREF_TURBOXDR_CRASH_STREAK, 0) }
 
         Log.i(TAG, "▶ STARTUP: onCreate done | ${System.currentTimeMillis() - startTime}ms")
     }
@@ -129,11 +153,49 @@ class DeviceApplication : Application() {
                     e.printStackTrace(pw)
                 }
                 File(filesDir, "crash.log").writeText(sw.toString())
+                // ★ 崩溃盾：累计连续崩溃次数（每次崩溃 +1；干净跑完 onCreate 归零）
+                val streak = prefs.getInt(PREF_TURBOXDR_CRASH_STREAK, 0) + 1
+                prefs.edit { putInt(PREF_TURBOXDR_CRASH_STREAK, streak) }
             } catch (_: Throwable) {}
 
             oldHandler?.uncaughtException(t, e)
                 ?: Process.killProcess(Process.myPid())
         }
+    }
+
+    /**
+     * ★ 崩溃盾（治「闪退一次永久崩」现象A）：
+     * 检测 TurboXDR/夜光条是否进入崩溃循环——连续崩溃次数 ≥ 阈值，或距上次崩溃 30s 内又启动。
+     * 命中则强制关闭两者并写回 SP（保留用户原 SP 值由开关本身已持久化），注入 false，
+     * 通过主线程 Toast 一次性提示「已自动关闭 TurboXDR」。返回 true=已强制关闭。
+     *
+     * 仅当原本开启时才动手（避免全新安装/本就关闭时误伤）；且只在真正命中循环时提示一次。
+     */
+    private fun maybeAutoDisableTurboXdrOnCrashLoop(s: AppSettings): Boolean {
+        val streak = prefs.getInt(PREF_TURBOXDR_CRASH_STREAK, 0)
+        val crashLog = File(filesDir, "crash.log")
+        val recentCrash = crashLog.exists() &&
+            (System.currentTimeMillis() - crashLog.lastModified()) < CRASH_RECENT_MS
+        val inLoop = streak >= CRASH_STREAK_THRESHOLD || recentCrash
+
+        val wasOn = s.cyberNightlightTurboXdrEnabled || s.cyberNightlightBarEnabled
+        if (!inLoop || !wasOn) return false
+
+        // 强制关闭，写回 SP；cyberNightlightTurboXdrIntensity 保留（用户可手动重开时沿用）
+        s.cyberNightlightTurboXdrEnabled = false
+        s.cyberNightlightBarEnabled = false
+        // 注意：不重置 streak —— 保留抑制直到用户手动重开开关，避免「开了→崩→自动关→用户没动→下次又开」反复
+        Handler(Looper.getMainLooper()).post {
+            runCatching {
+                Toast.makeText(
+                    this@DeviceApplication,
+                    "已自动关闭 TurboXDR（检测到反复崩溃，可在设置中手动重新开启）",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+        Log.w(TAG, "★ 崩溃盾触发：强制关闭 TurboXDR/夜光条 | streak=$streak recentCrash=$recentCrash")
+        return true
     }
 
     /**
