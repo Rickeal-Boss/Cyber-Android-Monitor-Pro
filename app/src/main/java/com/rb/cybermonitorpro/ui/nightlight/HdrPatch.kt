@@ -1,5 +1,6 @@
 package com.rb.cybermonitorpro.ui.nightlight
 
+import android.graphics.Bitmap
 import android.graphics.RectF
 import androidx.compose.runtime.mutableStateOf
 
@@ -51,6 +52,12 @@ data class HdrPatch(
     val textBold: Boolean = true,
     val textMonospace: Boolean = true,
     val letterSpacingEm: Float = 0f,
+    /**
+     * 预栅格化位图（文字/图标本体掩码：白色=不透明，背景透明）。非空时渲染器直接上传该位图，
+     * 由 Compose 侧用 TextMeasurer / Drawable 精确栅格化，保证与 SDR 布局像素级对齐；
+     * 否则回退到按 [text] 现场生成字形纹理。位图随文本/图标变化而重建。
+     */
+    val bitmap: Bitmap? = null,
     /** CHART_LINE/CHART_GRID：窗口坐标点 [x0,y0,x1,y1,...] */
     val points: FloatArray? = null,
     val tailDotRadiusPx: Float = 0f,

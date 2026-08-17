@@ -53,6 +53,9 @@ class PatchRenderer(
 
     // 字形纹理缓存：key = text|sizePx
     private val glyphCache = LinkedHashMap<String, Int>()
+    // 位图掩码纹理缓存（文字/图标本体）：key = patch.id → (源 Bitmap 引用, GL 纹理 id)
+    // 用 Bitmap 引用判等，文本/图标变化时自动重传并删旧纹理，避免泄漏。
+    private val bitmapTexCache = HashMap<String, Pair<Bitmap, Int>>()
     // 折线几何缓存：key = patch.id → (源 points 引用, 几何)
     private val lineCache = HashMap<String, Pair<FloatArray, LineGeom>>()
 
@@ -133,6 +136,17 @@ class PatchRenderer(
             drawPatch(p)
         }
         GLES20.glDisable(GLES20.GL_SCISSOR_TEST)
+
+        // 清理已消失的位图纹理（图标/文字离开屏幕或文本变化时），避免 GL 纹理泄漏
+        val liveIds = patches.map { it.id }.toSet()
+        val bit = bitmapTexCache.entries.iterator()
+        while (bit.hasNext()) {
+            val e = bit.next()
+            if (e.key !in liveIds) {
+                GLES20.glDeleteTextures(1, intArrayOf(e.value.second), 0)
+                bit.remove()
+            }
+        }
     }
 
     // ── 绘制 ──
@@ -158,13 +172,32 @@ class PatchRenderer(
     }
 
     private fun drawGlyph(p: HdrPatch) {
-        val texId = ensureGlyph(p) ?: return
+        // 优先使用 Compose 侧精确栅格化的位图掩码（文字/图标本体）；否则回退现场字形生成。
+        val texId = if (p.bitmap != null) ensureBitmapTex(p) else ensureGlyph(p) ?: return
         bindQuad(rectVerts(p.bounds))
         GLES20.glUniform4f(uColor, p.color0[0], p.color0[1], p.color0[2], 1f)
         GLES20.glUniform1i(uMode, 2)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
         GLES20.glUniform4f(uRect, p.bounds.left, p.bounds.top, p.bounds.width(), p.bounds.height())
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
+    }
+
+    /** 上传/复用 Compose 侧传入的位图掩码纹理（白色=不透明）。 */
+    private fun ensureBitmapTex(p: HdrPatch): Int? {
+        val bmp = p.bitmap ?: return null
+        val cached = bitmapTexCache[p.id]
+        if (cached != null && cached.first === bmp) return cached.second
+        if (cached != null) GLES20.glDeleteTextures(1, intArrayOf(cached.second), 0)
+        val tex = IntArray(1)
+        GLES20.glGenTextures(1, tex, 0)
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, tex[0])
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MIN_FILTER, GLES20.GL_LINEAR)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
+        GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
+        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bmp, 0)
+        bitmapTexCache[p.id] = bmp to tex[0]
+        return tex[0]
     }
 
     private fun drawGrid(p: HdrPatch) {
@@ -277,7 +310,7 @@ class PatchRenderer(
             textSize = ts
             isFakeBoldText = p.textBold
             if (p.textMonospace) typeface = Typeface.MONOSPACE
-            letterSpacing = p.letterSpacingEm * ts
+            letterSpacing = p.letterSpacingEm
         }
         val fm = paint.fontMetrics
         val w = (paint.measureText(text) + 4f).coerceAtLeast(1f)

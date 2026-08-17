@@ -16,21 +16,30 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.theme.NeonCyan
+import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.DividerCyber
 import com.rb.cybermonitorpro.data.model.GpsSatelliteInfo
 import com.rb.cybermonitorpro.ui.components.constellationColor
+import android.graphics.Bitmap
+import android.graphics.Typeface
 import java.util.UUID
 import kotlin.math.pow
 
@@ -140,9 +149,13 @@ fun Modifier.hdrTabIndicatorPatch(key: String): Modifier = composed {
 
 /**
  * 大数字 HDR 字形。始终渲染原 SDR Text（保留布局/测量，且永不消失），
- * 并在 TurboXDR 开启时把字形本体上报为 TEXT_GLYPH 贴片，由 PQ surface 叠加真实 HDR 增亮。
+ * 并在 TurboXDR 开启时把字形本体（精确栅格化的位图掩码）上报为 TEXT_GLYPH 贴片，
+ * 由 PQ surface 叠加真实 HDR 增亮。
  *
- * 采用"叠加"而非"隐藏 SDR"：即便 PQ 纹理因任何原因失败，数字仍是清晰可读的 SDR 文本。
+ * 修正（pre6 真机）：不再按原始字体度量现场生成字形再拉伸进 composable 包围盒
+ * （导致非均匀缩放→窄平/错位），改用 TextMeasurer 取得与 Compose 完全一致的
+ * 布局尺寸与基线/左缘，栅格化到与包围盒等宽高的位图，纹理→quad 1:1 像素级对齐。
+ * 采用"叠加"而非"隐藏 SDR"：即便位图因任何原因失败，数字仍是清晰可读的 SDR 文本。
  */
 @Composable
 fun HdrMetricText(
@@ -162,6 +175,36 @@ fun HdrMetricText(
     val key = remember { "metric:" + UUID.randomUUID().toString() }
     val density = LocalDensity.current
     val enabled = CyberNightlightSwitch.enabled && gate
+    val measurer = rememberTextMeasurer()
+
+    // 字形位图：仅在文本或样式变化时重建（数字每秒刷新→旧位图在 onDispose 回收，避免泄漏）
+    val bitmapState = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    DisposableEffect(text, fontSize, fontWeight, monospace, letterSpacing) {
+        val bmp = buildTextBitmap(measurer, density, text, fontSize, fontWeight, monospace, letterSpacing)
+        bitmapState.value = bmp
+        onDispose { bmp.recycle() }
+    }
+
+    val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
+
+    fun report() {
+        val bmp = bitmapState.value
+        val pos = posState.value
+        if (!enabled || bmp == null || pos == null) {
+            HdrPatchRegistry.remove(key)
+            return
+        }
+        HdrPatchRegistry.upsert(
+            HdrPatch(
+                id = key,
+                type = HdrPatchType.TEXT_GLYPH,
+                bounds = pos,
+                color0 = encodePq(color, HDR_TEXT_MULT),
+                bitmap = bmp,
+                topZone = topZone
+            )
+        )
+    }
 
     Text(
         text = text,
@@ -175,40 +218,21 @@ fun HdrMetricText(
         softWrap = true,
         modifier = modifier
             .onGloballyPositioned { coords ->
-                if (!enabled) {
-                    HdrPatchRegistry.remove(key)
-                    return@onGloballyPositioned
-                }
                 // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
-                val pos = coords.localToRoot(Offset.Zero)
-                val b = android.graphics.RectF(
-                    pos.x, pos.y, pos.x + coords.size.width.toFloat(), pos.y + coords.size.height.toFloat()
+                val p = coords.localToRoot(Offset.Zero)
+                posState.value = android.graphics.RectF(
+                    p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
                 )
-                val textSizePx = with(density) { fontSize.toPx() }
-                val lsEm = if (fontSize.value > 0f) letterSpacing.value / fontSize.value else 0f
-                HdrPatchRegistry.upsert(
-                    HdrPatch(
-                        id = key,
-                        type = HdrPatchType.TEXT_GLYPH,
-                        bounds = b,
-                        color0 = encodePq(color, HDR_TEXT_MULT),
-                        text = text,
-                        textSizePx = textSizePx,
-                        textBold = true,
-                        textMonospace = monospace,
-                        letterSpacingEm = lsEm,
-                        topZone = topZone
-                    )
-                )
+                report()
             }
     )
 
     DisposableEffect(key) {
         onDispose { HdrPatchRegistry.remove(key) }
     }
-    // 门控翻转为 false（如 Tab 切换）时立即注销，避免残留幽灵标签。
-    LaunchedEffect(enabled) {
-        if (!enabled) HdrPatchRegistry.remove(key)
+    // 文本变化（位图重建）/ 门控翻转时重新上报或注销，避免残留幽灵标签。
+    LaunchedEffect(enabled, bitmapState.value) {
+        if (!enabled) HdrPatchRegistry.remove(key) else report()
     }
 }
 
@@ -361,45 +385,59 @@ private fun reportChartPatches(
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * 顶部 Tab 选中项矢量图标 HDR 光环。挂在 Icon 的 Modifier 上，仅当 [selected] 时上报，
- * 在图标外圈描一圈霓虹圆角描边（复用 CARD_BORDER），topZone=true 绕过"顶撞裁剪"。
+ * 顶部 Tab 选中项矢量图标 HDR 本体。挂在 Icon 的 Modifier 上，仅当 [selected] 时上报，
+ * 把图标 Drawable 栅格化为白色掩码位图，由 PQ surface 直接画出 HDR 矢量图标
+ *（不再画外圈圆圈光环）。topZone=true 绕过"顶撞裁剪"。
  */
-fun Modifier.hdrTabIconPatch(key: String, selected: Boolean): Modifier = composed {
+fun Modifier.hdrTabIconPatch(key: String, selected: Boolean, iconRes: Int): Modifier = composed {
     val density = LocalDensity.current
+    val context = LocalContext.current
     val enabled = CyberNightlightSwitch.enabled && selected
-    DisposableEffect(key) {
-        onDispose { HdrPatchRegistry.remove(key) }
+
+    // 图标位图：随 iconRes 重建；卸载时回收，避免泄漏。
+    val bitmapState = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    DisposableEffect(key, iconRes) {
+        val bmp = buildIconBitmap(context, iconRes, density)
+        bitmapState.value = bmp
+        onDispose { bmp?.recycle() }
     }
-    // 门控翻转为 false（Tab 切换）时立即注销，避免残留幽灵光环。
-    LaunchedEffect(enabled) {
-        if (!enabled) HdrPatchRegistry.remove(key)
-    }
-    this.onGloballyPositioned { coords ->
-        if (!enabled) {
+
+    val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
+
+    fun report() {
+        val bmp = bitmapState.value
+        val pos = posState.value
+        if (!enabled || bmp == null || pos == null) {
             HdrPatchRegistry.remove(key)
-            return@onGloballyPositioned
+            return
         }
-        // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
-        val pos = coords.localToRoot(Offset.Zero)
-        val w = coords.size.width.toFloat()
-        val h = coords.size.height.toFloat()
-        val pad = with(density) { 3.dp.toPx() }
-        val half = (if (w < h) w else h) / 2f + pad
-        val b = android.graphics.RectF(
-            pos.x - pad, pos.y - pad, pos.x + w + pad, pos.y + h + pad
-        )
         HdrPatchRegistry.upsert(
             HdrPatch(
                 id = key,
-                type = HdrPatchType.CARD_BORDER,
-                bounds = b,
-                color0 = encodePq(NeonPurpleBright, HDR_TAB_MULT),
-                color1 = encodePq(NeonCyan, HDR_TAB_MULT),
-                cornerRadiusPx = half,
-                strokeWidthPx = with(density) { 2.dp.toPx() },
+                type = HdrPatchType.TEXT_GLYPH,
+                bounds = pos,
+                color0 = encodePq(NeonPurple, HDR_TAB_MULT),
+                bitmap = bmp,
                 topZone = true
             )
         )
+    }
+
+    DisposableEffect(key) {
+        onDispose { HdrPatchRegistry.remove(key) }
+    }
+    // 门控翻转（Tab 切换）/ 位图就绪时重新上报或注销，避免残留幽灵图标。
+    LaunchedEffect(enabled, bitmapState.value) {
+        if (!enabled) HdrPatchRegistry.remove(key) else report()
+    }
+
+    this.onGloballyPositioned { coords ->
+        // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
+        val p = coords.localToRoot(Offset.Zero)
+        posState.value = android.graphics.RectF(
+            p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
+        )
+        report()
     }
 }
 
@@ -483,4 +521,74 @@ private class SkyPatchHolder {
     var h = 0f
     val ready: Boolean get() = w > 0f && h > 0f
     val activeIds = mutableSetOf<String>()
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 位图掩码栅格化（文字 / 图标本体）
+// ───────────────────────────────────────────────────────────────────────────
+
+/**
+ * 用 TextMeasurer 取得与 Compose 完全一致的布局，再把字形栅格化到与包围盒等宽高的位图
+ *（2× 超采样，纹理→quad 1:1 下采样，清晰且无宽高变形）。白色字形=不透明掩码，颜色由 shader 注入。
+ * 关键：沿用 Compose 同一基线(getLineBaseline)与左缘(getLineLeft)，保证 HDR 字形与 SDR 文本像素级对齐。
+ */
+private fun buildTextBitmap(
+    measurer: TextMeasurer,
+    density: Density,
+    text: String,
+    fontSize: TextUnit,
+    fontWeight: FontWeight,
+    monospace: Boolean,
+    letterSpacing: TextUnit
+): Bitmap {
+    val style = TextStyle(
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
+        letterSpacing = letterSpacing
+    )
+    val layout = measurer.measure(
+        text, style, Constraints(), softWrap = true, overflow = TextOverflow.Ellipsis, maxLines = 4
+    )
+    val ss = 2
+    val w = (layout.size.width * ss).coerceAtLeast(1)
+    val h = (layout.size.height * ss).coerceAtLeast(1)
+    val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val c = android.graphics.Canvas(bmp)
+    c.save()
+    c.scale(ss.toFloat(), ss.toFloat())
+    val tp = with(density) { fontSize.toPx() }
+    val paint = Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFFFFFFF.toInt()
+        textSize = tp
+        isFakeBoldText = fontWeight == FontWeight.Bold
+        typeface = if (monospace) Typeface.MONOSPACE else Typeface.DEFAULT
+        // Paint.letterSpacing 单位为 em（相对 textSize 的比例），故直接用 sp 比值，勿再乘 px
+        this.letterSpacing = if (fontSize.value > 0f) letterSpacing.value / fontSize.value else 0f
+    }
+    // 与 Compose 同款基线/左缘，保证像素级对齐
+    c.drawText(text, layout.getLineLeft(0), layout.getLineBaseline(0), paint)
+    c.restore()
+    return bmp
+}
+
+/**
+ * 把图标 Drawable 栅格化为白色掩码位图（2× 超采样）；白色=不透明，颜色由 shader 注入为选中色。
+ * 这样 HDR 直接画出矢量图标本体，而非外圈圆圈光环。
+ */
+private fun buildIconBitmap(
+    context: android.content.Context,
+    iconRes: Int,
+    density: Density
+): Bitmap? {
+    val d = ContextCompat.getDrawable(context, iconRes) ?: return null
+    val base = with(density) { 16.dp.toPx() }.toInt().coerceAtLeast(1)
+    val ss = 2
+    val px = base * ss
+    val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+    val c = android.graphics.Canvas(bmp)
+    d.setBounds(0, 0, px, px)
+    try { d.setTint(0xFFFFFFFF.toInt()) } catch (_: Throwable) { /* 旧 API 忽略 */ }
+    d.draw(c)
+    return bmp
 }

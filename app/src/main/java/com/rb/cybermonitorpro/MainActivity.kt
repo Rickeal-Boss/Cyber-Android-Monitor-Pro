@@ -550,7 +550,7 @@ private fun MainTabs(
                         Icon(
                             painterResource(tab.iconRes), null,
                             Modifier.size(16.dp)
-                                .hdrTabIconPatch("tab.icon.$i", selected = pagerState.currentPage == i)
+                                .hdrTabIconPatch("tab.icon.$i", selected = pagerState.currentPage == i, iconRes = tab.iconRes)
                         )
                     },
                     selectedContentColor = NeonPurple,
