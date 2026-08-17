@@ -215,7 +215,11 @@ fun HdrMetricText(
     gate: Boolean = true,
     // 字形是否等宽（大数字默认等宽；Tab 标签用系统字体）
     monospace: Boolean = true,
-    fontWeight: FontWeight = FontWeight.Bold
+    fontWeight: FontWeight = FontWeight.Bold,
+    // 以下三项须与下方 Text 完全一致，否则 SDR 与 HDR 测量/换行不同步
+    maxLines: Int = Int.MAX_VALUE,
+    softWrap: Boolean = true,
+    overflow: TextOverflow = TextOverflow.Clip
 ) {
     val key = remember { "metric:" + UUID.randomUUID().toString() }
     val density = LocalDensity.current
@@ -224,10 +228,15 @@ fun HdrMetricText(
 
     // 字形位图：仅在文本或样式变化时重建（数字每秒刷新→旧位图在 onDispose 回收，避免泄漏）
     val bitmapState = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
-    DisposableEffect(text, fontSize, fontWeight, monospace, letterSpacing) {
-        val bmp = buildTextBitmap(measurer, density, text, fontSize, fontWeight, monospace, letterSpacing)
+    // 关键修复：记录 Text composable 的实际布局宽度，buildTextBitmap 用同宽度约束测量，
+    // 保证 HDR 位图与 SDR Text 换行/行数完全一致，避免错位/重影。
+    var measuredWidthPx by remember { mutableStateOf(0) }
+    DisposableEffect(text, fontSize, fontWeight, monospace, letterSpacing, measuredWidthPx, maxLines, softWrap, overflow) {
+        val constraints = if (measuredWidthPx > 0) Constraints(maxWidth = measuredWidthPx) else Constraints()
+        val bmp = buildTextBitmap(measurer, density, text, fontSize, fontWeight, monospace, letterSpacing, maxLines, softWrap, overflow, constraints)
+        val old = bitmapState.value
         bitmapState.value = bmp
-        onDispose { bmp.recycle() }
+        onDispose { old?.recycle(); bmp.recycle() }
     }
 
     val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
@@ -258,13 +267,14 @@ fun HdrMetricText(
         color = color,
         fontFamily = if (monospace) FontFamily.Monospace else FontFamily.Default,
         letterSpacing = letterSpacing,
-        maxLines = 4,
-        overflow = TextOverflow.Ellipsis,
-        softWrap = true,
+        maxLines = maxLines,
+        overflow = overflow,
+        softWrap = softWrap,
         modifier = modifier
             .onGloballyPositioned { coords ->
                 // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
                 val p = coords.localToRoot(Offset.Zero)
+                measuredWidthPx = coords.size.width
                 posState.value = android.graphics.RectF(
                     p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
                 )
@@ -422,6 +432,75 @@ private fun reportChartPatches(
         )
     } else {
         HdrPatchRegistry.remove(chartKey + ".grid")
+    }
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// 线性进度条 HDR 贴片
+// ───────────────────────────────────────────────────────────────────────────
+
+private class ProgressPatchHolder {
+    var x = 0f
+    var y = 0f
+    var w = 0f
+    var h = 0f
+    val ready: Boolean get() = w > 0f && h > 0f
+}
+
+/**
+ * LinearProgressIndicator 的已填充部分 HDR 贴片上报。挂在 Indicator 的 Modifier 上。
+ * 进度变化时通过 LaunchedEffect 重新上报；位置变化时通过 onGloballyPositioned 重新上报。
+ * 使用 TAB_INDICATOR 类型（实心圆角矩形），cornerRadius 设为高度一半以匹配 SDR 圆角。
+ */
+fun Modifier.hdrLinearProgressPatch(
+    key: String,
+    progress: Float,
+    color: Color,
+    mult: Float = HDR_CARD_MULT
+): Modifier = composed {
+    val enabled = CyberNightlightSwitch.enabled
+    val holder = remember { ProgressPatchHolder() }
+
+    DisposableEffect(key) {
+        onDispose { HdrPatchRegistry.remove(key) }
+    }
+
+    fun report() {
+        if (!enabled || !holder.ready) {
+            HdrPatchRegistry.remove(key)
+            return
+        }
+        val p = progress.coerceIn(0f, 1f)
+        val fillW = holder.w * p
+        // 进度为 0 或极窄时不绘制，避免零宽 bounds 触发 GL 异常
+        if (fillW < 1f) {
+            HdrPatchRegistry.remove(key)
+            return
+        }
+        val corner = holder.h * 0.5f
+        val b = android.graphics.RectF(
+            holder.x, holder.y, holder.x + fillW, holder.y + holder.h
+        )
+        HdrPatchRegistry.upsert(
+            HdrPatch(
+                id = key,
+                type = HdrPatchType.TAB_INDICATOR,
+                bounds = b,
+                color0 = encodePq(color, mult),
+                cornerRadiusPx = corner,
+                strokeWidthPx = corner
+            )
+        )
+    }
+
+    LaunchedEffect(progress, enabled) { report() }
+
+    Modifier.onGloballyPositioned { coords ->
+        holder.x = coords.localToRoot(Offset.Zero).x
+        holder.y = coords.localToRoot(Offset.Zero).y
+        holder.w = coords.size.width.toFloat()
+        holder.h = coords.size.height.toFloat()
+        report()
     }
 }
 
@@ -644,7 +723,11 @@ private fun buildTextBitmap(
     fontSize: TextUnit,
     fontWeight: FontWeight,
     monospace: Boolean,
-    letterSpacing: TextUnit
+    letterSpacing: TextUnit,
+    maxLines: Int = Int.MAX_VALUE,
+    softWrap: Boolean = true,
+    overflow: TextOverflow = TextOverflow.Clip,
+    constraints: Constraints = Constraints()
 ): Bitmap {
     val style = TextStyle(
         fontSize = fontSize,
@@ -654,8 +737,8 @@ private fun buildTextBitmap(
     )
     val layout = measurer.measure(
         text, style,
-        softWrap = true, overflow = TextOverflow.Ellipsis, maxLines = 4,
-        constraints = Constraints()
+        softWrap = softWrap, overflow = overflow, maxLines = maxLines,
+        constraints = constraints
     )
     val ss = 2
     val w = (layout.size.width * ss).coerceAtLeast(1)
@@ -673,8 +756,17 @@ private fun buildTextBitmap(
         // Paint.letterSpacing 单位为 em（相对 textSize 的比例），故直接用 sp 比值，勿再乘 px
         this.letterSpacing = if (fontSize.value > 0f) letterSpacing.value / fontSize.value else 0f
     }
-    // 与 Compose 同款基线/左缘，保证像素级对齐
-    c.drawText(text, layout.getLineLeft(0), layout.getLineBaseline(0), paint)
+    // 与 Compose 同款基线/左缘，保证像素级对齐。
+    // 关键修复：多行文本须逐行绘制，否则 Canvas.drawText 会把整段文字画成单行，
+    // 与 SDR Text 的自动换行布局错位/重影。
+    for (line in 0 until layout.lineCount) {
+        val start = layout.getLineStart(line)
+        val end = layout.getLineEnd(line)
+        if (start >= end) continue
+        val lineText = text.substring(start, end).trimEnd('\n')
+        if (lineText.isEmpty()) continue
+        c.drawText(lineText, layout.getLineLeft(line), layout.getLineBaseline(line), paint)
+    }
     c.restore()
     return bmp
 }

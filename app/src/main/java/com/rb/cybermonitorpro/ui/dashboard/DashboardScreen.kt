@@ -45,8 +45,11 @@ import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.entranceReveal
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
+import com.rb.cybermonitorpro.ui.nightlight.HdrMetricText
+import com.rb.cybermonitorpro.ui.nightlight.hdrLinearProgressPatch
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.delay
+import java.util.UUID
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
@@ -381,25 +384,35 @@ private fun MetricCardByType(
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
                 Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.memory_swap_zram_title),
-                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f), letterSpacing = 0.5.sp)
+                HdrMetricText(
+                    text = stringResource(R.string.memory_swap_zram_title),
+                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
+                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal, monospace = false
+                )
                 Spacer(Modifier.height(3.dp))
                 val szText = FormatUtils.formatBytes(swapzramUsedKB * 1024)
-                Text("$szText ${stringResource(R.string.common_in_use)}",
-                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-                    color = memValueColor, fontFamily = FontFamily.Monospace)
+                HdrMetricText(
+                    text = "$szText ${stringResource(R.string.common_in_use)}",
+                    fontSize = 16.sp, color = memValueColor,
+                    fontWeight = FontWeight.SemiBold, monospace = true
+                )
                 if (swapzramPct >= 0f) {
                     Spacer(Modifier.height(6.dp))
+                    val swapProgressKey = remember { "dash.swapzram.progress:${UUID.randomUUID()}" }
                     LinearProgressIndicator(
                         progress = { swapzramPct },
-                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
+                            .hdrLinearProgressPatch(swapProgressKey, swapzramPct, memValueColor.copy(alpha = 0.75f)),
                         color = memValueColor.copy(alpha = 0.75f), trackColor = CyberMuted
                     )
                 }
                 val szTotalText = FormatUtils.formatBytes(swapzramTotalKB * 1024)
                 Spacer(Modifier.height(4.dp))
-                Text(stringResource(R.string.memory_swap_total, szTotalText),
-                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.6f))
+                HdrMetricText(
+                    text = stringResource(R.string.memory_swap_total, szTotalText),
+                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.6f),
+                    fontWeight = FontWeight.Normal, monospace = false
+                )
             }
         }
 
@@ -413,12 +426,17 @@ private fun MetricCardByType(
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
                 Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.dashboard_metric_battery_temp),
-                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f), letterSpacing = 0.5.sp)
+                HdrMetricText(
+                    text = stringResource(R.string.dashboard_metric_battery_temp),
+                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
+                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal, monospace = false
+                )
                 Spacer(Modifier.height(3.dp))
-                Text(batteryTemp,
-                    fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-                    color = SuccessNeon, fontFamily = FontFamily.Monospace)
+                HdrMetricText(
+                    text = batteryTemp,
+                    fontSize = 16.sp, color = SuccessNeon,
+                    fontWeight = FontWeight.SemiBold, monospace = true
+                )
             }
         }
 

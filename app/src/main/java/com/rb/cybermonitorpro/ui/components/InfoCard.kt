@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.UUID
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.effects.revealLight
@@ -102,7 +103,10 @@ fun MetricCard(
     ) {
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardGradient)) {
             Column(Modifier.padding(18.dp)) {
-                Text(title, fontSize = 11.sp, color = TextSecondary, letterSpacing = 0.5.sp)
+                HdrMetricText(
+                    text = title, fontSize = 11.sp, color = TextSecondary,
+                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal, monospace = false
+                )
                 Spacer(Modifier.height(6.dp))
                 // 行业首创：大数字本体上报为 HDR 字形贴片（SDR 文本保留，叠加真实 HDR 增亮，永不消失）
                 HdrMetricText(
@@ -110,9 +114,11 @@ fun MetricCard(
                 )
                 if (showProgress && progress >= 0f) {
                     Spacer(Modifier.height(10.dp))
+                    val progressKey = remember { "metric.progress:${UUID.randomUUID()}" }
                     LinearProgressIndicator(
                         progress = { progress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(2.5.dp)),
+                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(2.5.dp))
+                            .hdrLinearProgressPatch(progressKey, progress.coerceIn(0f, 1f), valueColor),
                         color = valueColor, trackColor = CyberMuted
                     )
                 }

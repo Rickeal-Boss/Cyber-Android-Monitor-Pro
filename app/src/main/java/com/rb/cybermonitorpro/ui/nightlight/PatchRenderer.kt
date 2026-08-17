@@ -155,7 +155,14 @@ class PatchRenderer(
         bindQuad(rectVerts(p.bounds))
         GLES20.glUniform4f(uColor, p.color0[0], p.color0[1], p.color0[2], 1f)
         GLES20.glUniform4f(uColor1, p.color0[0], p.color0[1], p.color0[2], 1f)
-        GLES20.glUniform1i(uMode, 0)
+        if (p.cornerRadiusPx > 0f) {
+            // 圆角实心填充（进度条等）：复用 SDF round box，填充内部而非描边
+            GLES20.glUniform1i(uMode, 3)
+            GLES20.glUniform4f(uRect, p.bounds.left, p.bounds.top, p.bounds.width(), p.bounds.height())
+            GLES20.glUniform1f(uCorner, p.cornerRadiusPx)
+        } else {
+            GLES20.glUniform1i(uMode, 0)
+        }
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
 
@@ -411,6 +418,14 @@ class PatchRenderer(
                     float a = texture2D(uTex, uv).a;
                     if (a <= 0.001) discard;
                     outc = vec4(uColor.rgb, uColor.a * a);
+                } else if (uMode == 3) {
+                    vec2 center = uRect.xy + uRect.zw * 0.5;
+                    vec2 p = vPix - center;
+                    vec2 halfb = uRect.zw * 0.5;
+                    float d = sdRoundBox(p, max(halfb, vec2(0.0)), max(uCorner, 0.0));
+                    float cov = 1.0 - smoothstep(0.0, 1.5, d);
+                    if (cov <= 0.001) discard;
+                    outc = vec4(uColor.rgb, uColor.a * cov);
                 }
                 gl_FragColor = outc;
             }
