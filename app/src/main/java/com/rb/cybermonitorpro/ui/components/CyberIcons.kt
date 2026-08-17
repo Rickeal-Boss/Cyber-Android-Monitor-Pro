@@ -31,7 +31,7 @@ object CyberIcons {
     private val registry = mutableMapOf<ImageVector, List<PathSpec>>()
 
     /** 暴露自绘图标的路径数据，供 hdrVectorIconPatch 栅格化为 HDR 掩码；无对应则返回 null。 */
-    fun pathsFor(vector: ImageVector): List<PathSpec>? = registry[vector]
+    internal fun pathsFor(vector: ImageVector): List<PathSpec>? = registry[vector]
 
     /**
      * 构建辅助：在 ImageVector.Builder 之上捕获每条路径的源数据（data/fill/width），
