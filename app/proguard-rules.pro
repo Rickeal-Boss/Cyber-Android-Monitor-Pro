@@ -78,6 +78,21 @@
 # ===== 保留 R 类内部类 =====
 -keepclassmembers class **.R$* { public static <fields>; }
 
+# ===== 局部 HDR (TurboXDR) 全量保留（pre5–pre9 新增 → release 主界面闪退根因）=====
+# 主界面常驻两个 HDR 浮层 GLSurfaceView(HdrLumeSurfaceView / HdrPatchSurfaceView)，
+# 其 EGL 配置选择器(HdrEglState) 与 GL 渲染器(LumeRenderer / PatchRenderer) 的接口方法
+# (chooseConfig / createWindowSurface / onSurfaceCreated / onDrawFrame / onSurfaceChanged …)
+# 仅被 GLSurfaceView 的 GL 线程以虚拟调用方式触发，R8 调用图不可见 → -optimize 会当
+# "未被调用"剥掉 → EGL/GL 初始化失败 → 主界面闪退（debug 不瘦身故正常）。
+# 故对整包 + 框架回调接口实现显式保留，禁止 R8 缩减/优化。
+-keep class com.rb.cybermonitorpro.ui.nightlight.** { *; }
+-keep class com.rb.cybermonitorpro.ui.components.CyberIcons { *; }
+-keep class com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch { *; }
+-keep class com.rb.cybermonitorpro.ui.effects.NightlightBarSwitch { *; }
+-keepclassmembers class * implements android.opengl.GLSurfaceView$Renderer { *; }
+-keepclassmembers class * implements android.opengl.GLSurfaceView$EGLConfigChooser { *; }
+-keepclassmembers class * implements android.opengl.GLSurfaceView$EGLWindowSurfaceFactory { *; }
+
 # ===== 缩而不混 + 保留运行时元数据 =====
 -dontobfuscate
 -keepattributes Signature, *Annotation*, InnerClasses, EnclosingMethod
