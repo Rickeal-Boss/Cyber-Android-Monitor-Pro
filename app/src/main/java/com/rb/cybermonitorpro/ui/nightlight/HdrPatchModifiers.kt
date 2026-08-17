@@ -31,15 +31,15 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.PathNode
-import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.PathParser
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.DividerCyber
 import com.rb.cybermonitorpro.data.model.GpsSatelliteInfo
+import com.rb.cybermonitorpro.ui.components.CyberIcons
 import com.rb.cybermonitorpro.ui.components.constellationColor
 import android.graphics.Bitmap
 import android.graphics.Paint
@@ -702,23 +702,24 @@ private fun buildIconBitmap(
 
 /**
  * 把自绘 ImageVector（如 CyberIcons.*）栅格化为白色掩码位图（2× 超采样）。
- * 不依赖 Compose 内部离屏 API（toPixelMap 在本项目 Compose 版本不可见），改为遍历
- * ImageVector.root 的 VectorPath，把 pathData（PathNode 列表）转为 android.graphics.Path，
- * 再用 android.graphics.Canvas 绘制为白色掩码（颜色由 shader 注入）。
- * 视口 24×24 → 位图 px，整体缩放；描边/填充按 VectorPath 的 brush 类型判定。
+ * 经 CyberIcons.pathsFor 取得路径源数据（SVG path 字符串），用 AndroidX PathParser
+ * 转 android.graphics.Path，再用 Canvas 绘制为白色掩码（颜色由 shader 注入）。
+ * 不依赖任何 Compose 私有/内部 API（toPixelMap / VectorGroup.children 均不可用）。
+ * 视口 24×24 → 位图 px 整体缩放；描边/填充按 PathSpec 类型判定。
  */
 private fun buildVectorIconBitmap(
     imageVector: ImageVector,
     density: Density,
     sizeDp: Dp
 ): Bitmap? {
+    val specs = CyberIcons.pathsFor(imageVector) ?: return null
     val base = with(density) { sizeDp.toPx() }.toInt().coerceAtLeast(1)
     val ss = 2
     val px = base * ss
     val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
     val c = android.graphics.Canvas(bmp)
     c.drawColor(android.graphics.Color.TRANSPARENT, android.graphics.PorterDuff.Mode.CLEAR)
-    val scale = if (imageVector.viewportWidth > 0f) px / imageVector.viewportWidth else 1f
+    val scale = px / 24f   // CyberIcons 视口恒为 24×24
     c.save()
     c.scale(scale, scale)
     val paint = Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
@@ -727,17 +728,14 @@ private fun buildVectorIconBitmap(
         strokeJoin = android.graphics.Paint.Join.ROUND
     }
     return try {
-        for (node in imageVector.root.children) {
-            if (node !is VectorPath) continue
-            val path = android.graphics.Path()
-            buildPathFromNodes(node.pathData, path)
-            if (node.fill != null) {
+        for (spec in specs) {
+            val path = PathParser.createPathFromPathData(spec.data)
+            if (spec.fill) {
                 paint.style = android.graphics.Paint.Style.FILL
                 c.drawPath(path, paint)
-            }
-            if (node.stroke != null) {
+            } else {
                 paint.style = android.graphics.Paint.Style.STROKE
-                paint.strokeWidth = node.strokeLineWidth
+                paint.strokeWidth = spec.width
                 c.drawPath(path, paint)
             }
         }
@@ -746,29 +744,5 @@ private fun buildVectorIconBitmap(
         null
     } finally {
         c.restore()
-    }
-}
-
-/**
- * 把 Compose PathNode 列表（与 SVG path 等价）转为 android.graphics.Path。
- * CyberIcons 自绘图标仅使用 M/L/Z（含相对变体）指令，此处覆盖这些及 H/V 直指令；
- * 曲线/圆弧等未使用指令遇到直接跳过，不影响掩码主体。
- */
-private fun buildPathFromNodes(nodes: List<PathNode>, path: android.graphics.Path) {
-    var cx = 0f; var cy = 0f
-    var startX = 0f; var startY = 0f
-    for (n in nodes) {
-        when (n) {
-            is PathNode.MoveTo -> { cx = n.x; cy = n.y; path.moveTo(cx, cy); startX = cx; startY = cy }
-            is PathNode.RelativeMoveTo -> { cx += n.dx; cy += n.dy; path.moveTo(cx, cy); startX = cx; startY = cy }
-            is PathNode.LineTo -> { cx = n.x; cy = n.y; path.lineTo(cx, cy) }
-            is PathNode.RelativeLineTo -> { cx += n.dx; cy += n.dy; path.lineTo(cx, cy) }
-            is PathNode.HorizontalTo -> { cx = n.x; path.lineTo(cx, cy) }
-            is PathNode.RelativeHorizontalTo -> { cx += n.dx; path.lineTo(cx, cy) }
-            is PathNode.VerticalTo -> { cy = n.y; path.lineTo(cx, cy) }
-            is PathNode.RelativeVerticalTo -> { cy += n.dy; path.lineTo(cx, cy) }
-            is PathNode.Close -> { path.close(); cx = startX; cy = startY }
-            else -> { /* 曲线/圆弧等未使用指令：跳过，CyberIcons 仅用 M/L/Z */ }
-        }
     }
 }

@@ -24,31 +24,58 @@ import androidx.compose.ui.unit.dp
  */
 object CyberIcons {
 
-    private fun cyberIcon(name: String, block: ImageVector.Builder.() -> Unit): ImageVector =
-        ImageVector.Builder(
+    /** 单条路径的源数据（SVG path 字符串 + 描边/填充 + 线宽），供 HDR 栅格化复用。 */
+    internal data class PathSpec(val data: String, val fill: Boolean, val width: Float)
+
+    /** ImageVector 实例 → 路径数据列表（构建时登记，HDR 栅格化读取，零反射/零私有 API）。 */
+    private val registry = mutableMapOf<ImageVector, List<PathSpec>>()
+
+    /** 暴露自绘图标的路径数据，供 hdrVectorIconPatch 栅格化为 HDR 掩码；无对应则返回 null。 */
+    fun pathsFor(vector: ImageVector): List<PathSpec>? = registry[vector]
+
+    /**
+     * 构建辅助：在 ImageVector.Builder 之上捕获每条路径的源数据（data/fill/width），
+     * 同时照常 addPath。block 仍只写 strokePath/fillPath，调用方无感。
+     */
+    private class IconBuilder(
+        private val builder: ImageVector.Builder,
+        private val specs: MutableList<PathSpec>
+    ) {
+        fun strokePath(data: String, width: Float = 1.8f) {
+            specs.add(PathSpec(data, false, width))
+            builder.addPath(
+                pathData = addPathNodes(data),
+                stroke = SolidColor(Color.White),
+                strokeLineWidth = width,
+                strokeLineCap = StrokeCap.Round,
+                strokeLineJoin = StrokeJoin.Round,
+            )
+        }
+
+        fun fillPath(data: String) {
+            specs.add(PathSpec(data, true, 0f))
+            builder.addPath(
+                pathData = addPathNodes(data),
+                fill = SolidColor(Color.White),
+            )
+        }
+    }
+
+    private fun cyberIcon(name: String, block: IconBuilder.() -> Unit): ImageVector {
+        val specs = mutableListOf<PathSpec>()
+        val builder = ImageVector.Builder(
             name = name,
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
             viewportWidth = 24f,
             viewportHeight = 24f,
-        ).apply(block).build()
-
-    private fun ImageVector.Builder.strokePath(data: String, width: Float = 1.8f) {
-        addPath(
-            pathData = addPathNodes(data),
-            stroke = SolidColor(Color.White),
-            strokeLineWidth = width,
-            strokeLineCap = StrokeCap.Round,
-            strokeLineJoin = StrokeJoin.Round,
         )
+        IconBuilder(builder, specs).block()
+        val v = builder.build()
+        registry[v] = specs
+        return v
     }
 
-    private fun ImageVector.Builder.fillPath(data: String) {
-        addPath(
-            pathData = addPathNodes(data),
-            fill = SolidColor(Color.White),
-        )
-    }
 
     /** 悬浮窗 — 田字四格窗 (替代 Icons.Filled.Window) */
     val Window: ImageVector by lazy {
