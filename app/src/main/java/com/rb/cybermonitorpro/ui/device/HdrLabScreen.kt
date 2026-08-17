@@ -45,8 +45,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import com.rb.cybermonitorpro.AppSettings
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.ui.components.CyberIcons
+import com.rb.cybermonitorpro.ui.components.CyberJoystickSwitch
+import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.theme.CyberCardEnd
 import com.rb.cybermonitorpro.ui.theme.CyberCardStart
@@ -55,6 +58,7 @@ import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
+import com.rb.cybermonitorpro.ui.theme.TextPrimary
 import com.rb.cybermonitorpro.ui.theme.TextSecondary
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
 import kotlinx.coroutines.delay
@@ -389,6 +393,11 @@ fun HdrLabScreen(onBack: () -> Unit = {}) {
                 }
             }
 
+            // ═══════ TurboXDR 局部 HDR 控制（与设置页同款：边测边调）═══════
+            // 强度滑条同时映射到 HdrLumeSurfaceView.setDesiredHdrHeadroom(1.0..8.0) 控制夜光条亮度；
+            // 此处提供同款控件，便于在 HDR 实验室一边验证 headroom 一边微调局部 HDR 增亮强度。
+            HdrLabTurboXdrCard()
+
             // ── 截图失真提示 ──
             Text(
                 stringResource(R.string.hdr_lab_hint_screenshot),
@@ -455,6 +464,100 @@ fun HdrLabScreen(onBack: () -> Unit = {}) {
                         stringResource(R.string.hdr_lab_fullscreen_hint),
                         fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f)
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * ★ 2026-08-16 HDR 实验室 — TurboXDR 局部 HDR 控制卡片。
+ *
+ * 与设置页 CyberNightlightTurboXdrSettingsCard 同款控件：总开关 + 强度滑条（1.0×–8.0×）。
+ * 目的：在 HDR 实验室边验证 headroom 边微调局部 HDR 增亮强度，即时生效（写 AppSettings + 同步 CyberNightlightSwitch）。
+ * 强度滑条同时映射到 HdrLumeSurfaceView.setDesiredHdrHeadroom 控制顶部夜光条亮度。
+ */
+@Composable
+private fun HdrLabTurboXdrCard() {
+    val ctx = LocalContext.current
+    val settings = remember { AppSettings.getInstance(ctx) }
+    var enabled by remember { mutableStateOf(CyberNightlightSwitch.enabled) }
+    var intensity by remember { mutableFloatStateOf(CyberNightlightSwitch.intensity) }
+
+    Card(
+        Modifier
+            .fillMaxWidth()
+            .cardGradientBorder(20.dp, hdrHighlight = true),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Box(Modifier.fillMaxWidth().background(HdrLabCardGradient)) {
+            Column(Modifier.padding(16.dp)) {
+                // ── 总开关行 ──
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(CyberIcons.Light, null, tint = NeonPurpleBright, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.size(8.dp))
+                        Column {
+                            Text(stringResource(R.string.settings_turboxdr), fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            Text(stringResource(R.string.settings_turboxdr_desc), fontSize = 11.sp, color = TextSecondary)
+                            Text(
+                                if (enabled) stringResource(R.string.settings_turboxdr_on)
+                                else stringResource(R.string.settings_turboxdr_off),
+                                fontSize = 11.sp, color = TextSecondary)
+                        }
+                    }
+                    CyberJoystickSwitch(
+                        checked = enabled,
+                        onCheckedChange = { v ->
+                            enabled = v
+                            settings.cyberNightlightTurboXdrEnabled = v
+                            CyberNightlightSwitch.enabled = v   // 即时生效，无需重启
+                        },
+                    )
+                }
+
+                // ── HDR 强度滑条（1.0×..8.0×，对应 setDesiredHdrHeadroom）──
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column {
+                        Text(stringResource(R.string.device_hdr_intensity), fontSize = 14.sp, color = TextPrimary)
+                        Text(stringResource(R.string.device_hdr_intensity_hint), fontSize = 11.sp, color = TextSecondary)
+                    }
+                    Text(String.format("%.1fx", intensity), fontSize = 14.sp,
+                        color = NeonPurpleBright, fontWeight = FontWeight.SemiBold)
+                }
+                Spacer(Modifier.height(4.dp))
+                Slider(
+                    value = intensity,
+                    onValueChange = { intensity = it },
+                    onValueChangeFinished = {
+                        settings.cyberNightlightTurboXdrIntensity = intensity
+                        CyberNightlightSwitch.intensity = intensity
+                    },
+                    valueRange = 1f..8f,
+                    steps = 69,  // 0.1× 步长 → (8-1)/0.1 - 1 = 69 个中间挡
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = SliderDefaults.colors(
+                        thumbColor = NeonPurpleBright,
+                        activeTrackColor = NeonPurple,
+                        inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
+                    )
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("1.0×", fontSize = 10.sp, color = NeonSteelBlue.copy(alpha = 0.7f))
+                    Text("8.0×", fontSize = 10.sp, color = NeonSteelBlue.copy(alpha = 0.7f))
+                }
+                if (!enabled) {
+                    Text(stringResource(R.string.device_hdr_intensity_off),
+                        fontSize = 11.sp, color = NeonSteelBlue.copy(alpha = 0.7f))
                 }
             }
         }

@@ -42,6 +42,7 @@ import com.rb.cybermonitorpro.ui.components.CyberIcons
 import com.rb.cybermonitorpro.ui.components.CyberJoystickSwitch
 import com.rb.cybermonitorpro.ui.effects.GlobalLightSwitch
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
+import com.rb.cybermonitorpro.ui.effects.NightlightBarSwitch
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
@@ -114,8 +115,11 @@ fun SettingsScreen(viewModel: SettingsViewModel = koinViewModel()) {
         // ═══ 全局光照 ═══
         GlobalLightSettingsCard()
 
-        // ═══ CyberNightlight TurboXDR（仿电子表夜光 / 局部 HDR 增亮）═══
+        // ═══ CyberNightlight TurboXDR（局部 HDR 增亮）═══
         CyberNightlightTurboXdrSettingsCard()
+
+        // ═══ 顶部夜光条（独立开关，与 TurboXDR 解耦）═══
+        CyberNightlightBarSettingsCard()
 
         // ═══ App 信息 ═══
         Card(
@@ -517,13 +521,11 @@ private fun HapticSettingsCard() {
 
 // ═══════ CyberNightlight TurboXDR 卡片 ═══════
 /**
- * 仿电子表夜光：局部 HDR 增亮。复用 CyberJoystickSwitch 样式；默认关闭。
- * 即时生效：写 AppSettings + 同步 CyberNightlightSwitch（渲染层消费）。
+ * TurboXDR 局部 HDR 增亮总开关：卡片描边 / 文字 / 图标 / 折线等贴片。
+ * 复用 CyberJoystickSwitch 样式；默认关闭。即时生效：写 AppSettings + 同步 CyberNightlightSwitch。
  *
- * HDR 强度滑条（用户要求放在设置页）—— 范围 1.0×..8.0×，直接映射
- * SurfaceView.setDesiredHdrHeadroom(1.0..8.0)。受设备"实际可用倍率"上限约束
- * （参考 qr.txt：Xiaomi Android 16 上 "Maximum supported: 8.0×"）。
- * 始终可拖（便于预设 8.0× 后再开开关），下方提示仅在开启时生效。
+ * HDR 强度滑条同时映射到 HdrLumeSurfaceView.setDesiredHdrHeadroom(1.0..8.0)，
+ * 控制顶部夜光条亮度；在 HDR 实验室页也提供同款滑条以便边测边调。
  */
 @Composable
 private fun CyberNightlightTurboXdrSettingsCard() {
@@ -603,6 +605,55 @@ private fun CyberNightlightTurboXdrSettingsCard() {
                 Text(stringResource(R.string.device_hdr_intensity_off),
                     fontSize = 11.sp, color = NeonSteelBlue.copy(alpha = 0.7f))
             }
+        }
+    }
+}
+
+// ═══════ 顶部夜光条独立开关卡片 ═══════
+/**
+ * 顶部夜光条（CyberNightlightHost / HdrLumeSurfaceView 全屏边缘闪光）独立开关。
+ * 与 TurboXDR 解耦：关闭夜光条不影响局部 HDR 贴片；夜光条亮度仍由 TurboXDR 强度滑块控制。
+ */
+@Composable
+private fun CyberNightlightBarSettingsCard() {
+    val ctx = LocalContext.current
+    val settings = remember { AppSettings.getInstance(ctx) }
+    var enabled by remember { mutableStateOf(NightlightBarSwitch.enabled) }
+
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = NeonPurple.copy(alpha = 0.08f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Icon(CyberIcons.Light, null, tint = NeonPurpleBright, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.size(8.dp))
+                Column {
+                    Text(stringResource(R.string.settings_nightlight_bar), fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                    Text(stringResource(R.string.settings_nightlight_bar_desc), fontSize = 11.sp, color = TextSecondary)
+                    Text(
+                        if (enabled) stringResource(R.string.settings_nightlight_bar_on)
+                        else stringResource(R.string.settings_nightlight_bar_off),
+                        fontSize = 11.sp, color = TextSecondary)
+                }
+            }
+            CyberJoystickSwitch(
+                checked = enabled,
+                onCheckedChange = { v ->
+                    enabled = v
+                    settings.cyberNightlightBarEnabled = v
+                    NightlightBarSwitch.enabled = v
+                },
+            )
         }
     }
 }

@@ -16,13 +16,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.nightlight.HdrMetricText
+import com.rb.cybermonitorpro.ui.nightlight.hdrVectorIconPatch
 import com.rb.cybermonitorpro.ui.theme.*
 
 /**
@@ -59,12 +59,21 @@ fun InfoCard(
                         .background(CyberMuted),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(icon, null, tint = iconTint, modifier = Modifier.size(22.dp))
+                    // ★ 新增(首卡矢量图标 HDR): 仅 TurboXDR 开启时由 PQ 浮层点亮图标本体
+                    Icon(icon, null, tint = iconTint, modifier = Modifier.size(22.dp)
+                        .hdrVectorIconPatch("infocard.device.icon", imageVector = icon, sizeDp = 22.dp))
                 }
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(subtitle, fontSize = 13.sp, color = TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // ★ 新增(首卡文字 HDR): 标题/副标题本体上报为 TEXT_GLYPH 贴片（SDR 文本保留，叠加真实 HDR 增亮）
+                    HdrMetricText(
+                        text = title, fontSize = 17.sp, color = TextPrimary,
+                        fontWeight = FontWeight.Bold, monospace = false, letterSpacing = 0.sp
+                    )
+                    HdrMetricText(
+                        text = subtitle, fontSize = 13.sp, color = TextSecondary,
+                        monospace = false, letterSpacing = 0.sp
+                    )
                 }
             }
         }
@@ -108,10 +117,10 @@ fun MetricCard(
                     )
                 }
                 if (subtitle.isNotBlank()) {
-                    Text(
-                        subtitle, fontSize = 12.sp,
-                        color = TextSecondary.copy(alpha = 0.7f), letterSpacing = 0.5.sp,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis
+                    // ★ 新增(两行卡底部文字 HDR): 副标题本体上报为 TEXT_GLYPH 贴片（SDR 文本保留，叠加真实 HDR 增亮）
+                    HdrMetricText(
+                        text = subtitle, fontSize = 12.sp,
+                        color = TextSecondary.copy(alpha = 0.7f), monospace = false, letterSpacing = 0.5.sp
                     )
                 }
                 chart()

@@ -94,10 +94,13 @@ class DeviceApplication : Application() {
         // 全局光照总开关 — 从 AppSettings 注入 (SP 读取, 微秒级, 主线程安全)
         GlobalLightSwitch.enabled = AppSettings.getInstance(this@DeviceApplication).globalLightEnabled
 
-        // ★ CyberNightlight TurboXDR — 从 AppSettings 注入运行期状态（仿电子表夜光 / 局部 HDR 增亮）
+        // ★ CyberNightlight TurboXDR — 从 AppSettings 注入运行期状态（局部 HDR 增亮贴片）
         val nightlightSettings = AppSettings.getInstance(this@DeviceApplication)
         CyberNightlightSwitch.enabled = nightlightSettings.cyberNightlightTurboXdrEnabled
         CyberNightlightSwitch.intensity = nightlightSettings.cyberNightlightTurboXdrIntensity
+        // 顶部夜光条独立开关（与 TurboXDR 解耦）
+        com.rb.cybermonitorpro.ui.effects.NightlightBarSwitch.enabled =
+            nightlightSettings.cyberNightlightBarEnabled
 
         // 启动阶段汇总日志异步写入（不阻塞主线程）
         startupScope.launch {

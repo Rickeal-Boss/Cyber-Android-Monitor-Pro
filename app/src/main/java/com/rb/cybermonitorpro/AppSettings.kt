@@ -61,12 +61,18 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getBoolean("global_light_enabled", true)
         set(value) = prefs.edit { putBoolean("global_light_enabled", value) }
 
-    // ── CyberNightlight TurboXDR（仿电子表夜光 / 局部 HDR 增亮）──
+    // ── CyberNightlight TurboXDR（局部 HDR 增亮：卡片描边 / 文字 / 图标 / 折线等贴片）──
     // false = 默认关闭（用户明确要求默认关），开启后由 CyberNightlightSwitch 在运行期消费。
     // 仅控制「局部 HDR 增亮」效果；低版本（<API 35）设备开关可开但渲染层静默降级（不崩、不提亮）。
     var cyberNightlightTurboXdrEnabled: Boolean
         get() = prefs.getBoolean("cyber_nightlight_turboxdr_enabled", false)
         set(value) = prefs.edit { putBoolean("cyber_nightlight_turboxdr_enabled", value) }
+
+    // ── 顶部夜光条（CyberNightlightHost / HdrLumeSurfaceView 全屏边缘闪光）──
+    // 与 TurboXDR 独立开关：仅控制仿电子表夜光条的点亮，不影响局部 HDR 贴片。
+    var cyberNightlightBarEnabled: Boolean
+        get() = prefs.getBoolean("cyber_nightlight_bar_enabled", false)
+        set(value) = prefs.edit { putBoolean("cyber_nightlight_bar_enabled", value) }
 
     // HDR 强度倍数 ∈ [1.0, 8.0] → 直接映射 SurfaceView.setDesiredHdrHeadroom(1.0..8.0)。
     // 参考 qr.txt 中 Xiaomi 24069RA21C / Android 16 真机的 "Maximum supported: 8.0×"。

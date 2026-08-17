@@ -12,12 +12,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
+import com.rb.cybermonitorpro.ui.effects.NightlightBarSwitch
 
 /**
  * CyberNightlight TurboXDR 的 Compose 宿主：把 HdrLumeSurfaceView 挂进组合树。
  *
  * 点亮真 HDR 的最终闸门 = 开关开启 && 覆盖层不可见 && 未被门控抑制：
- *  - CyberNightlightSwitch.enabled：设置页开关（默认关）。
+ *  - NightlightBarSwitch.enabled：设置页「夜光条」独立开关（默认关）。
+ *  - CyberNightlightSwitch.enabled / intensity：TurboXDR 局部 HDR 总开关与强度（供 HdrLumeSurfaceView headroom）。
  *  - hidden：设置/悬浮窗/HDR实验室/传感器详情等覆盖层打开时隐藏（避免盖在覆盖层上）。
  *  - NightlightState.suppressed：省电/发热时抑制。
  *
@@ -35,7 +37,7 @@ fun CyberNightlightHost(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val enabled = CyberNightlightSwitch.enabled
+    val enabled = NightlightBarSwitch.enabled
     val intensity = CyberNightlightSwitch.intensity
     val suppressed by NightlightState.suppressed
 

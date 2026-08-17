@@ -30,6 +30,8 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.toPixelMap
 import androidx.core.content.ContextCompat
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.theme.NeonCyan
@@ -142,6 +144,47 @@ fun Modifier.hdrTabIndicatorPatch(key: String): Modifier = composed {
                 type = HdrPatchType.TAB_INDICATOR,
                 bounds = b,
                 color0 = encodePq(NeonCyan, HDR_TAB_MULT),
+                topZone = true
+            )
+        )
+    }
+}
+
+/**
+ * 顶部 Tab 栏药丸描边 HDR 贴片上报。挂在 Tab 栏容器 Box 上（与 neonBorderGlow 同款圆角/描边）。
+ *
+ * 与 hdrCardBorderPatch 的区别：topZone=true —— 药丸位于顶部 Tab 区，
+ * 两段式渲染时绕过"顶撞裁剪"（contentClipTop 设在药丸底部，普通 content 贴片会被裁掉）。
+ * 仅当 TurboXDR 开启时上报，关闭时移除（SDR 描边保持原样）。
+ */
+fun Modifier.hdrTabBarBorderPatch(
+    key: String,
+    cornerDp: Dp = 26.dp,
+    strokeDp: Dp = 1.5.dp
+): Modifier = composed {
+    val density = LocalDensity.current
+    DisposableEffect(key) {
+        onDispose { HdrPatchRegistry.remove(key) }
+    }
+    this.onGloballyPositioned { coords ->
+        if (!CyberNightlightSwitch.enabled) {
+            HdrPatchRegistry.remove(key)
+            return@onGloballyPositioned
+        }
+        // ★ 修复(偏低): localToRoot 对齐内容根像素原点；圆角/描边与 neonBorderGlow 一致。
+        val pos = coords.localToRoot(Offset.Zero)
+        val b = android.graphics.RectF(
+            pos.x, pos.y, pos.x + coords.size.width.toFloat(), pos.y + coords.size.height.toFloat()
+        )
+        HdrPatchRegistry.upsert(
+            HdrPatch(
+                id = key,
+                type = HdrPatchType.CARD_BORDER,
+                bounds = b,
+                color0 = encodePq(NeonPurpleBright, HDR_CARD_MULT),
+                color1 = encodePq(NeonCyan, HDR_CARD_MULT),
+                cornerRadiusPx = with(density) { cornerDp.toPx() },
+                strokeWidthPx = with(density) { strokeDp.toPx() },
                 topZone = true
             )
         )
@@ -524,6 +567,66 @@ private class SkyPatchHolder {
     val activeIds = mutableSetOf<String>()
 }
 
+/**
+ * 自绘 ImageVector 图标（如 CyberIcons.Home）HDR 本体。与 hdrTabIconPatch 同机制，
+ * 但源是 ImageVector 而非 drawable 资源：用 Compose toPixelMap 把矢量栅格化为白色掩码位图，
+ * 由 PQ surface 直接画出 HDR 矢量图标。topZone=false（内容区图标）。
+ */
+fun Modifier.hdrVectorIconPatch(
+    key: String,
+    imageVector: ImageVector,
+    sizeDp: Dp = 22.dp,
+    selected: Boolean = true
+): Modifier = composed {
+    val density = LocalDensity.current
+    val enabled = CyberNightlightSwitch.enabled && selected
+
+    // 图标位图：随 imageVector 重建；卸载时回收，避免泄漏。
+    val bitmapState = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    DisposableEffect(key, imageVector) {
+        val bmp = buildVectorIconBitmap(imageVector, density, sizeDp)
+        bitmapState.value = bmp
+        onDispose { bmp?.recycle() }
+    }
+
+    val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
+
+    fun report() {
+        val bmp = bitmapState.value
+        val pos = posState.value
+        if (!enabled || bmp == null || pos == null) {
+            HdrPatchRegistry.remove(key)
+            return
+        }
+        HdrPatchRegistry.upsert(
+            HdrPatch(
+                id = key,
+                type = HdrPatchType.TEXT_GLYPH,
+                bounds = pos,
+                color0 = encodePq(NeonPurpleBright, HDR_TAB_MULT),
+                bitmap = bmp,
+                topZone = false
+            )
+        )
+    }
+
+    DisposableEffect(key) {
+        onDispose { HdrPatchRegistry.remove(key) }
+    }
+    LaunchedEffect(enabled, bitmapState.value) {
+        if (!enabled) HdrPatchRegistry.remove(key) else report()
+    }
+
+    this.onGloballyPositioned { coords ->
+        // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
+        val p = coords.localToRoot(Offset.Zero)
+        posState.value = android.graphics.RectF(
+            p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
+        )
+        report()
+    }
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // 位图掩码栅格化（文字 / 图标本体）
 // ───────────────────────────────────────────────────────────────────────────
@@ -594,4 +697,29 @@ private fun buildIconBitmap(
     try { d.setTint(0xFFFFFFFF.toInt()) } catch (_: Throwable) { /* 旧 API 忽略 */ }
     d.draw(c)
     return bmp
+}
+
+/**
+ * 把自绘 ImageVector（如 CyberIcons.*）栅格化为白色掩码位图（2× 超采样）。
+ * 用 Compose toPixelMap 在离屏 ImageBitmap 上渲染矢量，再拷入 android.graphics.Bitmap。
+ * CyberIcons 所有路径均以 SolidColor(Color.White) 描边/填充 → 渲染结果即白色掩码，颜色由 shader 注入。
+ */
+private fun buildVectorIconBitmap(
+    imageVector: ImageVector,
+    density: Density,
+    sizeDp: Dp
+): Bitmap? {
+    val base = with(density) { sizeDp.toPx() }.toInt().coerceAtLeast(1)
+    val ss = 2
+    val px = base * ss
+    return try {
+        val pm = imageVector.toPixelMap(px, px, density)
+        val bmp = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888)
+        val buf = pm.buffer
+        buf.rewind()
+        bmp.copyPixelsFromBuffer(buf)
+        bmp
+    } catch (_: Throwable) {
+        null
+    }
 }

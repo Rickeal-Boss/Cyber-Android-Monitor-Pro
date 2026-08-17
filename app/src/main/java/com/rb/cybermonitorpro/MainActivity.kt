@@ -73,6 +73,7 @@ import com.rb.cybermonitorpro.ui.nightlight.CyberNightlightHost
 import com.rb.cybermonitorpro.ui.nightlight.HdrOverlayState
 import com.rb.cybermonitorpro.ui.nightlight.HdrPatchHost
 import com.rb.cybermonitorpro.ui.nightlight.hdrTabIndicatorPatch
+import com.rb.cybermonitorpro.ui.nightlight.hdrTabBarBorderPatch
 import com.rb.cybermonitorpro.ui.nightlight.hdrTabIconPatch
 import com.rb.cybermonitorpro.ui.nightlight.HdrMetricText
 import com.rb.cybermonitorpro.ui.nightlight.HdrPatchRegistry
@@ -494,6 +495,8 @@ private fun MainTabs(
                 .height(64.dp)
                 .revealLight(radius = 200.dp, intensity = 0.15f)
                 .neonBorderGlow()
+                // ★ 新增(Tab 栏描边 HDR): 与 neonBorderGlow 同款圆角/描边，仅 TurboXDR 开启时由 PQ 浮层点亮（topZone 绕过顶撞裁剪）
+                .hdrTabBarBorderPatch("topbar.border")
                 // ★ 修复(顶撞): 记录药丸头部+Tab 行底部（根坐标），供渲染器减去 surfaceRoot 后裁剪内容贴片
                 .onGloballyPositioned { coords ->
                     val rootY = coords.localToRoot(Offset.Zero).y
