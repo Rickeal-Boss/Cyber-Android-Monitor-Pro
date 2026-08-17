@@ -7,6 +7,7 @@ import android.opengl.GLSurfaceView
 import android.os.Build
 import android.util.AttributeSet
 import android.view.Display
+import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel

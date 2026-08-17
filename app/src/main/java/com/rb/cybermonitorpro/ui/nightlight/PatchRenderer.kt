@@ -127,7 +127,7 @@ class PatchRenderer(
      *  防止旧纹理 id 在 context 丢失后变成悬空引用 → GL 错误积累 → 闪退。
      */
     private fun clearGpuCaches() {
-        for ((_, tex) in bitmapTexCache) runCatching { GLES20.glDeleteTextures(1, intArrayOf(tex), 0) }
+        for ((_, pair) in bitmapTexCache) runCatching { GLES20.glDeleteTextures(1, intArrayOf(pair.second), 0) }
         for ((_, tex) in glyphCache) runCatching { GLES20.glDeleteTextures(1, intArrayOf(tex), 0) }
         bitmapTexCache.clear()
         glyphCache.clear()
