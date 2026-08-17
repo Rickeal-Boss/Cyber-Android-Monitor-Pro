@@ -9,6 +9,7 @@ import android.opengl.GLES20
 import android.opengl.GLUtils
 import android.opengl.GLSurfaceView
 import android.view.Display
+import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -64,6 +65,15 @@ class PatchRenderer(
     fun setEnabled(v: Boolean) { _enabled = v }
     fun isActive(): Boolean = _enabled
     fun setPatches(list: List<HdrPatch>) { patches = list }
+
+    /**
+     * 当前 TurboXDR 强度（1.0×–8.0×），由设置页 / HDR 实验室滑块实时写入 [CyberNightlightSwitch.intensity]。
+     * 渲染器每帧读取 → 滑块拖动即时反映到局部 HDR 贴片亮度（无需重编码/重组）。
+     */
+    private val turboIntensity: Float get() = CyberNightlightSwitch.intensity
+
+    /** 线性光（相对 SDR 白）→ ST 2084 PQ 码值，并叠加当前 TurboXDR 强度倍率。 */
+    private fun pqEnc(lin: Float): Float = pqOETF(lin * turboIntensity)
 
     override fun onSurfaceCreated(gl: javax.microedition.khronos.opengles.GL10?, config: javax.microedition.khronos.egl.EGLConfig?) {
         buildProgram()
@@ -153,8 +163,8 @@ class PatchRenderer(
 
     private fun drawSolid(p: HdrPatch) {
         bindQuad(rectVerts(p.bounds))
-        GLES20.glUniform4f(uColor, p.color0[0], p.color0[1], p.color0[2], 1f)
-        GLES20.glUniform4f(uColor1, p.color0[0], p.color0[1], p.color0[2], 1f)
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+        GLES20.glUniform4f(uColor1, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
         if (p.cornerRadiusPx > 0f) {
             // 圆角实心填充（进度条等）：复用 SDF round box，填充内部而非描边
             GLES20.glUniform1i(uMode, 3)
@@ -169,8 +179,8 @@ class PatchRenderer(
     private fun drawSdfBorder(p: HdrPatch) {
         val b = p.bounds
         bindQuad(rectVerts(b))
-        GLES20.glUniform4f(uColor, p.color0[0], p.color0[1], p.color0[2], 1f)
-        GLES20.glUniform4f(uColor1, p.color1[0], p.color1[1], p.color1[2], 1f)
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+        GLES20.glUniform4f(uColor1, pqEnc(p.color1[0]), pqEnc(p.color1[1]), pqEnc(p.color1[2]), 1f)
         GLES20.glUniform1i(uMode, 1)
         GLES20.glUniform4f(uRect, b.left, b.top, b.width(), b.height())
         GLES20.glUniform1f(uCorner, p.cornerRadiusPx)
@@ -182,7 +192,7 @@ class PatchRenderer(
         // 优先使用 Compose 侧精确栅格化的位图掩码（文字/图标本体）；否则回退现场字形生成。
         val texId = if (p.bitmap != null) ensureBitmapTex(p) else ensureGlyph(p) ?: return
         bindQuad(rectVerts(p.bounds))
-        GLES20.glUniform4f(uColor, p.color0[0], p.color0[1], p.color0[2], 1f)
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
         GLES20.glUniform1i(uMode, 2)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, texId)
         GLES20.glUniform4f(uRect, p.bounds.left, p.bounds.top, p.bounds.width(), p.bounds.height())
@@ -210,8 +220,8 @@ class PatchRenderer(
     private fun drawGrid(p: HdrPatch) {
         val pts = p.points ?: return
         bindQuad(pts)
-        GLES20.glUniform4f(uColor, p.color0[0], p.color0[1], p.color0[2], 1f)
-        GLES20.glUniform4f(uColor1, p.color0[0], p.color0[1], p.color0[2], 1f)
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+        GLES20.glUniform4f(uColor1, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
         GLES20.glUniform1i(uMode, 0)
         GLES20.glLineWidth(1f)
         GLES20.glDrawArrays(GLES20.GL_LINES, 0, pts.size / 2)
@@ -221,15 +231,15 @@ class PatchRenderer(
         val geom = lineGeom(p)
         if (geom.lineVerts.isEmpty()) return
         bindQuad(geom.lineVerts)
-        GLES20.glUniform4f(uColor, p.color0[0], p.color0[1], p.color0[2], 1f)
-        GLES20.glUniform4f(uColor1, p.color0[0], p.color0[1], p.color0[2], 1f)
+        GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+        GLES20.glUniform4f(uColor1, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
         GLES20.glUniform1i(uMode, 0)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, geom.lineVerts.size / 2)
         // 尾点（实心圆 via SDF 全填充）
         if (geom.dotR > 0f) {
             bindQuad(rectVerts(geom.dotBounds))
-            GLES20.glUniform4f(uColor, p.color0[0], p.color0[1], p.color0[2], 1f)
-            GLES20.glUniform4f(uColor1, p.color0[0], p.color0[1], p.color0[2], 1f)
+            GLES20.glUniform4f(uColor, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
+            GLES20.glUniform4f(uColor1, pqEnc(p.color0[0]), pqEnc(p.color0[1]), pqEnc(p.color0[2]), 1f)
             GLES20.glUniform1i(uMode, 1)
             GLES20.glUniform4f(uRect, geom.dotBounds.left, geom.dotBounds.top, geom.dotBounds.width(), geom.dotBounds.height())
             GLES20.glUniform1f(uCorner, geom.dotR)

@@ -75,13 +75,20 @@ fun pqOETF(L: Float): Float {
     return ((c1 + c2 * Lm) / (1f + c3 * Lm)).toDouble().pow(m2).toFloat()
 }
 
-/** 把 sRGB 颜色按倍率编码成 PQ 码值三元组（0..1）。 */
+/**
+ * 把 sRGB 颜色按倍率换算成**线性光**三元组（相对 SDR 白=1.0，可 >1 表示超亮）。
+ *
+ * 注意：本函数**不再**做 ST 2084 PQ OETF —— PQ 编码改由 [PatchRenderer] 在每帧绘制时、
+ * 按当前 TurboXDR 强度 [CyberNightlightSwitch.intensity] 统一施加（见 pqEnc）。
+ * 这样滑块调节 intensity 能实时改变局部 HDR 贴片亮度，且亮度倍率始终处于线性光域，
+ * 与原有各 HDR_*_MULT 标定一致。
+ */
 fun encodePq(color: Color, mult: Float): FloatArray {
     val s = mult * SDR_WHITE_L
     return floatArrayOf(
-        pqOETF(srgbToLinear(color.red) * s),
-        pqOETF(srgbToLinear(color.green) * s),
-        pqOETF(srgbToLinear(color.blue) * s)
+        srgbToLinear(color.red) * s,
+        srgbToLinear(color.green) * s,
+        srgbToLinear(color.blue) * s
     )
 }
 

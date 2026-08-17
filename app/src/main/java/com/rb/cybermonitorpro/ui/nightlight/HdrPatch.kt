@@ -34,9 +34,11 @@ object HdrOverlayState {
  *
  * @param bounds  窗口坐标像素（onGloballyPositioned → positionInWindow）。surface 全屏覆盖根 Box，
  *                 故窗口坐标 == surface 像素坐标。
- * @param color0/color1 线性光经 ST 2084 PQ OETF 编码后的码值（0..1，>~0.02 即超 SDR 白场）。
- *                 单色时 color1 缺省等于 color0。由 [encodePq] 在 Compose 侧预先编码。
- * @param intensity 亮度倍率（相对 SDR 白），仅用于诊断/微调。
+ * @param color0/color1 **线性光**（相对 SDR 白=1.0，可>1 表示超亮），由 [encodePq] 产出；
+ *                 真正的 ST 2084 PQ OETF 由 [PatchRenderer] 在每帧绘制时按当前 TurboXDR
+ *                 强度 [CyberNightlightSwitch.intensity] 统一施加（见 pqEnc），实现滑块实时调亮。
+ *                 单色时 color1 缺省等于 color0。
+ * @param intensity 亮度倍率（相对 SDR 白），仅用于诊断/微调（实际亮度倍率由 color0 的 mult 与 TurboXDR intensity 共同决定）。
  */
 data class HdrPatch(
     val id: String,
