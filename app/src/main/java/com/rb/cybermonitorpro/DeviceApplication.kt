@@ -49,8 +49,8 @@ class DeviceApplication : Application() {
         private const val PREF_TURBOXDR_CRASH_STREAK = "turboxdr_crash_streak"
         // 触发自动关闭的连续崩溃阈值
         private const val CRASH_STREAK_THRESHOLD = 2
-        // 距上次崩溃 30s 内再次启动也算崩溃循环候选
-        private const val CRASH_RECENT_MS = 30_000L
+        // 距上次崩溃 5min 内再次启动也算崩溃循环候选（原 30s 过短，正常测试场景易被误杀）
+        private const val CRASH_RECENT_MS = 300_000L
     }
 
     val deviceRepository: DeviceRepository by lazy {
@@ -127,10 +127,10 @@ class DeviceApplication : Application() {
             writeStartupStage(startTime)
         }
 
-        // ★ 崩溃盾：本次 onCreate 干净跑完 → 清除连续崩溃计数。
-        //   无论本次是否因崩溃循环被强制关闭都清零：下次若仍崩，handler 会重新 +1，
-        //   由 recentCrash(30s)/streak≥2 再次触发；避免永久压制用户手动重开意图。
+        // ★ 崩溃盾：本次 onCreate 干净跑完 → 清除连续崩溃计数，并删除 crash.log，
+        //   确保下次启动的 recentCrash 只反映真正的新崩溃（与清零对称，治 pre13-A 误杀）。
         prefs.edit { putInt(PREF_TURBOXDR_CRASH_STREAK, 0) }
+        runCatching { File(filesDir, "crash.log").delete() }
 
         Log.i(TAG, "▶ STARTUP: onCreate done | ${System.currentTimeMillis() - startTime}ms")
     }
@@ -175,12 +175,17 @@ class DeviceApplication : Application() {
     private fun maybeAutoDisableTurboXdrOnCrashLoop(s: AppSettings): Boolean {
         val streak = prefs.getInt(PREF_TURBOXDR_CRASH_STREAK, 0)
         val crashLog = File(filesDir, "crash.log")
+        // ★ 仅「HDR 相关崩溃」才计入 recentCrash：避免任何无关崩溃(网络/IO/其他模块)误杀 HDR。
         val recentCrash = crashLog.exists() &&
-            (System.currentTimeMillis() - crashLog.lastModified()) < CRASH_RECENT_MS
+            (System.currentTimeMillis() - crashLog.lastModified()) < CRASH_RECENT_MS &&
+            isCrashHdrRelated(crashLog)
         val inLoop = streak >= CRASH_STREAK_THRESHOLD || recentCrash
 
         val wasOn = s.cyberNightlightTurboXdrEnabled || s.cyberNightlightBarEnabled
         if (!inLoop || !wasOn) return false
+        // ★ 即便命中循环，若本次崩溃栈与 HDR 无关(不含 nightlight/PatchRenderer/GLSurfaceView 等)，
+        //   也不强制关闭 HDR —— 只治「真·HDR 崩溃循环」，不误伤（治 pre12 复查 F1）。
+        if (!isCrashHdrRelated(crashLog)) return false
 
         // 强制关闭，写回 SP；cyberNightlightTurboXdrIntensity 保留（用户可手动重开时沿用）
         s.cyberNightlightTurboXdrEnabled = false
@@ -190,13 +195,32 @@ class DeviceApplication : Application() {
             runCatching {
                 Toast.makeText(
                     this@DeviceApplication,
-                    "已自动关闭 TurboXDR（检测到反复崩溃，可在设置中手动重新开启）",
+                    "已自动关闭 TurboXDR（检测到 HDR 相关反复崩溃，可在设置中手动重新开启）",
                     Toast.LENGTH_LONG
                 ).show()
             }
         }
         Log.w(TAG, "★ 崩溃盾触发：强制关闭 TurboXDR/夜光条 | streak=$streak recentCrash=$recentCrash")
+        // ★ 自动关闭成功后删除 crash.log：避免 5min 窗口内反复测试被 recentCrash 反复触发（治 pre13-A）。
+        runCatching { crashLog.delete() }
         return true
+    }
+
+    /**
+     * ★ 崩溃盾（pre13 增强）：判断最近一次崩溃是否与局部 HDR 相关。
+     * 读取 [crash.log] 文本，若栈中含 nightlight / PatchRenderer / HdrPatch / GLSurfaceView /
+     * GLThread / Lume 等关键字，则视为 HDR 相关崩溃，才允许触发自动关闭；
+     * 否则视为无关崩溃（网络/IO/其他模块），不误杀 HDR（治 pre12 复查 F1）。
+     * crash.log 不存在或读取失败 → 返回 false（如 native 崩溃不会写 Java crash.log，不误触发）。
+     */
+    private fun isCrashHdrRelated(crashLog: File): Boolean {
+        return runCatching {
+            val lower = crashLog.readText().lowercase()
+            lower.contains("nightlight") || lower.contains("patchrenderer") ||
+                lower.contains("hdrpatch") || lower.contains("hdrlu") ||
+                lower.contains("glsurfaceview") || lower.contains("glthread") ||
+                lower.contains("lumerenderer") || lower.contains("hdr")
+        }.getOrDefault(false)
     }
 
     /**

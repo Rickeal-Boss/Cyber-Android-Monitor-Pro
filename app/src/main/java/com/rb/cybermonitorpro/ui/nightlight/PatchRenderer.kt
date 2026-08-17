@@ -52,11 +52,24 @@ class PatchRenderer(
     private var surfaceW = 1
     private var surfaceH = 1
 
-    // 字形纹理缓存：key = text|sizePx
-    private val glyphCache = LinkedHashMap<String, Int>()
-    // 位图掩码纹理缓存（文字/图标本体）：key = patch.id → (源 Bitmap 引用, GL 纹理 id)
-    // 用 Bitmap 引用判等，文本/图标变化时自动重传并删旧纹理，避免泄漏。
-    private val bitmapTexCache = HashMap<String, Pair<Bitmap, Int>>()
+    // 字形纹理缓存：key = text|sizePx。★ pre13-R1：LRU 上限 64，淘汰时删 GL 纹理，
+    // 避免监控数字每秒刷新生成新字形 → GL 内存无限增长 → 驱动 reset/OOM → 闪退。
+    private val GLYPH_CACHE_MAX = 64
+    private val glyphCache = object : LinkedHashMap<String, Int>(GLYPH_CACHE_MAX, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>): Boolean {
+            if (size > GLYPH_CACHE_MAX) {
+                runCatching { GLES20.glDeleteTextures(1, intArrayOf(eldest.value), 0) }
+                return true
+            }
+            return false
+        }
+    }
+    // 位图掩码纹理缓存（文字/图标本体）：key = patch.id → (源 Bitmap, 上传副本, GL 纹理 id)
+    // ★ pre13-R3：上传副本 copy 而非源 Bitmap，使 GL 纹理与 Compose 可能 recycle 的源解耦，
+    //   避免 DisposableEffect.onDispose 回收源时恰逢 GL 线程 texImage2D → IllegalStateException。
+    // 用源 Bitmap 引用判等，文本/图标变化时自动重传并删旧纹理 + 回收副本，避免泄漏。
+    private data class BitmapTex(val original: Bitmap, val copy: Bitmap, val tex: Int)
+    private val bitmapTexCache = HashMap<String, BitmapTex>()
     // 折线几何缓存：key = patch.id → (源 points 引用, 几何)
     private val lineCache = HashMap<String, Pair<FloatArray, LineGeom>>()
     // ★ 现象A-3：顶点 FloatBuffer 缓存（按 patch.id），避免每帧 allocateDirect（治 GC 风暴）
@@ -72,19 +85,6 @@ class PatchRenderer(
     fun setEnabled(v: Boolean) { _enabled = v }
     fun isActive(): Boolean = _enabled
     fun setPatches(list: List<HdrPatch>) { patches = list }
-
-    /**
-     * ★ 现象A-2：surface 销毁（宿主 onDetachedFromWindow，UI 线程）时调用。
-     *   仅清空 CPU 侧缓存 map —— 不在此处调 glDeleteTextures（GL 调用必须走 GL 线程，
-     *   且 EGL context 即将销毁，驱动会自动回收纹理）。真正的 GL 纹理删除在 GL 线程的
-     *   [clearGpuCaches]（onSurfaceCreated/onSurfaceChanged）中完成，避免跨线程 GL 竞态。
-     */
-    fun releaseGpuResources() {
-        bitmapTexCache.clear()
-        glyphCache.clear()
-        lineCache.clear()
-        quadBufCache.clear()
-    }
 
     /**
      * 当前 TurboXDR 强度（1.0×–8.0×），由设置页 / HDR 实验室滑块实时写入 [CyberNightlightSwitch.intensity]。
@@ -116,8 +116,9 @@ class PatchRenderer(
     override fun onSurfaceChanged(gl: javax.microedition.khronos.opengles.GL10?, w: Int, h: Int) {
         surfaceW = w
         surfaceH = h
-        // ★ 现象A-2：surface 尺寸变化（旋转/分屏/窗口化）同样重建了帧缓冲，清缓存保一致。
-        clearGpuCaches()
+        // ★ pre13-F：尺寸变化(旋转/分屏/窗口化)不意味 EGL context 丢失
+        //   (preserveEGLContextOnPause=true 下 context 持久)，纹理仍有效，不再全量删纹理重建，
+        //   避免每次尺寸微变触发全量重传的卡顿尖峰与空帧（pre12 复查 R4）。
     }
 
     /**
@@ -126,8 +127,11 @@ class PatchRenderer(
      *  在 onSurfaceCreated / onSurfaceChanged（context 重建）以及 surface 销毁时调用，
      *  防止旧纹理 id 在 context 丢失后变成悬空引用 → GL 错误积累 → 闪退。
      */
-    private fun clearGpuCaches() {
-        for ((_, pair) in bitmapTexCache) runCatching { GLES20.glDeleteTextures(1, intArrayOf(pair.second), 0) }
+    internal fun clearGpuCaches() {
+        for ((_, e) in bitmapTexCache) {
+            runCatching { GLES20.glDeleteTextures(1, intArrayOf(e.tex), 0) }
+            runCatching { e.copy.recycle() }
+        }
         for ((_, tex) in glyphCache) runCatching { GLES20.glDeleteTextures(1, intArrayOf(tex), 0) }
         bitmapTexCache.clear()
         glyphCache.clear()
@@ -210,7 +214,8 @@ class PatchRenderer(
         while (bit.hasNext()) {
             val e = bit.next()
             if (e.key !in liveIds) {
-                GLES20.glDeleteTextures(1, intArrayOf(e.value.second), 0)
+                GLES20.glDeleteTextures(1, intArrayOf(e.value.tex), 0)
+                runCatching { e.value.copy.recycle() }
                 bit.remove()
             }
         }
@@ -260,8 +265,14 @@ class PatchRenderer(
     private fun ensureBitmapTex(p: HdrPatch): Int {
         val bmp = p.bitmap!!
         val cached = bitmapTexCache[p.id]
-        if (cached != null && cached.first === bmp) return cached.second
-        if (cached != null) GLES20.glDeleteTextures(1, intArrayOf(cached.second), 0)
+        if (cached != null && cached.original === bmp) return cached.tex
+        // ★ pre13-R3：上传副本，与 Compose 生命周期解耦（源可能被 onDispose recycle，
+        //   否则主线程 recycle 的实例恰是 GL 线程即将 texImage2D 的实例 → IllegalStateException）。
+        val copy = bmp.copy(Bitmap.Config.ARGB_8888, false)
+        if (cached != null) {
+            GLES20.glDeleteTextures(1, intArrayOf(cached.tex), 0)
+            runCatching { cached.copy.recycle() }
+        }
         val tex = IntArray(1)
         GLES20.glGenTextures(1, tex, 0)
         GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, tex[0])
@@ -269,8 +280,8 @@ class PatchRenderer(
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_MAG_FILTER, GLES20.GL_LINEAR)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
-        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, bmp, 0)
-        bitmapTexCache[p.id] = bmp to tex[0]
+        GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, copy, 0)
+        bitmapTexCache[p.id] = BitmapTex(bmp, copy, tex[0])
         return tex[0]
     }
 

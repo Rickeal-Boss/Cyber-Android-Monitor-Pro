@@ -68,8 +68,10 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
         renderMode = RENDERMODE_WHEN_DIRTY
         preserveEGLContextOnPause = true
 
-        // 浮层盖在 SDR UI 之上但不拦截触摸
-        setZOrderOnTop(true)
+        // ★ pre13-P0-B：Lume 层降为 mediaOverlay（位于 SDR UI 之上、但在 Patch 的 onTop 之下），
+        //   避免与 Patch 层两个 setZOrderOnTop(true) 的 10-bit PQ surface 争抢 HDR overlay 平面
+        //   （上限通常为 1）→ SurfaceFlinger native crash。Lume 仅边缘闪光，无需盖在最顶层。
+        setZOrderMediaOverlay(true)
         isClickable = false
     }
 

@@ -81,7 +81,10 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
         registryJob = scope.launch {
             HdrPatchRegistry.flow.collect { list ->
                 renderer.setPatches(list)
-                if (renderer.isActive()) requestRender()
+                // ★ pre13-D：无条件 requestRender。onDrawFrame 内部已有 active 门控会 early-return，
+                //   去掉 isActive 判断可避免「setActive 的 requestRender 早于首帧注册表数据到达」时
+                //   停在空透明帧 → HDR 层偶发不显示（治 pre13-D）。
+                requestRender()
             }
         }
     }
@@ -118,16 +121,21 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
      */
     fun setIntensity(v: Float) {
         val clamped = v.coerceIn(1.0f, 8.0f)
+        // ★ pre13-E：headroom 仅在 API≥35 生效，但无论 API 高低，active 时都需 requestRender 一帧，
+        //   让 PatchRenderer.pqEnc 用新 intensity 重算贴片亮度（API<35 原因 requestRender 被门控而空操作）。
         if (Build.VERSION.SDK_INT >= 35 && renderer.isActive()) {
             runCatching { setDesiredHdrHeadroom(clamped) }
-            requestRender() // 触发一帧重绘，应用新强度
         }
+        if (renderer.isActive()) requestRender()
     }
 
     override fun onDetachedFromWindow() {
         if (Build.VERSION.SDK_INT >= 35) runCatching { setDesiredHdrHeadroom(1f) }
-        // ★ 现象A-2：删除全部 GL 纹理 + 清空 CPU 侧缓存（EGL context 销毁前）
-        renderer.releaseGpuResources()
+        // ★ pre13-C：在 GL 线程删除 GL 纹理 + 清空缓存（queueEvent 串行于 onDrawFrame），
+        //   既真删纹理治泄漏（原 releaseGpuResources 只清 CPU HashMap，preserveEGLContextOnPause
+        //   下 onSurfaceCreated 不回调 → 纹理永久泄漏 → 耗尽 GL → native crash），
+        //   又避免 UI 线程 clear 与 GL 线程并发改 HashMap 的竞态（pre12 复查 R2）。
+        runCatching { queueEvent { renderer.clearGpuCaches() } }
         detachRegistry()
         super.onDetachedFromWindow()
     }
