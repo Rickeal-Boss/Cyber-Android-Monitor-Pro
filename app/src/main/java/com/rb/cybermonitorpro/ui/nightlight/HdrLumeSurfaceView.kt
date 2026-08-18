@@ -54,6 +54,9 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
 
     @Volatile private var active: Boolean = false
 
+    /** ★ pre14-G4：翻页门控——期间抑制闪光，到位后由 Host 恢复并播一次。 */
+    @Volatile private var flashGated = false
+
     /** 当前 HDR 强度倍数 ∈ [1.0, 8.0]（来自 slider）；toggle 关闭时强制 1.0。 */
     @Volatile private var intensityMultiplier: Float = 1.0f
 
@@ -112,7 +115,7 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
      * 仅在 active=true 时生效；空闲态只是丢弃。闪光播完自动切回 RENDERMODE_WHEN_DIRTY 节能。
      */
     fun fireFlash() {
-        if (!active) return
+        if (!active || flashGated) return  // ★ pre14-G4：翻页门控期间抑制闪光
         lumeRenderer.fireFlash()
         renderMode = RENDERMODE_CONTINUOUSLY
         // 闪光播完后切回节能模式（PQ surface 仍保留，headroom 持续作用于 UI）
@@ -122,6 +125,21 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
                 renderMode = RENDERMODE_WHEN_DIRTY
             }
         }, lumeRenderer.flashDurationMs + 50L)
+    }
+
+    /**
+     * ★ pre14-G4：翻页门控。true 时抑制闪光（丢弃后续 fireFlash + 停止当前闪光），
+     * 降低翻页期间夜光条 surface 的持续合成负载（与 Patch 层联动治双 surface 并发）。
+     */
+    fun setFlashGated(gated: Boolean) {
+        flashGated = gated
+        if (gated) {
+            // 停止当前正在播放的闪光并清空重排回调，切回节能模式
+            mainHandler.removeCallbacksAndMessages(FLASH_END_TOKEN)
+            lumeRenderer.stopFlash()
+            renderMode = RENDERMODE_WHEN_DIRTY
+            requestRender()  // 补一帧透明清场
+        }
     }
 
     /** PQ 表面是否真正激活（运行时真相，可上送诊断/QA）。 */

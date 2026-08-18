@@ -1,5 +1,6 @@
 package com.rb.cybermonitorpro.ui.nightlight
 
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -8,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -15,6 +17,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * 行业首创「局部 HDR 增亮」的 Compose 宿主：把 [HdrPatchSurfaceView] 挂进组合树。
@@ -30,6 +34,7 @@ import kotlinx.coroutines.CoroutineScope
 @Composable
 fun HdrPatchHost(
     hidden: Boolean,
+    pagerState: PagerState? = null,
     modifier: Modifier = Modifier,
 ) {
     val enabled = CyberNightlightSwitch.enabled
@@ -65,6 +70,22 @@ fun HdrPatchHost(
     val intensity = CyberNightlightSwitch.intensity
     LaunchedEffect(intensity) {
         viewRef.value?.setIntensity(intensity)
+    }
+
+    // ★ pre14-G2：翻页门控——翻页期间暂停 HDR 贴片渲染，到位延迟 80ms 后点亮。
+    //   snapshotFlow 监听 isScrollInProgress（覆盖拖拽+fling+settle 全程）；
+    //   collectLatest 保证延迟期间若再次翻页则取消本次 ungate。
+    LaunchedEffect(pagerState) {
+        val ps = pagerState ?: return@LaunchedEffect
+        snapshotFlow { ps.isScrollInProgress }
+            .collectLatest { scrolling ->
+                if (scrolling) {
+                    viewRef.value?.setScrollGated(true)
+                } else {
+                    delay(80)  // 等旧页 dispose(bitmap 解除引用)/新页 onGloballyPositioned 完成
+                    viewRef.value?.setScrollGated(false)
+                }
+            }
     }
 
     DisposableEffect(Unit) {

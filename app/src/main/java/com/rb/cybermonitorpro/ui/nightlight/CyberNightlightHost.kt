@@ -1,6 +1,7 @@
 package com.rb.cybermonitorpro.ui.nightlight
 
 import android.content.Context
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -8,11 +9,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.effects.NightlightBarSwitch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 /**
  * CyberNightlight TurboXDR 的 Compose 宿主：把 HdrLumeSurfaceView 挂进组合树。
@@ -34,6 +38,7 @@ import com.rb.cybermonitorpro.ui.effects.NightlightBarSwitch
 fun CyberNightlightHost(
     hidden: Boolean,
     currentPage: Int,
+    pagerState: PagerState? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -80,5 +85,21 @@ fun CyberNightlightHost(
             view.fireFlash()
         }
         lastPage = currentPage
+    }
+
+    // ★ pre14-G4：翻页联动——翻页期间抑制闪光（丢弃 fireFlash + 停止当前闪光），
+    //   到位延迟 80ms 后恢复并播一次，治翻页期夜光条 surface 持续合成（双 surface 并发负载）。
+    LaunchedEffect(pagerState) {
+        val ps = pagerState ?: return@LaunchedEffect
+        snapshotFlow { ps.isScrollInProgress }
+            .collectLatest { scrolling ->
+                if (scrolling) {
+                    viewRef.value?.setFlashGated(true)
+                } else {
+                    delay(80)
+                    viewRef.value?.setFlashGated(false)
+                    viewRef.value?.fireFlash()
+                }
+            }
     }
 }

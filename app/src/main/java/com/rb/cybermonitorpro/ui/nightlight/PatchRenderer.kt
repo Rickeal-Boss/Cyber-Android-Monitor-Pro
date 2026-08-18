@@ -48,9 +48,15 @@ class PatchRenderer(
     private var uOffset = 0
 
     @Volatile private var _enabled = false
-    private var patches: List<HdrPatch> = emptyList()
+    // ★ pre14：patches 由 StateFlow collect(Main 协程)写入、GL 线程读取，加 @Volatile 保可见性。
+    @Volatile private var patches: List<HdrPatch> = emptyList()
     private var surfaceW = 1
     private var surfaceH = 1
+    // ★ pre14-G2：翻页门控。true 时 onDrawFrame 只输出透明帧（不遍历贴片/不碰位图/不上传纹理），
+    //   由 HdrPatchSurfaceView.setScrollGated 在 PagerState.isScrollInProgress 变化时写入。
+    @Volatile var scrollGated: Boolean = false
+    // ★ pre14-G4：GL 线程连续异常计数，≥3 次才禁用贴片渲染（单次毛刺自动恢复）。
+    private var consecutiveErrors = 0
 
     // 字形纹理缓存：key = text|sizePx。★ pre13-R1：LRU 上限 64，淘汰时删 GL 纹理，
     // 避免监控数字每秒刷新生成新字形 → GL 内存无限增长 → 驱动 reset/OOM → 闪退。
@@ -140,6 +146,25 @@ class PatchRenderer(
     }
 
     override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
+        try {
+            drawFrameInternal(gl)
+            // 本帧无异常 → 清零连续错误计数（连续 ≥3 次异常才禁用，单次毛刺自动恢复）。
+            consecutiveErrors = 0
+        } catch (t: Throwable) {
+            // ★ pre14-G4：GL 线程异常兜底——任何意外（位图异常/GL 错误升级/OOM）都不杀进程。
+            //   清掉可能处于坏状态的缓存 + 输出透明帧；连续 ≥3 次才禁用贴片渲染，下次 toggle 恢复。
+            consecutiveErrors++
+            runCatching {
+                GLES20.glClearColor(0f, 0f, 0f, 0f)
+                GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+            }
+            runCatching { clearGpuCaches() }
+            if (consecutiveErrors >= 3) _enabled = false
+            android.util.Log.e("PatchRenderer", "onDrawFrame error #$consecutiveErrors, HDR disabled=$_enabled", t)
+        }
+    }
+
+    private fun drawFrameInternal(gl: javax.microedition.khronos.opengles.GL10?) {
         GLES20.glClearColor(0f, 0f, 0f, 0f)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
 
@@ -155,7 +180,8 @@ class PatchRenderer(
         val ratioOk = pq && cachedRatioOk
         onState(pq, ratioOk)
 
-        if (!active) return
+        // ★ pre14-G2：翻页门控——只输出透明帧，不碰贴片/位图/纹理（关闭翻页期竞态窗口 + 纹理风暴）。
+        if (scrollGated || !active) return
 
         GLES20.glViewport(0, 0, surfaceW, surfaceH)
         GLES20.glDisable(GLES20.GL_DEPTH_TEST)
@@ -252,7 +278,9 @@ class PatchRenderer(
 
     private fun drawGlyph(p: HdrPatch) {
         // 优先使用 Compose 侧精确栅格化的位图掩码（文字/图标本体）；否则回退现场字形生成。
-        val texId = if (p.bitmap != null) ensureBitmapTex(p) else ensureGlyph(p) ?: return
+        // ★ pre14-G1：ensureBitmapTex 现可返回 null（源 recycle/copy 异常），统一在此判空跳过。
+        val texId = if (p.bitmap != null) ensureBitmapTex(p) else ensureGlyph(p)
+        if (texId == null) return
         bindQuad(p.id, rectVerts(p.bounds))
         GLES20.glUniform4f(uColor, pqEnc(p.color0[0], p.bias), pqEnc(p.color0[1], p.bias), pqEnc(p.color0[2], p.bias), 1f)
         GLES20.glUniform1i(uMode, 2)
@@ -261,14 +289,22 @@ class PatchRenderer(
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
     }
 
-    /** 上传/复用 Compose 侧传入的位图掩码纹理（白色=不透明）。仅在 p.bitmap != null 时调用。 */
-    private fun ensureBitmapTex(p: HdrPatch): Int {
-        val bmp = p.bitmap!!
+    /** 上传/复用 Compose 侧传入的位图掩码纹理（白色=不透明）。仅在 p.bitmap != null 时调用。
+     *  ★ pre14-G1：返回 Int?，源位图已 recycle 或 copy 异常时返回 null（跳过该贴片而非闪退）。 */
+    private fun ensureBitmapTex(p: HdrPatch): Int? {
+        val bmp = p.bitmap ?: return null
+        // 防御：源位图已被 recycle（交 GC 后不应发生，双保险）→ 跳过该贴片。
+        if (bmp.isRecycled) return null
         val cached = bitmapTexCache[p.id]
         if (cached != null && cached.original === bmp) return cached.tex
         // ★ pre13-R3：上传副本，与 Compose 生命周期解耦（源可能被 onDispose recycle，
         //   否则主线程 recycle 的实例恰是 GL 线程即将 texImage2D 的实例 → IllegalStateException）。
-        val copy = bmp.copy(Bitmap.Config.ARGB_8888, false)
+        val copy = try {
+            bmp.copy(Bitmap.Config.ARGB_8888, false)
+        } catch (t: Throwable) {
+            // ★ pre14-G1：copy 瞬间源被回收等异常 → 跳过该贴片而非让 GL 线程抛异常杀进程。
+            return null
+        }
         if (cached != null) {
             GLES20.glDeleteTextures(1, intArrayOf(cached.tex), 0)
             runCatching { cached.copy.recycle() }

@@ -295,9 +295,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             AppGlowBackground()
             // ★ CyberNightlight TurboXDR：局部 HDR 增亮浮层（setZOrderOnTop 盖在 SDR UI 之上，
             //   触摸穿透；覆盖层打开时 hidden=true 隐藏；当前 Tab 变化时触发一次性边缘闪光）
-            CyberNightlightHost(hidden = overlayVisible, currentPage = pagerState.currentPage)
+            CyberNightlightHost(hidden = overlayVisible, currentPage = pagerState.currentPage, pagerState = pagerState)
             // ★ 行业首创：局部 UI 元素级真 HDR 增亮浮层（卡片描边 / Tab 指示条 / 大数字 / 折线+网格）
-            HdrPatchHost(hidden = overlayVisible, modifier = Modifier.matchParentSize())
+            HdrPatchHost(hidden = overlayVisible, pagerState = pagerState, modifier = Modifier.matchParentSize())
             // ★ Windows 10 风格全局光照 — 包裹全部内容以捕获指针事件
             GlobalLightProvider {
             // ★ 主 Tab 页始终保持在 composition 中，保留所有滚动状态

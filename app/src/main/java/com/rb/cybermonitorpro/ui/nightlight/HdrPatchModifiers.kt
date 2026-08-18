@@ -246,9 +246,11 @@ fun HdrMetricText(
     DisposableEffect(text, fontSize, fontWeight, monospace, letterSpacing, measuredWidthPx, maxLines, softWrap, overflow) {
         val constraints = if (measuredWidthPx > 0) Constraints(maxWidth = measuredWidthPx) else Constraints()
         val bmp = buildTextBitmap(measurer, density, text, fontSize, fontWeight, monospace, letterSpacing, maxLines, softWrap, overflow, constraints)
-        val old = bitmapState.value
         bitmapState.value = bmp
-        onDispose { old?.recycle(); bmp.recycle() }
+        // ★ pre14-G1：不再手动 recycle 源位图。源位图交 GC 管理，GL 线程经 ensureBitmapTex 的
+        //   copy 持有独立副本；手动 recycle 会与 GL 线程 bmp.copy()/texImage2D 竞态
+        //   （快速翻页时旧页 dispose recycle 源位图，GL 线程恰在 copy → IllegalStateException → 闪退）。
+        onDispose { bitmapState.value = null }
     }
 
     val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
@@ -539,7 +541,8 @@ fun Modifier.hdrTabIconPatch(key: String, selected: Boolean, iconRes: Int): Modi
     DisposableEffect(key, iconRes) {
         val bmp = buildIconBitmap(context, iconRes, density)
         bitmapState.value = bmp
-        onDispose { bmp?.recycle() }
+        // ★ pre14-G1：不 recycle，交 GC（理由同 HdrMetricText：防与 GL 线程 copy/texImage2D 竞态）。
+        onDispose { bitmapState.value = null }
     }
 
     val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
@@ -684,7 +687,8 @@ fun Modifier.hdrVectorIconPatch(
     DisposableEffect(key, imageVector) {
         val bmp = buildVectorIconBitmap(imageVector, density, sizeDp)
         bitmapState.value = bmp
-        onDispose { bmp?.recycle() }
+        // ★ pre14-G1：不 recycle，交 GC（理由同 HdrMetricText）。
+        onDispose { bitmapState.value = null }
     }
 
     val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }

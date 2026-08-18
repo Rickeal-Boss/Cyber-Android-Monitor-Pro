@@ -118,6 +118,12 @@ class LumeRenderer : GLSurfaceView.Renderer {
         flashExpiredFlag = false
     }
 
+    /** ★ pre14-G4：立即停止当前闪光（翻页门控时调用），清状态但不改 enabled。 */
+    fun stopFlash() {
+        flashStartMs = 0L
+        flashExpiredFlag = false
+    }
+
     /**
      * 轮询：当前闪光是否已播完（SurfaceView 在 onDrawFrame 后调用，
      * 若返回 true 则把渲染模式切回 WHEN_DIRTY 节能）。

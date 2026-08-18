@@ -81,10 +81,10 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
         registryJob = scope.launch {
             HdrPatchRegistry.flow.collect { list ->
                 renderer.setPatches(list)
-                // ★ pre13-D：无条件 requestRender。onDrawFrame 内部已有 active 门控会 early-return，
-                //   去掉 isActive 判断可避免「setActive 的 requestRender 早于首帧注册表数据到达」时
-                //   停在空透明帧 → HDR 层偶发不显示（治 pre13-D）。
-                requestRender()
+                // ★ pre14-G2：翻页门控期间不 requestRender——setPatches 已保持最新列表，
+                //   ungate 时 setScrollGated(false) 会 requestRender 一帧点亮到位后的贴片，
+                //   省掉中间页全部渲染（关闭翻页期纹理风暴与 bitmap 竞态窗口）。
+                if (!renderer.scrollGated) requestRender()
             }
         }
     }
@@ -127,6 +127,19 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
             runCatching { setDesiredHdrHeadroom(clamped) }
         }
         if (renderer.isActive()) requestRender()
+    }
+
+    /**
+     * ★ pre14-G2：翻页门控。gated=true 时 GL 只输出透明帧（不遍历贴片、不上传纹理），
+     * gated=false 时立即 requestRender 一帧绘制最新贴片。
+     *
+     * 由 HdrPatchHost 在 PagerState.isScrollInProgress 变化时调用：
+     *  - 翻页开始 → gate(true)：消除翻页期间纹理上传风暴与 bitmap 竞态窗口
+     *  - 翻页到位后延迟 80ms → gate(false)：等旧页 dispose/新页布局完成后一帧点亮
+     */
+    fun setScrollGated(gated: Boolean) {
+        renderer.scrollGated = gated
+        requestRender()  // gate=true 时补一帧透明清场；gate=false 时绘制最新贴片
     }
 
     override fun onDetachedFromWindow() {
