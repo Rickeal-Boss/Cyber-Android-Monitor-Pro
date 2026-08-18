@@ -196,8 +196,11 @@ class PatchRenderer(
         // ★ pre14-G2：翻页门控——只输出透明帧，不碰贴片/位图/纹理（关闭翻页期竞态窗口 + 纹理风暴）。
         if (scrollGated || !active) return
 
+        // ★ pre20-c：预算自适应——垂直滚动中放大（消化速度 > 入队速度 → 停止时队列必空，
+        //   停止后无"陆续入场"）；静止恢复 3/帧。
         // ★ pre19-A：本帧上传预算先用于补传上一帧入队的纹理任务，剩余额度供本帧新上传。
-        uploadBudgetLeft = MAX_UPLOADS_PER_FRAME
+        uploadBudgetLeft =
+            if (NightlightState.verticalScrolling) MAX_UPLOADS_PER_FRAME_SCROLLING else MAX_UPLOADS_PER_FRAME
         drainPendingUploads()
 
         GLES20.glViewport(0, 0, surfaceW, surfaceH)
@@ -274,7 +277,10 @@ class PatchRenderer(
         if (pendingKeys.add(key)) pendingUploads.addLast(Pair(key, p))
     }
 
-    /** 补传上一帧入队的纹理任务（GL 线程，每帧最多 [MAX_UPLOADS_PER_FRAME] 个，与绘制共用预算）。 */
+    /** 补传上一帧入队的纹理任务（GL 线程，与绘制共用帧预算）。
+     *  ★ pre20-a：替换任务（有旧纹理）传 budgeted=false 强制「先传新后删旧」无缝替换——
+     *    若传 true 会命中"有旧纹理→入队返回旧"分支，导致任务永远不真正执行（入队→处理→再入队死循环）。
+     *    全新任务同样强制上传（drain 本身已受 while(uploadBudgetLeft>0) 帧预算约束）。 */
     private fun drainPendingUploads() {
         while (uploadBudgetLeft > 0 && pendingUploads.isNotEmpty()) {
             val (key, ref) = pendingUploads.removeFirst()
@@ -283,13 +289,13 @@ class PatchRenderer(
                 val gk = key.substring(2)
                 // 字形纹理为共享 LRU：期间已被其他贴片补传则无需再传
                 if (!glyphCache.containsKey(gk) && ref.text != null) {
-                    if (ensureGlyph(ref, true) != null) uploadBudgetLeft--
+                    if (ensureGlyph(ref, false) != null) uploadBudgetLeft--
                 }
             } else {
                 // 位图掩码纹理按 patch.id 键控：取当前快照里最新版本（期间坐标/文本可能已变）
                 val cur = patches.firstOrNull { it.id == key } ?: continue
                 if (cur.bitmap != null) {
-                    if (ensureBitmapTex(cur, true) != null) uploadBudgetLeft--
+                    if (ensureBitmapTex(cur, false) != null) uploadBudgetLeft--
                 }
             }
         }
@@ -339,33 +345,40 @@ class PatchRenderer(
 
     /** 上传/复用 Compose 侧传入的位图掩码纹理（白色=不透明）。仅在 p.bitmap != null 时调用。
      *  ★ pre14-G1：返回 Int?，源位图已 recycle 或 copy 异常时返回 null（跳过该贴片而非闪退）。
-     *  ★ pre19-A：budgeted=true 时受帧上传预算约束——未缓存且预算耗尽 → 入队返回 null（本帧跳过，
-     *    SDR 本体仍在，后续帧补传点亮）；budgeted=false 供清缓存/drain 内部强制上传使用。 */
+     *  ★ pre19-A：budgeted=true（绘制路径）时受帧上传预算约束——未缓存且预算耗尽 → 入队返回 null
+     *    （本帧跳过，SDR 本体仍在，后续帧补传点亮）；budgeted=false（drain 路径）强制实际上传/替换。
+     *  ★ pre20-a：有旧纹理的贴片永不因预算离场——新位图到达时本帧继续画旧纹理（零离场）、
+     *    新纹理入队后台替换；替换顺序「先传新、后删旧」，任何异常路径旧纹理仍在。
+     *    消除 pre19 副作用：停止瞬间数字刷新/布局变化 → 旧纹理被删（离场）→ 新纹理等预算
+     *    1-3 帧才点亮（入场）→ 视觉与水平翻页相同的"旧离场+新入场"。 */
     private fun ensureBitmapTex(p: HdrPatch, budgeted: Boolean): Int? {
         val bmp = p.bitmap ?: return null
         // 防御：源位图已被 recycle（交 GC 后不应发生，双保险）→ 跳过该贴片。
         if (bmp.isRecycled) return null
         val cached = bitmapTexCache[p.id]
         if (cached != null && cached.original === bmp) return cached.tex
-        // ★ pre19-A：未缓存需上传；预算耗尽 → 入队，本帧跳过绘制（SDR 文本/图标仍在，绝无缺字）
+
         if (budgeted) {
-            if (uploadBudgetLeft <= 0) {
-                enqueueUpload(p.id, p)
-                return null
+            if (cached == null) {
+                // 仅「从未上传过」的全新贴片受预算约束：耗尽则入队，本帧跳过
+                if (uploadBudgetLeft <= 0) {
+                    enqueueUpload(p.id, p)
+                    return null
+                }
+                uploadBudgetLeft--
+            } else {
+                // ★ pre20-a：有旧纹理 → 本帧继续画旧纹理（零离场），新纹理入队后台替换
+                if (!pendingKeys.contains(p.id)) enqueueUpload(p.id, p)
+                return cached.tex
             }
-            uploadBudgetLeft--
         }
         // ★ pre13-R3：上传副本，与 Compose 生命周期解耦（源可能被 onDispose recycle，
         //   否则主线程 recycle 的实例恰是 GL 线程即将 texImage2D 的实例 → IllegalStateException）。
         val copy = try {
             bmp.copy(Bitmap.Config.ARGB_8888, false)
         } catch (t: Throwable) {
-            // ★ pre14-G1：copy 瞬间源被回收等异常 → 跳过该贴片而非让 GL 线程抛异常杀进程。
-            return null
-        }
-        if (cached != null) {
-            GLES20.glDeleteTextures(1, intArrayOf(cached.tex), 0)
-            runCatching { cached.copy.recycle() }
+            // ★ pre14-G1：copy 瞬间源被回收等异常 → 有旧纹理则继续画旧，否则跳过该贴片
+            return cached?.tex
         }
         val tex = IntArray(1)
         GLES20.glGenTextures(1, tex, 0)
@@ -375,6 +388,11 @@ class PatchRenderer(
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_S, GLES20.GL_CLAMP_TO_EDGE)
         GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D, GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE)
         GLUtils.texImage2D(GLES20.GL_TEXTURE_2D, 0, copy, 0)
+        // ★ pre20-a：先传新、后删旧——新纹理上传成功后才删旧纹理并回收旧副本
+        if (cached != null) {
+            GLES20.glDeleteTextures(1, intArrayOf(cached.tex), 0)
+            runCatching { cached.copy.recycle() }
+        }
         bitmapTexCache[p.id] = BitmapTex(bmp, copy, tex[0])
         return tex[0]
     }
@@ -557,9 +575,11 @@ class PatchRenderer(
     private data class LineGeom(val lineVerts: FloatArray, val dotBounds: RectF, val dotR: Float)
 
     companion object {
-        /** ★ pre19-A：每帧允许的纹理上传数（含补传与新上传）。收尾帧风暴被摊到后续 3-5 帧，
+        /** ★ pre19-A：静止时每帧允许的纹理上传数（含补传与新上传）。收尾帧风暴被摊到后续 3-5 帧，
          *  单帧上传成本封顶 ~10ms，肉眼不可辨。 */
         private const val MAX_UPLOADS_PER_FRAME = 3
+        /** ★ pre20-c：垂直滚动中每帧上传预算放大（滚动中消化 > 入队 → 停止时队列必空）。 */
+        private const val MAX_UPLOADS_PER_FRAME_SCROLLING = 6
         /** ★ pre19-C：每帧允许删除的离屏纹理数，避免删除风暴与上传/绘制同帧叠加。 */
         private const val MAX_TEX_DELETES_PER_FRAME = 2
 

@@ -5,6 +5,7 @@ import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.opengl.GLSurfaceView
 import android.os.Build
+import android.os.SystemClock
 import android.util.AttributeSet
 import android.view.Display
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
@@ -79,12 +80,23 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
     fun attachRegistry(scope: CoroutineScope) {
         registryJob?.cancel()
         registryJob = scope.launch {
+            // ★ pre20-b：垂直滚动停止窗口抑制——垂直滚动 = 纯跟随不换贴片，
+            //   停止瞬间布局 pass 的"坐标修正帧"（坐标变化 <0.5px 被注册表去重吞掉后
+            //   仍会因数字刷新等真实变化发射）不再立即渲染，保留滚动最后一帧已到位贴片；
+            //   120ms 窗口后下一次渲染由内容真实变化（数据刷新/翻页 ungate/开关）自然触发。
+            var lastV = false
+            var suppressUntil = 0L
             HdrPatchRegistry.flow.collect { list ->
                 renderer.setPatches(list)
+                val v = NightlightState.verticalScrolling
+                if (lastV && !v) suppressUntil = SystemClock.uptimeMillis() + VERTICAL_STOP_SUPPRESS_MS
+                lastV = v
+                val suppressed = renderer.scrollGated ||
+                    SystemClock.uptimeMillis() < suppressUntil
                 // ★ pre14-G2：翻页门控期间不 requestRender——setPatches 已保持最新列表，
                 //   ungate 时 setScrollGated(false) 会 requestRender 一帧点亮到位后的贴片，
                 //   省掉中间页全部渲染（关闭翻页期纹理风暴与 bitmap 竞态窗口）。
-                if (!renderer.scrollGated) requestRender()
+                if (!suppressed) requestRender()
             }
         }
     }
@@ -149,5 +161,8 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
         /** ★ pre15：贴片 surface 的 HDR 余量固定为贴片设计峰值（max bias = TAB 6×）。
          *   覆盖所有贴片亮度、避免跟随滑块拉到 8× 过度抬升/压缩 SDR 背景。 */
         private const val MAX_HEADROOM = 6f
+        /** ★ pre20-b：垂直滚动停止后的抑制窗口（ms）。停止瞬间的坐标修正帧被吞掉，
+         *   保留滚动最后一帧已到位贴片；120ms 足够覆盖最后布局 pass，又不影响后续数据刷新。 */
+        private const val VERTICAL_STOP_SUPPRESS_MS = 120L
     }
 }

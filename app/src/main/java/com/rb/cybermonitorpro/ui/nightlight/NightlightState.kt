@@ -29,6 +29,13 @@ object NightlightState {
     private var receiver: BroadcastReceiver? = null
     private var attachedCount = 0
 
+    // ★ pre20-b：垂直滚动状态广播（任意 Screen 的 scrollState.isScrollInProgress 实时写入）。
+    //   渲染器据此：滚动中预算放大（P2）、停止瞬间 120ms 窗口抑制 requestRender（P1）——
+    //   垂直滚动 = 纯跟随不换贴片；只有水平翻页（scrollGated）才做整套离场/入场。
+    @Volatile var verticalScrolling: Boolean = false
+        private set
+    fun setVerticalScrolling(v: Boolean) { verticalScrolling = v }
+
     /** 在宿主 Composable 挂载时调用（可重入，计数引用）。 */
     fun attach(context: Context) {
         attachedCount++

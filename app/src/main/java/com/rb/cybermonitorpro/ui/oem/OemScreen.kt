@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -50,7 +51,7 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
     val oem by viewModel.oemInfo.observeAsState()
 
     Column(
-        modifier = Modifier.verticalScroll(rememberScrollState()).padding(16.dp),
+        modifier = Modifier.verticalScroll(rememberHdrScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         Text(stringResource(R.string.oem_title), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)

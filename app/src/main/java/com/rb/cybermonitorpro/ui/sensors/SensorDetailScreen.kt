@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -109,7 +110,7 @@ fun SensorDetailScreen(
         onDispose { viewModel.stopListening() }
     }
 
-    val scrollState = rememberScrollState()
+    val scrollState = rememberHdrScrollState()
 
     // ── 全屏沉浸式 Box (对齐设置页/悬浮窗覆盖层风格) ──
     Box(Modifier.fillMaxSize()) {

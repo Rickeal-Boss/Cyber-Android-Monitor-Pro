@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
@@ -86,7 +87,7 @@ private val moduleConfigs = listOf(
 
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel = koinViewModel()) {
-    val scroll = rememberScrollState()
+    val scroll = rememberHdrScrollState()
 
     Column(
         modifier = Modifier
