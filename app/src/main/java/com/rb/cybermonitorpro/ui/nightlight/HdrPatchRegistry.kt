@@ -34,6 +34,17 @@ object HdrPatchRegistry {
     @Volatile var surfaceRootY: Float = 0f
 
     fun upsert(p: HdrPatch) = synchronized(mutex) {
+        // ★ pre18c：贴片内容未变化（同包围盒 + 同位图引用 + 同颜色）时跳过发射。
+        //   垂直滚动停止瞬间 onGloballyPositioned 会再上报一次相同坐标的贴片，
+        //   无条件发射会触发渲染器多余的重渲染 → 贴片闪断。去重后滚动中坐标变化
+        //   仍正常发射（贴片跟随），停止时坐标稳定则不再重渲染。
+        //   颜色（含电池温度语义描边）变化走 color0/color1 contentEquals，不会被吞掉。
+        val old = map[p.id]
+        if (old != null && old.bounds == p.bounds && old.bitmap === p.bitmap &&
+            old.color0.contentEquals(p.color0) && old.color1.contentEquals(p.color1)
+        ) {
+            return
+        }
         map[p.id] = p
         _flow.value = map.values.toList()
     }

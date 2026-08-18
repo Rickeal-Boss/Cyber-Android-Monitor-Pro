@@ -271,10 +271,13 @@ fun HdrMetricText(
     fun report() {
         val bmp = bitmapState.value
         val pos = posHolder.value
-        if (!enabled || bmp == null || pos == null) {
+        if (!enabled) {
             HdrPatchRegistry.remove(key)
             return
         }
+        // ★ pre18c：瞬时 null（位图/坐标尚未就绪）时保留最后上报的贴片，
+        //   避免 remove→re-add 触发纹理删除/重传导致贴片闪断（滚动停止瞬间易触发）。
+        if (bmp == null || pos == null) return
         HdrPatchRegistry.upsert(
             HdrPatch(
                 id = key,
@@ -564,10 +567,13 @@ fun Modifier.hdrTabIconPatch(key: String, selected: Boolean, iconRes: Int): Modi
     fun report() {
         val bmp = bitmapState.value
         val pos = posHolder.value
-        if (!enabled || bmp == null || pos == null) {
+        if (!enabled) {
             HdrPatchRegistry.remove(key)
             return
         }
+        // ★ pre18c：瞬时 null（位图/坐标尚未就绪）时保留最后上报的贴片，
+        //   避免 remove→re-add 触发纹理删除/重传导致贴片闪断（滚动停止瞬间易触发）。
+        if (bmp == null || pos == null) return
         HdrPatchRegistry.upsert(
             HdrPatch(
                 id = key,
@@ -711,10 +717,13 @@ fun Modifier.hdrVectorIconPatch(
     fun report() {
         val bmp = bitmapState.value
         val pos = posHolder.value
-        if (!enabled || bmp == null || pos == null) {
+        if (!enabled) {
             HdrPatchRegistry.remove(key)
             return
         }
+        // ★ pre18c：瞬时 null（位图/坐标尚未就绪）时保留最后上报的贴片，
+        //   避免 remove→re-add 触发纹理删除/重传导致贴片闪断（滚动停止瞬间易触发）。
+        if (bmp == null || pos == null) return
         HdrPatchRegistry.upsert(
             HdrPatch(
                 id = key,
