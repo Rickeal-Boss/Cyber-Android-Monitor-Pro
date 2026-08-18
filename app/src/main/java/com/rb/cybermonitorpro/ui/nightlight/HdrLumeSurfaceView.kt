@@ -20,16 +20,16 @@ import android.view.Display
  *  2. PixelFormat.RGBA_1010102（HDR 设备）提供 10-bit + 2-bit alpha 半透明合成。
  *  3. setZOrderOnTop(true) + isClickable=false：浮层盖在 SDR UI 之上但不拦截触摸。
  *  4. preserveEGLContextOnPause = true：离开-返回不丢 EGL/PQ 状态。
- *  5. ★ pre16：不再调用 setDesiredHdrHeadroom —— headroom > 1 会压低底层 SDR 背景亮度；
- *     PQ surface 由系统按内容自动分配余量。
+ *  5. 构造即不申请 HDR 余量；由 setActive(true) 按需 setDesiredHdrHeadroom(slider)。
  *
  * 渲染策略（仿电子表夜光）：
- *  - setActive(true)：触发一次性边缘闪光（fireFlash）；切到 RENDERMODE_CONTINUOUSLY 驱动闪光播放；
- *    闪光播完自动切回 RENDERMODE_WHEN_DIRTY。
- *  - setActive(false)：闪光清零、补一帧透明。
+ *  - setActive(true)：触发一次性边缘闪光（fireFlash）；HDR 余量 = slider (1.0×–8.0×)；
+ *    切到 RENDERMODE_CONTINUOUSLY 驱动闪光播放；闪光播完自动切回 RENDERMODE_WHEN_DIRTY。
+ *  - setActive(false)：余量归 1.0、闪光清零、补一帧透明。
  *  - fireFlash()：可由 Compose 层在 toggle on / 切页面时调用，复用同一边缘闪光。
  *
- * 空闲帧：Surface 输出 vec4(0,0,0,0)（纯透明黑），不抬升也不压低底层 SDR UI。
+ * 空闲帧：Surface 输出 vec4(0,0,0,0)（纯透明黑）；PQ surface 自身保留，使
+ * setDesiredHdrHeadroom 持续作用于底层 SDR UI —— slider 调多少，整屏 HDR 化多少倍。
  */
 class HdrLumeSurfaceView @JvmOverloads constructor(
     context: Context,
@@ -85,8 +85,12 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
     fun setActive(enabled: Boolean) {
         active = enabled
         lumeRenderer.setEnabled(enabled)
-        // ★ pre16：移除 setDesiredHdrHeadroom —— 与 Patch 层同理，headroom > 1 会压低底层 SDR
-        //   背景（淡蓝光晕）亮度导致"背景透明消失"。PQ surface 已由系统自动分配余量。
+        if (Build.VERSION.SDK_INT >= 35) {
+            // ★ pre15：闪光 headroom 固定 LUME_HEADROOM，不再跟随滑块（避免与 Patch 一起把
+            //   headroom 拉到 8×，触发屏幕级 HDR 合成、把底层 SDR 背景"整屏 HDR 化"导致失真）。
+            val headroom = if (enabled) LUME_HEADROOM else 1f
+            runCatching { setDesiredHdrHeadroom(headroom) }
+        }
         if (enabled) {
             lumeRenderer.fireFlash()
             renderMode = RENDERMODE_CONTINUOUSLY
@@ -97,11 +101,11 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
     }
 
     /**
-     * 设定 HDR 强度倍数 ∈ [1.0×, 8.0×]。★ pre16：不再映射到 setDesiredHdrHeadroom（改由系统自动），
-     *   这里仅保留 multiplier 供诊断。
+     * 设定 HDR 强度倍数 ∈ [1.0×, 8.0×]，直接对应 SurfaceView.setDesiredHdrHeadroom。
+     * 参考 qr.txt: Xiaomi 24069RA21C / Android 16 上 "Maximum supported: 8.0×"。
      */
     fun setIntensity(v: Float) {
-        // ★ pre16：滑块不再改 headroom；multiplier 仅保留供诊断。
+        // ★ pre15：闪光 headroom 固定 LUME_HEADROOM，滑块不再改 headroom（multiplier 仅保留供诊断）。
         intensityMultiplier = v.coerceIn(1.0f, 8.0f)
     }
 
@@ -143,6 +147,7 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
     fun isActive(): Boolean = active
 
     override fun onDetachedFromWindow() {
+        if (Build.VERSION.SDK_INT >= 35) runCatching { setDesiredHdrHeadroom(1f) }
         mainHandler.removeCallbacksAndMessages(FLASH_END_TOKEN)
         super.onDetachedFromWindow()
     }
@@ -150,5 +155,7 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
     private companion object {
         private val mainHandler = Handler(Looper.getMainLooper())
         private const val FLASH_END_TOKEN = 0xCAFE_F1A5.toInt()
+        /** ★ pre15：闪光 surface 的 HDR 余量固定（边缘闪光亮度 2× SDR 白足够，避免过度 HDR 化背景）。 */
+        private const val LUME_HEADROOM = 2f
     }
 }

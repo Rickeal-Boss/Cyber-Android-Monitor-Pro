@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
  *  - EGL 选 10/10/10/2 + 注入 BT.2020 PQ（常量 0x3340），失败回退 8/8/8/8。
  *  - PixelFormat.RGBA_1010102（HDR 设备）提供 10-bit + 2-bit alpha 半透明合成。
  *  - setZOrderOnTop(true) + isClickable=false：盖在 SDR UI 之上但不拦截触摸。
- *  - preserveEGLContextOnPause = true；★ pre16 不再调用 setDesiredHdrHeadroom（PQ surface 由系统自动分配余量）。
+ *  - preserveEGLContextOnPause = true；构造即不申请余量，由 setActive(true) 按需 setDesiredHdrHeadroom。
  */
 class HdrPatchSurfaceView @JvmOverloads constructor(
     context: Context,
@@ -95,16 +95,17 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
     }
 
     /**
-     * 由 HdrPatchHost 调用：开启 = 进入事件驱动渲染；关闭 = 补一帧透明。
+     * 由 HdrPatchHost 调用：开启 = 申请 HDR 余量 + 进入事件驱动渲染；关闭 = 余量归 1.0 并补一帧透明。
      *
-     * ★ pre16：移除 [setDesiredHdrHeadroom] —— 官方文档确认 headroom > 1 会让系统为 HDR 内容
-     *   预留余量、压低底层 SDR 内容亮度，本项目淡蓝光晕背景（AppGlowBackground）因此"透明消失"；
-     *   且 pre15 把余量固定为 2×/6× 后真机现象不变（任何 > 1 的值都会触发）。
-     *   PQ surface（EGL 0x3340）已由系统按内容自动分配余量，无需手动抬升；滑块亮度改由
-     *   [PatchRenderer.pqEnc] 的 effMult 控制。
+     * ★ pre15：HDR 余量固定为贴片设计峰值 [MAX_HEADROOM]（max bias = TAB 6×），不再跟随滑块。
+     *   滑块只经 [PatchRenderer.pqEnc] 的 effMult 控制贴片亮度；headroom 只需覆盖贴片峰值。
+     *   跟随滑块会把 headroom 拉到 8×，触发屏幕级 HDR 合成，把底层 SDR 背景（淡蓝光晕）
+     *   也一并"HDR 化"导致颜色失真（真机反馈「背景淡蓝色失败」）。
      * 渲染模式为 [RENDERMODE_WHEN_DIRTY]，仅由注册表流/滑块变化 [requestRender] 驱动。
      */
     fun setActive(enabled: Boolean) {
+        val headroom = if (enabled) MAX_HEADROOM else 1f
+        if (Build.VERSION.SDK_INT >= 35) runCatching { setDesiredHdrHeadroom(headroom) }
         renderer.setEnabled(enabled)
         // 事件驱动：贴片注册表变化 / 滑块变化才会 requestRender（见 attachRegistry / setIntensity）
         renderMode = RENDERMODE_WHEN_DIRTY
@@ -112,11 +113,11 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
     }
 
     /**
-     * ★ pre16：滑块只经 [PatchRenderer.pqEnc] 的 effMult 控制贴片亮度（不再触碰 headroom）。
-     *   仅 requestRender 一帧，让 pqEnc 用新 [CyberNightlightSwitch.intensity] 重算贴片亮度。
+     * ★ pre15：滑块只经 [PatchRenderer.pqEnc] 的 effMult 控制贴片亮度，headroom 固定 [MAX_HEADROOM]
+     *   不再跟随滑块。仅 requestRender 一帧，让 pqEnc 用新 [CyberNightlightSwitch.intensity] 重算贴片亮度。
      */
     fun setIntensity(v: Float) {
-        // 滑块变化只重绘（pqEnc 重算亮度），不再 setDesiredHdrHeadroom。
+        // headroom 固定 MAX_HEADROOM；滑块变化只重绘（pqEnc 重算亮度），不再 setDesiredHdrHeadroom。
         if (renderer.isActive()) requestRender()
     }
 
@@ -134,6 +135,7 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        if (Build.VERSION.SDK_INT >= 35) runCatching { setDesiredHdrHeadroom(1f) }
         // ★ pre13-C：在 GL 线程删除 GL 纹理 + 清空缓存（queueEvent 串行于 onDrawFrame），
         //   既真删纹理治泄漏（原 releaseGpuResources 只清 CPU HashMap，preserveEGLContextOnPause
         //   下 onSurfaceCreated 不回调 → 纹理永久泄漏 → 耗尽 GL → native crash），
@@ -143,4 +145,9 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
+    private companion object {
+        /** ★ pre15：贴片 surface 的 HDR 余量固定为贴片设计峰值（max bias = TAB 6×）。
+         *   覆盖所有贴片亮度、避免跟随滑块拉到 8× 过度抬升/压缩 SDR 背景。 */
+        private const val MAX_HEADROOM = 6f
+    }
 }
