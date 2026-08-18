@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -45,12 +46,16 @@ import org.koin.androidx.compose.koinViewModel
 private val axisColors = listOf(NeonPurple, NeonCyan, NeonMagenta)
 
 /**
- * 传感器详情页 — 全屏沉浸式风格 (对齐设置/悬浮窗覆盖层)
- * 包含: 实时数值卡片(含照度等级/距离状态) + 波形图 + 静态信息
+ * 传感器详情内容 — F5 拆出（MainActivity 传感器覆盖层承载）。
+ * progress = 传感器覆盖层主时钟（MainActivity.sensorProgress Animatable）：
+ * 非标题内容的 alpha 与 24dp→0 上移全部由其在 draw 阶段驱动（零重组）。
+ * 滚动必须用 rememberHdrScrollState()（pre20 回归红线，勿回退 rememberScrollState）。
  */
 @Composable
-fun SensorDetailScreen(
+fun SensorDetailContent(
     sensor: SensorItemInfo,
+    progress: androidx.compose.animation.core.Animatable<Float, androidx.compose.animation.core.AnimationVector1D>,
+    density: androidx.compose.ui.unit.Density,
     onBack: () -> Unit,
     viewModel: SensorDetailViewModel = koinViewModel()
 ) {
@@ -145,6 +150,15 @@ fun SensorDetailScreen(
                 )
             }
 
+            // ── F5: 非标题内容 — alpha + 24dp 上移由 sensorProgress 驱动 (draw 阶段, 零重组) ──
+            Column(
+                Modifier.graphicsLayer {
+                    val p = progress.value
+                    alpha = p
+                    translationY = with(density) { androidx.compose.ui.util.lerp(24.dp, 0.dp, p).toPx() }
+                },
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
             // ── 实时数值卡片 (含光线等级/距离状态) ──
             SensorValueCard(sensor = sensor, meta = meta, liveData = liveData)
 
@@ -176,6 +190,7 @@ fun SensorDetailScreen(
 
             // ── 传感器静态信息 ──
             SensorInfoCard(sensor = sensor, meta = meta)
+            } // end F5 非标题内容 Column
         }
 
         // ── 沉浸式返回按钮 (浅色圆形, WorkBuddy Android 客户端同款) ──

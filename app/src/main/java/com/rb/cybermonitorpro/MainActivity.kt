@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -61,7 +62,7 @@ import com.rb.cybermonitorpro.ui.gps.GpsScreen
 import com.rb.cybermonitorpro.ui.gpu.GpuScreen
 import com.rb.cybermonitorpro.ui.memory.MemoryScreen
 import com.rb.cybermonitorpro.ui.network.NetworkScreen
-import com.rb.cybermonitorpro.ui.sensors.SensorDetailScreen
+import com.rb.cybermonitorpro.ui.sensors.SensorDetailContent
 import com.rb.cybermonitorpro.ui.sensors.SensorsScreen
 import com.rb.cybermonitorpro.ui.settings.SettingsScreen
 import com.rb.cybermonitorpro.ui.effects.GlobalLightProvider
@@ -142,6 +143,10 @@ class MainActivity : ComponentActivity() {
 }
 
 private data class TopTabItem(val title: String, val iconRes: Int)
+
+// F5: 传感器详情过渡弹簧 — 进入平顺跟手、退出带回弹
+private val SENSOR_ENTRY_SPRING = spring<Float>(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+private val SENSOR_EXIT_SPRING = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
 
 /** 赛博风格线条矢量图标 — 与 Tab 含义一一对应 */
 private val topTabIcons = listOf(
@@ -239,6 +244,29 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
     val overlayVisible = showSettings || showFloatConfig || showSensorDetail || showHdrLab
 
+    // ── F5: 传感器详情统一主时钟 — Animatable<Float>, 0f=收起 1f=展开 ──
+    //   进入: animateTo(1f, ENTRY_SPRING) / 预测返回: snapTo 跟手 /
+    //   手势取消: animateTo(1f) 回弹 / 完成或返回键: animateTo(0f) 后移出组合。
+    //   渲染条件用 sensorAlive(keepAlive 守卫)，绝不读 sensorProgress.value 组合判断 → 零重组。
+    val sensorProgress = remember { Animatable(0f) }
+    var sensorAlive by remember { mutableStateOf(false) }
+
+    fun openSensorDetail(sensor: com.rb.cybermonitorpro.data.model.SensorItemInfo) {
+        selectedSensorForDetail = sensor
+        showSensorDetail = true
+        sensorAlive = true
+        scope.launch { sensorProgress.animateTo(1f, SENSOR_ENTRY_SPRING) }
+    }
+
+    fun closeSensorDetail() {
+        scope.launch {
+            sensorProgress.animateTo(0f, SENSOR_EXIT_SPRING)
+            showSensorDetail = false
+            selectedSensorForDetail = null
+            sensorAlive = false
+        }
+    }
+
     // ★ 预测性返回手势进度 (2026-06-19): 驱动覆盖层缩放/位移，替代纯 alpha 动画
     //   手指拖拽返回时 progress 0→1，覆盖层缩小+右移模拟"被拽走"；
     //   手势完成关闭覆盖层，手势取消则 spring 回弹。
@@ -257,25 +285,33 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
     // ── 预测性返回: PredictiveBackHandler 接收手指拖拽进度 ──
     // activity-compose 1.9.0 中 PredictiveBackHandler 已稳定（无需 @OptIn）
+    // F5: 传感器详情分支 — 手势期 sensorProgress 从起点跟手退回，取消回弹到 1f
     PredictiveBackHandler(enabled = overlayVisible) { progress: Flow<BackEventCompat> ->
+        val sensorStart = if (showSensorDetail) sensorProgress.value else 0f
         try {
             progress.collect { event ->
                 backProgress.snapTo(event.progress)
+                if (showSensorDetail) {
+                    sensorProgress.snapTo((sensorStart * (1f - event.progress)).coerceIn(0f, 1f))
+                }
             }
             // 手势完成 — 关闭当前覆盖层，重置进度
             backProgress.snapTo(0f)
             when {
+                showSensorDetail -> {
+                    sensorProgress.snapTo(0f)
+                    showSensorDetail = false
+                    selectedSensorForDetail = null
+                    sensorAlive = false
+                }
                 showSettings -> showSettings = false
                 showFloatConfig -> showFloatConfig = false
                 showHdrLab -> showHdrLab = false
-                showSensorDetail -> {
-                    showSensorDetail = false
-                    selectedSensorForDetail = null
-                }
             }
         } catch (e: CancellationException) {
             // 手势取消 — Spring 平滑回弹 (仅支持预测的 ROM 会触发)
             backProgress.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
+            if (showSensorDetail) sensorProgress.animateTo(1f, SENSOR_EXIT_SPRING)
         }
     }
 
@@ -308,10 +344,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 onOpenSettings = { showSettings = true },
                 onOpenFloat = { showFloatConfig = true },
                 onGpsTabChanged = { active -> gpsTabActive = active },
-                onOpenSensorDetail = { sensor ->
-                    selectedSensorForDetail = sensor
-                    showSensorDetail = true
-                },
+                onOpenSensorDetail = { sensor -> openSensorDetail(sensor) },
                 onOpenHdrLab = { showHdrLab = true }
             )
 
@@ -418,36 +451,30 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
-            // ── 传感器详情 ──
-            val sensorAlpha by animateFloatAsState(
-                targetValue = if (showSensorDetail) 1f else 0f,
-                animationSpec = tween(300), label = "sensorAlpha"
-            )
-            if (sensorAlpha > 0.01f || showSensorDetail) {
+            // ── 传感器详情 (F5: sensorProgress 主时钟 + keepAlive 守卫, 零重组) ──
+            // 渲染条件读 sensorAlive State，绝不在组合期读 sensorProgress.value；
+            // acrylic 背景与非标题内容的 alpha/位移全部由 Animatable 在 draw/layout 阶段驱动。
+            if (sensorAlive || showSensorDetail) {
                 val sensor = selectedSensorForDetail
                 if (sensor != null) {
-                    Box(Modifier.fillMaxSize()
-                        .graphicsLayer {
-                        val p = backProgress.value
-                        alpha = sensorAlpha * (1f - p * 0.3f)
-                        scaleX = 1f - p * 0.06f
-                        scaleY = 1f - p * 0.06f
-                        translationX = size.width * p * 0.25f
-                    }
-                        .acrylic(
-                            tintColor = CyberCardStart,
-                            tintOpacity = 0.85f,
-                            noiseOpacity = 0.04f,
-                            borderColor = NeonPurple.copy(alpha = 0.25f),
-                            enableNoise = false  // ★ 同设置页
+                    val density = LocalDensity.current
+                    Box(Modifier.fillMaxSize()) {
+                        Box(
+                            Modifier.fillMaxSize()
+                                .graphicsLayer { alpha = sensorProgress.value }
+                                .acrylic(
+                                    tintColor = CyberCardStart,
+                                    tintOpacity = 0.85f,
+                                    noiseOpacity = 0.04f,
+                                    borderColor = NeonPurple.copy(alpha = 0.25f),
+                                    enableNoise = false  // ★ 同设置页
+                                )
                         )
-                    ) {
-                        SensorDetailScreen(
+                        SensorDetailContent(
                             sensor = sensor,
-                            onBack = {
-                                showSensorDetail = false
-                                selectedSensorForDetail = null
-                            }
+                            progress = sensorProgress,
+                            density = density,
+                            onBack = { closeSensorDetail() }
                         )
                     }
                 }
