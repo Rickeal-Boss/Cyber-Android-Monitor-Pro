@@ -348,6 +348,8 @@
     <string name="float_stopped">Floating window stopped</string>
     <string name="float_notification_title">System Monitor</string>
     <string name="float_notification_text">Real-time monitoring active</string>
+    <string name="float_notif_toggle_hide">Tap to hide floating window</string>
+    <string name="float_notif_toggle_show">Tap to show floating window</string>
 
     <!-- ═══ Permission 权限 ═══ -->
     <string name="permission_location_title">Location Permission</string>

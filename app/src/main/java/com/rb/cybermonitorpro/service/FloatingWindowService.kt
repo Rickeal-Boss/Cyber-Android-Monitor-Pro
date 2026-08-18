@@ -20,7 +20,6 @@ import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import com.rb.cybermonitorpro.DeviceApplication
-import com.rb.cybermonitorpro.MainActivity
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.RefreshPolicy
 import com.rb.cybermonitorpro.data.model.BatteryInfo
@@ -45,6 +44,8 @@ class FloatingWindowService : Service() {
         private const val TAG = "FloatWinSvc"
         private const val CHANNEL_ID = "floating_window"
         private const val NOTIF_ID = 1001
+        /** 通知栏点击 → 临时显隐悬浮窗（不 stopSelf、不写 FloatingWindowConfig.enabled 持久化） */
+        const val ACTION_TOGGLE = "com.rb.cybermonitorpro.action.TOGGLE_FLOAT"
     }
 
     // ── F1: 样式实时应用 — 4 个样式 Flow combine 后统一 applyStyle ──
@@ -168,6 +169,21 @@ class FloatingWindowService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
+            // ★ FWS toggle: 通知栏点击 → 临时显隐悬浮窗（不 stopSelf、不写 enabled 持久化）
+            if (intent?.action == ACTION_TOGGLE) {
+                if (windows.isNotEmpty()) {
+                    // 隐藏: 移除全部悬浮窗并停采集, 通知文案 → "点击打开"
+                    removeAllWindows()
+                    stopDataCollection()
+                } else {
+                    // 显示: 先保证前台服务状态, 再建窗 + 启采集
+                    startForegroundSafe()
+                    createAllWindows()
+                    startDataCollection()
+                }
+                updateForegroundNotification()
+                return START_STICKY
+            }
             startForegroundSafe()
             createAllWindows()
             startDataCollection()
@@ -208,14 +224,31 @@ class FloatingWindowService : Service() {
         }
     }
 
+    /**
+     * 通知栏文案随显隐状态切换（windows 非空 = 已显示 → "点击关闭"）。
+     * contentIntent 指向 Service 自身 ACTION_TOGGLE —— 点击通知临时显隐，不跳转 MainActivity。
+     */
     private fun buildNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
         .setContentTitle(getString(R.string.float_svc_notif_title))
-        .setContentText(getString(R.string.float_svc_notif_text))
+        .setContentText(getString(
+            if (windows.isNotEmpty()) R.string.float_notif_toggle_hide
+            else R.string.float_notif_toggle_show
+        ))
         .setSmallIcon(R.drawable.ic_app_logo)
-        .setContentIntent(PendingIntent.getActivity(this, 0,
-            Intent(this, MainActivity::class.java),
+        .setContentIntent(PendingIntent.getService(this, 0,
+            Intent(this, FloatingWindowService::class.java).setAction(ACTION_TOGGLE),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
         .setOngoing(true).build()
+
+    /** 用 NotificationManager.notify 刷新前台通知文案（无需重启前台服务） */
+    private fun updateForegroundNotification() {
+        try {
+            val nm = getSystemService(NotificationManager::class.java)
+            nm?.notify(NOTIF_ID, buildNotification())
+        } catch (t: Throwable) {
+            Log.w(TAG, "更新通知失败", t)
+        }
+    }
 
     // ── 9 个独立窗口 ──
     private val itemDefs = listOf(
