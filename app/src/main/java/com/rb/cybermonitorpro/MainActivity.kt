@@ -12,9 +12,7 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import android.util.Log
@@ -31,11 +29,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import android.content.Context
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -71,6 +71,8 @@ import com.rb.cybermonitorpro.ui.effects.GlobalLightProvider
 import com.rb.cybermonitorpro.ui.effects.LocalSharedTransitionScope
 import com.rb.cybermonitorpro.ui.effects.StaggeredPageProvider
 import com.rb.cybermonitorpro.ui.effects.acrylic
+import com.rb.cybermonitorpro.ui.effects.circularReveal
+import com.rb.cybermonitorpro.ui.effects.rememberCircularRevealState
 import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.AppGlowBackground
 import com.rb.cybermonitorpro.ui.nightlight.CyberNightlightHost
@@ -270,6 +272,40 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         }
     }
 
+    // ── F3: 水波纹圆形展开 — 设置/悬浮窗/HDR实验室 3 覆盖层独立 reveal state + origin ──
+    //   进入 animateTo(1f) 弹簧扩散、退出 animateTo(0f) 后 isRevealing=false 移出组合;
+    //   传感器覆盖层不建自己的 reveal state，只一行挂接 F5 的 sensorProgress（唯一主时钟）。
+    //   预测返回"被拽走"(scale/translate)效果已移除，统一只留压暗 alpha —— 圆形展开/收缩是唯一过渡语言。
+    val settingsReveal = rememberCircularRevealState()
+    val floatReveal = rememberCircularRevealState()
+    val hdrLabReveal = rememberCircularRevealState()
+    var settingsOrigin by remember { mutableStateOf(Offset.Zero) }
+    var floatOrigin by remember { mutableStateOf(Offset.Zero) }
+    var hdrLabOrigin by remember { mutableStateOf(Offset.Zero) }
+    var sensorRevealOrigin by remember { mutableStateOf(Offset.Zero) }
+
+    // 兜底原点: 触发点未上报时从屏幕中心展开（方式 B: LocalConfiguration + density，无需 BoxWithConstraints）
+    val configuration = LocalConfiguration.current
+    val revealDensity = LocalDensity.current
+    val fallbackOrigin = remember(configuration, revealDensity) {
+        with(revealDensity) {
+            Offset(configuration.screenWidthDp.dp.toPx() / 2f, configuration.screenHeightDp.dp.toPx() / 2f)
+        }
+    }
+
+    LaunchedEffect(showSettings) {
+        if (showSettings) settingsReveal.expand(if (settingsOrigin != Offset.Zero) settingsOrigin else fallbackOrigin)
+        else settingsReveal.collapse()
+    }
+    LaunchedEffect(showFloatConfig) {
+        if (showFloatConfig) floatReveal.expand(if (floatOrigin != Offset.Zero) floatOrigin else fallbackOrigin)
+        else floatReveal.collapse()
+    }
+    LaunchedEffect(showHdrLab) {
+        if (showHdrLab) hdrLabReveal.expand(if (hdrLabOrigin != Offset.Zero) hdrLabOrigin else fallbackOrigin)
+        else hdrLabReveal.collapse()
+    }
+
     // ★ 预测性返回手势进度 (2026-06-19): 驱动覆盖层缩放/位移，替代纯 alpha 动画
     //   手指拖拽返回时 progress 0→1，覆盖层缩小+右移模拟"被拽走"；
     //   手势完成关闭覆盖层，手势取消则 spring 回弹。
@@ -281,8 +317,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     //      等价普通 BackHandler，覆盖层仍能正常关闭（仅无缩放进度动画）
     //   4. 与 MainTabs 的 pager BackHandler 互斥: overlayVisible 时本回调启用，
     //      MainTabs BackHandler enabled = (currentPage!=0 && !overlayVisible) 为 false
-    //   5. 不支持预测时 backProgress 保持 0f，覆盖层用 animateFloatAsState 的 alpha
-    //      动画提供退出过渡（tween 300ms），视觉上仍有淡出效果
+    //   5. 不支持预测时 backProgress 保持 0f，覆盖层以 F3 圆形展开/收缩弹簧
+    //      提供进入/退出过渡（进入 1f 扩散、退出 0f 收缩）
     //   6. BackGestureCompat 工具在启动时输出诊断日志，辅助排查 ROM 兼容性问题
     val backProgress = remember { Animatable(0f) }
 
@@ -348,11 +384,24 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 pagerState = pagerState,
                 scope = scope,
                 overlayVisible = overlayVisible,
-                onOpenSettings = { showSettings = true },
-                onOpenFloat = { showFloatConfig = true },
+                // F3: 触发点坐标随回调上抛，覆盖层从按钮/卡片中心圆形展开
+                onOpenSettings = { origin ->
+                    settingsOrigin = origin
+                    showSettings = true
+                },
+                onOpenFloat = { origin ->
+                    floatOrigin = origin
+                    showFloatConfig = true
+                },
                 onGpsTabChanged = { active -> gpsTabActive = active },
-                onOpenSensorDetail = { sensor -> openSensorDetail(sensor) },
-                onOpenHdrLab = { showHdrLab = true }
+                onOpenSensorDetail = { sensor, origin ->
+                    sensorRevealOrigin = origin
+                    openSensorDetail(sensor)
+                },
+                onOpenHdrLab = { origin ->
+                    hdrLabOrigin = origin
+                    showHdrLab = true
+                }
             )
 
             // ── 覆盖层 (graphicsLayer 透明动画, 保持 composition 存活) ──
@@ -360,19 +409,15 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             //   覆盖层在退出动画期间仍留在 composition 树中,
             //   系统预测性返回 (Android 15+) 可以跨页面渐变动画。
 
-            // ── 设置 ──
-            val settingsAlpha by animateFloatAsState(
-                targetValue = if (showSettings) 1f else 0f,
-                animationSpec = tween(300), label = "settingsAlpha"
-            )
-            if (settingsAlpha > 0.01f || showSettings) {
+            // ── 设置 (F3: 水波纹圆形展开; 预测返回仅压暗) ──
+            if (settingsReveal.isRevealing || showSettings) {
                 Box(Modifier.fillMaxSize()
+                    .circularReveal(
+                        progress = { settingsReveal.progress.value },
+                        origin = { settingsReveal.origin },
+                    )
                     .graphicsLayer {
-                        val p = backProgress.value
-                        alpha = settingsAlpha * (1f - p * 0.3f)
-                        scaleX = 1f - p * 0.06f
-                        scaleY = 1f - p * 0.06f
-                        translationX = size.width * p * 0.25f
+                        alpha = (1f - backProgress.value * 0.35f).coerceIn(0f, 1f)
                     }
                     .acrylic(
                         tintColor = CyberCardStart,
@@ -396,19 +441,15 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
-            // ── 悬浮窗 ──
-            val floatAlpha by animateFloatAsState(
-                targetValue = if (showFloatConfig) 1f else 0f,
-                animationSpec = tween(300), label = "floatAlpha"
-            )
-            if (floatAlpha > 0.01f || showFloatConfig) {
+            // ── 悬浮窗 (F3: 水波纹圆形展开; 预测返回仅压暗) ──
+            if (floatReveal.isRevealing || showFloatConfig) {
                 Box(Modifier.fillMaxSize()
+                    .circularReveal(
+                        progress = { floatReveal.progress.value },
+                        origin = { floatReveal.origin },
+                    )
                     .graphicsLayer {
-                        val p = backProgress.value
-                        alpha = floatAlpha * (1f - p * 0.3f)
-                        scaleX = 1f - p * 0.06f
-                        scaleY = 1f - p * 0.06f
-                        translationX = size.width * p * 0.25f
+                        alpha = (1f - backProgress.value * 0.35f).coerceIn(0f, 1f)
                     }
                     .acrylic(
                         tintColor = CyberCardStart,
@@ -427,19 +468,15 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
-            // ── HDR 实验室（详情页二层 — 局部 EDR 真机验证）──
-            val hdrLabAlpha by animateFloatAsState(
-                targetValue = if (showHdrLab) 1f else 0f,
-                animationSpec = tween(300), label = "hdrLabAlpha"
-            )
-            if (hdrLabAlpha > 0.01f || showHdrLab) {
+            // ── HDR 实验室（详情页二层 — 局部 EDR 真机验证; F3 水波纹中心展开）──
+            if (hdrLabReveal.isRevealing || showHdrLab) {
                 Box(Modifier.fillMaxSize()
+                    .circularReveal(
+                        progress = { hdrLabReveal.progress.value },
+                        origin = { hdrLabReveal.origin },
+                    )
                     .graphicsLayer {
-                        val p = backProgress.value
-                        alpha = hdrLabAlpha * (1f - p * 0.3f)
-                        scaleX = 1f - p * 0.06f
-                        scaleY = 1f - p * 0.06f
-                        translationX = size.width * p * 0.25f
+                        alpha = (1f - backProgress.value * 0.35f).coerceIn(0f, 1f)
                     }
                     .acrylic(
                         tintColor = CyberCardStart,
@@ -465,7 +502,13 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 val sensor = selectedSensorForDetail
                 if (sensor != null) {
                     val density = LocalDensity.current
-                    Box(Modifier.fillMaxSize()) {
+                    // F3: 传感器覆盖层只做一行挂接 — sensorProgress(F5 主时钟)驱动圆形展开, 不引入自己的 reveal state
+                    Box(Modifier.fillMaxSize()
+                        .circularReveal(
+                            progress = { sensorProgress.value },
+                            origin = { if (sensorRevealOrigin != Offset.Zero) sensorRevealOrigin else fallbackOrigin },
+                        )
+                    ) {
                         Box(
                             Modifier.fillMaxSize()
                                 .graphicsLayer { alpha = sensorProgress.value }
@@ -499,16 +542,27 @@ private fun MainTabs(
     pagerState: PagerState,
     scope: CoroutineScope,
     overlayVisible: Boolean = false,
-    onOpenSettings: () -> Unit,
-    onOpenFloat: () -> Unit,
+    onOpenSettings: (Offset) -> Unit,
+    onOpenFloat: (Offset) -> Unit,
     onGpsTabChanged: (Boolean) -> Unit = {},
-    onOpenSensorDetail: (com.rb.cybermonitorpro.data.model.SensorItemInfo) -> Unit = {},
-    onOpenHdrLab: () -> Unit = {}
+    onOpenSensorDetail: (com.rb.cybermonitorpro.data.model.SensorItemInfo, Offset) -> Unit = { _, _ -> },
+    onOpenHdrLab: (Offset) -> Unit = {}
 ) {
     val topTabs = rememberTopTabs()
     // 智能 GPS: 仅"网络" (index 5) 和 "GPS" (index 6) Tab 启用定位
     val currentPage = pagerState.currentPage
     val ctx = LocalContext.current
+    // F3: 按钮触发点坐标 — onGloballyPositioned 上报中心(boundsInRoot; RIPPLE-04 备 positionInWindow 降级)
+    var floatBtnOrigin by remember { mutableStateOf(Offset.Zero) }
+    var settingsBtnOrigin by remember { mutableStateOf(Offset.Zero) }
+    // HDR 实验室 P0: 屏幕中心展开(RowItemClickable 无 modifier 参数, 不改签名 — RIPPLE-03)
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val screenCenter = remember(configuration, density) {
+        with(density) {
+            Offset(configuration.screenWidthDp.dp.toPx() / 2f, configuration.screenHeightDp.dp.toPx() / 2f)
+        }
+    }
     LaunchedEffect(currentPage) {
         val isGpsRelated = currentPage == 5 || currentPage == 6
         onGpsTabChanged(isGpsRelated)
@@ -598,13 +652,15 @@ private fun MainTabs(
                 }
             }
 
-        val onFloatClick = remember(ctx) { { HapticUtils.standardTap(ctx); onOpenFloat() } }
-        val onSettingsClick = remember(ctx) { { HapticUtils.standardTap(ctx); onOpenSettings() } }
+        val onFloatClick = remember(ctx) { { HapticUtils.standardTap(ctx); onOpenFloat(floatBtnOrigin) } }
+        val onSettingsClick = remember(ctx) { { HapticUtils.standardTap(ctx); onOpenSettings(settingsBtnOrigin) } }
 
         // ── 玻璃圆底操作按钮 (与 LightCircleBackButton V3 视觉一致) ──
+        // F3: onGloballyPositioned 上报按钮中心 → 覆盖层从按钮中心圆形展开
         GlassCircleButton(
             onClick = onFloatClick,
             btnSize = 36.dp,
+            modifier = Modifier.onGloballyPositioned { floatBtnOrigin = it.boundsInRoot().center },
             contentDescription = stringResource(R.string.float_title)
         ) {
             Icon(
@@ -617,6 +673,7 @@ private fun MainTabs(
         GlassCircleButton(
             onClick = onSettingsClick,
             btnSize = 36.dp,
+            modifier = Modifier.onGloballyPositioned { settingsBtnOrigin = it.boundsInRoot().center },
             contentDescription = stringResource(R.string.common_settings)
         ) {
             Icon(
@@ -656,7 +713,7 @@ private fun MainTabs(
                 7 -> SensorsScreen(
                     onNavigateToSensor = onOpenSensorDetail
                 )
-                8 -> DeviceScreen(onOpenHdrLab = onOpenHdrLab)
+                8 -> DeviceScreen(onOpenHdrLab = { onOpenHdrLab(screenCenter) })
             }
             } // end StaggeredPageProvider (per-page)
         }

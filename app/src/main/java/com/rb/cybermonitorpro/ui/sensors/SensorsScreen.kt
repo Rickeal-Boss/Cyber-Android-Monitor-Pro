@@ -24,6 +24,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -44,24 +47,25 @@ import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
 /**
  * 传感器列表页 — 现在通过回调将传感器选择上抛给 MainActivity 以全屏覆盖层展示
+ * F3: 回调携带卡片中心触点坐标（boundsInRoot），覆盖层从卡片中心圆形展开
  */
 @Composable
 fun SensorsScreen(
     viewModel: SensorsViewModel = koinViewModel(),
-    onNavigateToSensor: (SensorItemInfo) -> Unit = {}
+    onNavigateToSensor: (SensorItemInfo, Offset) -> Unit = { _, _ -> }
 ) {
     val sensors by viewModel.sensors.observeAsState(emptyList())
 
     SensorListContent(
         sensors = sensors,
-        onSensorClick = { onNavigateToSensor(it) }
+        onSensorClick = { sensor, origin -> onNavigateToSensor(sensor, origin) }
     )
 }
 
 @Composable
 private fun SensorListContent(
     sensors: List<SensorItemInfo>,
-    onSensorClick: (SensorItemInfo) -> Unit
+    onSensorClick: (SensorItemInfo, Offset) -> Unit
 ) {
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberHdrScrollState()).padding(16.dp),
@@ -81,7 +85,11 @@ private fun SensorListContent(
         )
 
         sensors.forEachIndexed { idx, sensor ->
-            SensorItemCard(sensor = sensor, onClick = { onSensorClick(sensor) }, modifier = Modifier.staggeredSwipe(cardIdx + idx))
+            SensorItemCard(
+                sensor = sensor,
+                onClick = { origin -> onSensorClick(sensor, origin) },
+                modifier = Modifier.staggeredSwipe(cardIdx + idx)
+            )
         }
         cardIdx += sensors.size
     }
@@ -89,10 +97,12 @@ private fun SensorListContent(
 
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun SensorItemCard(sensor: SensorItemInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun SensorItemCard(sensor: SensorItemInfo, onClick: (Offset) -> Unit, modifier: Modifier = Modifier) {
     val meta = SensorTypeMeta.fromTypeId(sensor.type)
     val ctx = LocalContext.current
     val sharedScope = LocalSharedTransitionScope.current
+    // F3: 卡片中心触点（boundsInRoot; RIPPLE-04: 偏移异常时降级 positionInWindow 换算）
+    var cardCenter by remember { mutableStateOf(Offset.Zero) }
 
     Card(
         // ★ F5-2: sharedElement 插在修饰链头 — 后接 staggeredSwipe→cardGradientBorder→cardRipple 链序不动;
@@ -110,8 +120,9 @@ private fun SensorItemCard(sensor: SensorItemInfo, onClick: () -> Unit, modifier
             )
             .then(modifier)
             .fillMaxWidth()
+            .onGloballyPositioned { cardCenter = it.boundsInRoot().center }
             .cardGradientBorder(20.dp, hdrHighlight = true)
-            .cardRipple(onClick = onClick),
+            .cardRipple(onClick = { onClick(cardCenter) }),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
