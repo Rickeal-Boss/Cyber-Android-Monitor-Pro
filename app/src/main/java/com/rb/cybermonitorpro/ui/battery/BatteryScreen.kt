@@ -22,12 +22,11 @@ import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.rb.cybermonitorpro.ui.components.CyberIcons
+import com.rb.cybermonitorpro.ui.components.FancySlider
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -752,7 +751,7 @@ private fun BatteryCurrentMultiplierCard(
                 }
                 Spacer(Modifier.height(8.dp))
                 // ★ 自由滑动（steps=0）：valueRange=0..3 映射 4 挡，松手时 snap 到最近挡位
-                Slider(
+                FancySlider(
                     value = sliderIndex,
                     onValueChange = {
                         isDragging = true
@@ -769,11 +768,8 @@ private fun BatteryCurrentMultiplierCard(
                     steps = 0,
                     enabled = enabled,
                     modifier = Modifier.fillMaxWidth(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = NeonPurpleBright,
-                        activeTrackColor = NeonPurpleBright,
-                        inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
-                    )
+                    // 原版已选段用 NeonPurpleBright 高亮，保持一致
+                    activeTrackColor = NeonPurpleBright,
                 )
                 // ★ 2026-08-06 字号缩小：14sp (M3 TextButton 默认 labelLarge) → 12sp。
                 //   同时预设按钮改 weight(1f) 均分剩余宽度 —— M3 Button 内部 Row 带

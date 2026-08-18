@@ -18,8 +18,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +39,8 @@ import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.LocaleManager
 import com.rb.cybermonitorpro.ui.components.CyberIcons
 import com.rb.cybermonitorpro.ui.components.CyberJoystickSwitch
+import com.rb.cybermonitorpro.ui.components.FancySlider
+import com.rb.cybermonitorpro.ui.components.FancySliderRotation
 import com.rb.cybermonitorpro.ui.effects.GlobalLightSwitch
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.effects.NightlightBarSwitch
@@ -317,7 +317,7 @@ private fun ModuleIntervalCard(cfg: ModuleIntervalConfig, viewModel: SettingsVie
             }
             Spacer(Modifier.height(10.dp))
 
-            Slider(
+            FancySlider(
                 value = currentMs,
                 onValueChange = { currentMs = it },
                 onValueChangeFinished = {
@@ -328,11 +328,6 @@ private fun ModuleIntervalCard(cfg: ModuleIntervalConfig, viewModel: SettingsVie
                 valueRange = 500f..5000f,
                 steps = 0,  // 自由滑动，档次由 onValueChangeFinished snap 处理
                 modifier = Modifier.fillMaxWidth(),
-                colors = SliderDefaults.colors(
-                    thumbColor = NeonPurpleBright,
-                    activeTrackColor = NeonPurple,
-                    inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
-                )
             )
 
             // ★ Bug 修复 (2026-06-23): 原 Row(Arrangement.SpaceBetween) 将 5 个标签
@@ -486,7 +481,7 @@ private fun HapticSettingsCard() {
                 //   拖拽 1 秒内可能触发 60+ 次震动 + 60+ 次 SP 写入 → 严重卡顿 + 震动器过载
                 //   修复: onValueChange 只更新本地 state + 实时显示 label,
                 //         onValueChangeFinished (手指抬起) 时一次性写入 SP + 触发一次震动
-                Slider(
+                FancySlider(
                     value = intensity,
                     onValueChange = { v ->
                         intensity = v
@@ -498,12 +493,8 @@ private fun HapticSettingsCard() {
                     },
                     valueRange = 1f..3f,
                     steps = 1,
+                    rotationDegrees = FancySliderRotation.forSteps(1),  // 3 档 → 360° 整圈
                     modifier = Modifier.fillMaxWidth(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = NeonPurpleBright,
-                        activeTrackColor = NeonPurple,
-                        inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
-                    )
                 )
 
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -582,7 +573,7 @@ private fun CyberNightlightTurboXdrSettingsCard() {
                     color = NeonPurpleBright, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(4.dp))
-            Slider(
+            FancySlider(
                 value = intensity,
                 onValueChange = { intensity = it },
                 onValueChangeFinished = {
@@ -592,11 +583,6 @@ private fun CyberNightlightTurboXdrSettingsCard() {
                 valueRange = 1f..8f,
                 steps = 69,  // 0.1× 步长 → (8-1)/0.1 - 1 = 69 个中间挡
                 modifier = Modifier.fillMaxWidth(),
-                colors = SliderDefaults.colors(
-                    thumbColor = NeonPurpleBright,
-                    activeTrackColor = NeonPurple,
-                    inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
-                )
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text("1.0×", fontSize = 10.sp, color = NeonSteelBlue.copy(alpha = 0.7f))

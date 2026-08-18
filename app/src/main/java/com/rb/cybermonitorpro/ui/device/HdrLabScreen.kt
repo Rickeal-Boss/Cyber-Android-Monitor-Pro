@@ -24,8 +24,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -50,6 +48,7 @@ import com.rb.cybermonitorpro.AppSettings
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.ui.components.CyberIcons
 import com.rb.cybermonitorpro.ui.components.CyberJoystickSwitch
+import com.rb.cybermonitorpro.ui.components.FancySlider
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.theme.CyberCardEnd
@@ -278,7 +277,7 @@ fun HdrLabScreen(onBack: () -> Unit = {}) {
                                 tint = NeonSteelBlue.copy(alpha = 0.5f),
                                 modifier = Modifier.size(18.dp)
                             )
-                            Slider(
+                            FancySlider(
                                 value = desired,
                                 onValueChange = { v ->
                                     desired = v
@@ -289,14 +288,13 @@ fun HdrLabScreen(onBack: () -> Unit = {}) {
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(horizontal = 8.dp),
-                                colors = SliderDefaults.colors(
-                                    thumbColor = NeonPurpleBright,
-                                    activeTrackColor = NeonPurple,
-                                    inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f),
-                                    disabledThumbColor = NeonSteelBlue.copy(alpha = 0.4f),
-                                    disabledActiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f),
-                                    disabledInactiveTrackColor = NeonSteelBlue.copy(alpha = 0.2f)
-                                )
+                                // SLIDER-06: disabled 态用 if(canControl) 外部选色，与原三色降透明度视觉一致
+                                thumbColor = if (canControl) NeonPurpleBright
+                                    else NeonSteelBlue.copy(alpha = 0.4f),
+                                activeTrackColor = if (canControl) NeonPurple
+                                    else NeonSteelBlue.copy(alpha = 0.3f),
+                                inactiveTrackColor = if (canControl) NeonSteelBlue.copy(alpha = 0.3f)
+                                    else NeonSteelBlue.copy(alpha = 0.2f),
                             )
                             Icon(
                                 CyberIcons.Light, null,
@@ -536,7 +534,7 @@ private fun HdrLabTurboXdrCard() {
                         color = NeonPurpleBright, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(4.dp))
-                Slider(
+                FancySlider(
                     value = intensity,
                     onValueChange = { intensity = it },
                     onValueChangeFinished = {
@@ -546,11 +544,6 @@ private fun HdrLabTurboXdrCard() {
                     valueRange = 1f..8f,
                     steps = 69,  // 0.1× 步长 → (8-1)/0.1 - 1 = 69 个中间挡
                     modifier = Modifier.fillMaxWidth(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = NeonPurpleBright,
-                        activeTrackColor = NeonPurple,
-                        inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
-                    )
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("1.0×", fontSize = 10.sp, color = NeonSteelBlue.copy(alpha = 0.7f))

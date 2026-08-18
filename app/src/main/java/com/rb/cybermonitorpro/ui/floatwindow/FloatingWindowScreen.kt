@@ -20,14 +20,13 @@ import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.rb.cybermonitorpro.ui.components.CyberIcons
+import com.rb.cybermonitorpro.ui.components.FancySlider
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -214,7 +213,7 @@ private fun RefreshIntervalCard() {
                 fontSize = 12.sp, color = TextSecondary)
 
             // Free sliding + snap to nearest discrete step on release
-            Slider(
+            FancySlider(
                 value = dragValue,
                 onValueChange = {
                     dragValue = it
@@ -230,11 +229,6 @@ private fun RefreshIntervalCard() {
                 },
                 valueRange = refreshStepOptions.first().toFloat()..refreshStepOptions.last().toFloat(),
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                colors = SliderDefaults.colors(
-                    thumbColor = NeonPurpleBright,
-                    activeTrackColor = NeonPurple,
-                    inactiveTrackColor = NeonSteelBlue.copy(alpha = 0.3f)
-                )
             )
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
