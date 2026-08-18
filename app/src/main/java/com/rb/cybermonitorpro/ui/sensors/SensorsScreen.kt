@@ -1,5 +1,8 @@
 package com.rb.cybermonitorpro.ui.sensors
 
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.SensorItemInfo
 import com.rb.cybermonitorpro.data.model.SensorTypeMeta
+import com.rb.cybermonitorpro.ui.effects.LocalSharedTransitionScope
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
@@ -83,13 +87,28 @@ private fun SensorListContent(
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun SensorItemCard(sensor: SensorItemInfo, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val meta = SensorTypeMeta.fromTypeId(sensor.type)
     val ctx = LocalContext.current
+    val sharedScope = LocalSharedTransitionScope.current
 
     Card(
-        modifier
+        // ★ F5-2: sharedElement 插在修饰链头 — 后接 staggeredSwipe→cardGradientBorder→cardRipple 链序不动;
+        //   key 与 SensorDetailContent 标题容器一致 ("sensor_"+sensorId); scope 为 null 时优雅降级
+        Modifier
+            .then(
+                if (sharedScope != null) with(sharedScope) {
+                    Modifier.sharedElement(
+                        rememberSharedContentState(key = "sensor_${sensor.sensorId}"),
+                        boundsTransform = { _, _ ->
+                            spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                        }
+                    )
+                } else Modifier
+            )
+            .then(modifier)
             .fillMaxWidth()
             .cardGradientBorder(20.dp, hdrHighlight = true)
             .cardRipple(onClick = onClick),

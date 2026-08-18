@@ -51,6 +51,7 @@ private val axisColors = listOf(NeonPurple, NeonCyan, NeonMagenta)
  * 非标题内容的 alpha 与 24dp→0 上移全部由其在 draw 阶段驱动（零重组）。
  * 滚动必须用 rememberHdrScrollState()（pre20 回归红线，勿回退 rememberScrollState）。
  */
+@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 fun SensorDetailContent(
     sensor: SensorItemInfo,
@@ -131,23 +132,45 @@ fun SensorDetailContent(
                 .padding(start = 16.dp, end = 16.dp, top = 50.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ── 传感器名称 ──
-            Text(
-                SensorTypeMeta.getDisplayName(sensor.type, LocalContext.current),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (meta != null) {
-                // ── 命名规范 (2026-06-20): 副标题统一为"厂商 · 硬件名",
-                //   不再显示 type 数字 (用户无感), 硬件名在信息卡单独展示 ──
-                val vendorLabel = sensor.vendor.ifEmpty { sensor.name.split(" ").firstOrNull() ?: "" }
-                Text(
-                    if (vendorLabel.isNotEmpty()) "$vendorLabel · ${sensor.name}"
-                    else sensor.name,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // ── F5-2 标题容器: matching sharedElement(卡片 ↔ 详情标题形变), 不套 sensorProgress 变换 ──
+            val sharedScope = com.rb.cybermonitorpro.ui.effects.LocalSharedTransitionScope.current
+            Box(
+                Modifier
+                    .then(
+                        if (sharedScope != null) with(sharedScope) {
+                            Modifier.sharedElement(
+                                rememberSharedContentState(key = "sensor_${sensor.sensorId}"),
+                                boundsTransform = { _, _ ->
+                                    androidx.compose.animation.core.spring(
+                                        dampingRatio = 0.85f,
+                                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                                    )
+                                }
+                            )
+                        } else Modifier
+                    )
+                    .fillMaxWidth()
+            ) {
+                Column {
+                    // ── 传感器名称 ──
+                    Text(
+                        SensorTypeMeta.getDisplayName(sensor.type, LocalContext.current),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (meta != null) {
+                        // ── 命名规范 (2026-06-20): 副标题统一为"厂商 · 硬件名",
+                        //   不再显示 type 数字 (用户无感), 硬件名在信息卡单独展示 ──
+                        val vendorLabel = sensor.vendor.ifEmpty { sensor.name.split(" ").firstOrNull() ?: "" }
+                        Text(
+                            if (vendorLabel.isNotEmpty()) "$vendorLabel · ${sensor.name}"
+                            else sensor.name,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
             }
 
             // ── F5: 非标题内容 — alpha + 24dp 上移由 sensorProgress 驱动 (draw 阶段, 零重组) ──

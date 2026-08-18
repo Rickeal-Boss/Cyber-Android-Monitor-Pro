@@ -8,6 +8,8 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -66,6 +68,7 @@ import com.rb.cybermonitorpro.ui.sensors.SensorDetailContent
 import com.rb.cybermonitorpro.ui.sensors.SensorsScreen
 import com.rb.cybermonitorpro.ui.settings.SettingsScreen
 import com.rb.cybermonitorpro.ui.effects.GlobalLightProvider
+import com.rb.cybermonitorpro.ui.effects.LocalSharedTransitionScope
 import com.rb.cybermonitorpro.ui.effects.StaggeredPageProvider
 import com.rb.cybermonitorpro.ui.effects.acrylic
 import com.rb.cybermonitorpro.ui.effects.revealLight
@@ -179,7 +182,7 @@ private fun rememberTopTabs(): List<TopTabItem> {
 }
 
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalSharedTransitionApi::class)
 @Composable
 fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     // 安全获取 ViewModel: 如果 Koin 未初始化或找不到 ViewModel, 不会崩溃
@@ -335,7 +338,11 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             // ★ 行业首创：局部 UI 元素级真 HDR 增亮浮层（卡片描边 / Tab 指示条 / 大数字 / 折线+网格）
             HdrPatchHost(hidden = overlayVisible, pagerState = pagerState, modifier = Modifier.matchParentSize())
             // ★ Windows 10 风格全局光照 — 包裹全部内容以捕获指针事件
-            GlobalLightProvider {
+            // ★ F5-2: SharedTransitionLayout 包裹 — 传感器卡片 ↔ 详情标题 sharedElement 形变
+            //   (CARD-01: 实验 API 必须 @OptIn; scope 经 CompositionLocal 下发, 调用方判空降级)
+            SharedTransitionLayout {
+                CompositionLocalProvider(LocalSharedTransitionScope provides this@SharedTransitionLayout) {
+                    GlobalLightProvider {
             // ★ 主 Tab 页始终保持在 composition 中，保留所有滚动状态
             MainTabs(
                 pagerState = pagerState,
@@ -480,6 +487,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
             } // end GlobalLightProvider
+                } // end CompositionLocalProvider(LocalSharedTransitionScope)
+            } // end SharedTransitionLayout
         }
     }
 }
