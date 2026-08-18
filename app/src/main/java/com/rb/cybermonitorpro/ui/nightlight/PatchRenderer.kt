@@ -8,6 +8,7 @@ import android.graphics.Typeface
 import android.opengl.GLES20
 import android.opengl.GLUtils
 import android.opengl.GLSurfaceView
+import android.os.SystemClock
 import android.view.Display
 import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import java.nio.ByteBuffer
@@ -48,6 +49,9 @@ class PatchRenderer(
     private var uOffset = 0
 
     @Volatile private var _enabled = false
+    // ★ pre21：由宿主 HdrPatchSurfaceView 注入（GLSurfaceView.requestRender 线程安全，
+    //   GL 线程 onDrawFrame 内调用安排下一帧）——pendingUploads 自驱动渲染用。
+    var requestFrame: (() -> Unit)? = null
     // ★ pre14：patches 由 StateFlow collect(Main 协程)写入、GL 线程读取，加 @Volatile 保可见性。
     @Volatile private var patches: List<HdrPatch> = emptyList()
     private var surfaceW = 1
@@ -161,6 +165,14 @@ class PatchRenderer(
     override fun onDrawFrame(gl: javax.microedition.khronos.opengles.GL10?) {
         try {
             drawFrameInternal(gl)
+            // ★ pre21：替换任务自驱动——pendingUploads 非空且不在门控/失活态 → 安排下一帧，
+            //   队列持续推进直到清空。pre20 的 bug：drain 只在 requestRender 触发（WHEN_DIRTY），
+            //   若无新的 flow 发射（垂直滚动停止后数据刷新前的静止期），替换任务积压 →
+            //   下一次刷新时旧纹理被替换/新纹理点亮"跳变" → 滚动停止瞬间的闪烁。
+            //   自驱动后：滚动中队列消化快、停止时队列必空 → 停止后零渲染零闪烁。
+            if (pendingUploads.isNotEmpty() && _enabled && egl.pqSurfaceActive && !scrollGated) {
+                requestFrame?.invoke()
+            }
             // 本帧无异常 → 清零连续错误计数（连续 ≥3 次异常才禁用，单次毛刺自动恢复）。
             consecutiveErrors = 0
         } catch (t: Throwable) {
