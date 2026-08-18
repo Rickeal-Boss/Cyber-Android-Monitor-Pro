@@ -205,6 +205,17 @@ fun Modifier.hdrTabBarBorderPatch(
 }
 
 /**
+ * 贴片窗口坐标的普通持有者（非 Compose State）。
+ *
+ * ★ pre18：位置写入必须避免触发重组。onGloballyPositioned 在垂直滚动时每帧回调，
+ *   若位置存进 mutableStateOf，写新值会触发本 Composable 重组（「上下滑动 HDR 贴片重组」）。
+ *   改存普通字段后，滚动期间仅直接更新注册表（GL 渲染器重绘），不再触发 Compose 重组。
+ */
+private class PatchRectHolder {
+    var value: android.graphics.RectF? = null
+}
+
+/**
  * 大数字 HDR 字形。始终渲染原 SDR Text（保留布局/测量，且永不消失），
  * 并在 TurboXDR 开启时把字形本体（精确栅格化的位图掩码）上报为 TEXT_GLYPH 贴片，
  * 由 PQ surface 叠加真实 HDR 增亮。
@@ -255,11 +266,11 @@ fun HdrMetricText(
         onDispose { }
     }
 
-    val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
+    val posHolder = remember { PatchRectHolder() }
 
     fun report() {
         val bmp = bitmapState.value
-        val pos = posState.value
+        val pos = posHolder.value
         if (!enabled || bmp == null || pos == null) {
             HdrPatchRegistry.remove(key)
             return
@@ -292,7 +303,8 @@ fun HdrMetricText(
                 // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
                 val p = coords.localToRoot(Offset.Zero)
                 measuredWidthPx = coords.size.width
-                posState.value = android.graphics.RectF(
+                // ★ pre18：写普通字段而非 State，垂直滚动时避免每帧重组（贴片"重组"）。
+                posHolder.value = android.graphics.RectF(
                     p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
                 )
                 report()
@@ -547,11 +559,11 @@ fun Modifier.hdrTabIconPatch(key: String, selected: Boolean, iconRes: Int): Modi
         onDispose { }
     }
 
-    val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
+    val posHolder = remember { PatchRectHolder() }
 
     fun report() {
         val bmp = bitmapState.value
-        val pos = posState.value
+        val pos = posHolder.value
         if (!enabled || bmp == null || pos == null) {
             HdrPatchRegistry.remove(key)
             return
@@ -580,7 +592,8 @@ fun Modifier.hdrTabIconPatch(key: String, selected: Boolean, iconRes: Int): Modi
     this.onGloballyPositioned { coords ->
         // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
         val p = coords.localToRoot(Offset.Zero)
-        posState.value = android.graphics.RectF(
+        // ★ pre18：写普通字段而非 State，避免滚动/布局期间触发重组。
+        posHolder.value = android.graphics.RectF(
             p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
         )
         report()
@@ -693,11 +706,11 @@ fun Modifier.hdrVectorIconPatch(
         onDispose { }
     }
 
-    val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
+    val posHolder = remember { PatchRectHolder() }
 
     fun report() {
         val bmp = bitmapState.value
-        val pos = posState.value
+        val pos = posHolder.value
         if (!enabled || bmp == null || pos == null) {
             HdrPatchRegistry.remove(key)
             return
@@ -725,7 +738,8 @@ fun Modifier.hdrVectorIconPatch(
     this.onGloballyPositioned { coords ->
         // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
         val p = coords.localToRoot(Offset.Zero)
-        posState.value = android.graphics.RectF(
+        // ★ pre18：写普通字段而非 State，避免滚动/布局期间触发重组。
+        posHolder.value = android.graphics.RectF(
             p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
         )
         report()
