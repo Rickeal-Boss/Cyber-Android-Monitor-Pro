@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -272,16 +273,36 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         }
     }
 
-    // ── F3: 水波纹圆形展开 — 设置/悬浮窗/HDR实验室 3 覆盖层独立 reveal state + origin ──
+    // ── F5 扩展: HDR 实验室覆盖层 — 同传感器模式的可打断过渡 (keepAlive 守卫 + Animatable 主时钟) ──
+    //   进入: animateTo(1f, ENTRY) 从屏幕中心触发点 scale/slide 位移展开;
+    //   预测返回: snapTo 跟手 / 取消回弹 1f / 完成 animateTo(0f) 后 showHdrLab=false;
+    //   渲染条件读 hdrAlive State, 绝不读 hdrProgress.value 组合判断 → 零重组。
+    val hdrProgress = remember { Animatable(0f) }
+    var hdrAlive by remember { mutableStateOf(false) }
+
+    fun openHdrLab() {
+        showHdrLab = true
+        hdrAlive = true
+        scope.launch { hdrProgress.animateTo(1f, SENSOR_ENTRY_SPRING) }
+    }
+
+    fun closeHdrLab() {
+        scope.launch {
+            hdrProgress.animateTo(0f, SENSOR_EXIT_SPRING)
+            showHdrLab = false
+            hdrAlive = false
+        }
+    }
+
+    // ── F3: 水波纹圆形展开 — 仅【设置】【悬浮窗】2 覆盖层独立 reveal state + origin ──
     //   进入 animateTo(1f) 弹簧扩散、退出 animateTo(0f) 后 isRevealing=false 移出组合;
+    //   HDR 实验室已改归 F5 可打断过渡管理（hdrProgress, 见上）;
     //   传感器覆盖层不建自己的 reveal state，只一行挂接 F5 的 sensorProgress（唯一主时钟）。
     //   预测返回"被拽走"(scale/translate)效果已移除，统一只留压暗 alpha —— 圆形展开/收缩是唯一过渡语言。
     val settingsReveal = rememberCircularRevealState()
     val floatReveal = rememberCircularRevealState()
-    val hdrLabReveal = rememberCircularRevealState()
     var settingsOrigin by remember { mutableStateOf(Offset.Zero) }
     var floatOrigin by remember { mutableStateOf(Offset.Zero) }
-    var hdrLabOrigin by remember { mutableStateOf(Offset.Zero) }
     var sensorRevealOrigin by remember { mutableStateOf(Offset.Zero) }
 
     // 兜底原点: 触发点未上报时从屏幕中心展开（方式 B: LocalConfiguration + density，无需 BoxWithConstraints）
@@ -300,10 +321,6 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     LaunchedEffect(showFloatConfig) {
         if (showFloatConfig) floatReveal.expand(if (floatOrigin != Offset.Zero) floatOrigin else fallbackOrigin)
         else floatReveal.collapse()
-    }
-    LaunchedEffect(showHdrLab) {
-        if (showHdrLab) hdrLabReveal.expand(if (hdrLabOrigin != Offset.Zero) hdrLabOrigin else fallbackOrigin)
-        else hdrLabReveal.collapse()
     }
 
     // ★ 预测性返回手势进度 (2026-06-19): 驱动覆盖层缩放/位移，替代纯 alpha 动画
@@ -324,14 +341,18 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
     // ── 预测性返回: PredictiveBackHandler 接收手指拖拽进度 ──
     // activity-compose 1.9.0 中 PredictiveBackHandler 已稳定（无需 @OptIn）
-    // F5: 传感器详情分支 — 手势期 sensorProgress 从起点跟手退回，取消回弹到 1f
+    // F5: 传感器/HDR实验室 分支 — 手势期各自 progress 从起点跟手退回，取消回弹到 1f
     PredictiveBackHandler(enabled = overlayVisible) { progress: Flow<BackEventCompat> ->
         val sensorStart = if (showSensorDetail) sensorProgress.value else 0f
+        val hdrStart = if (showHdrLab) hdrProgress.value else 0f
         try {
             progress.collect { event ->
                 backProgress.snapTo(event.progress)
                 if (showSensorDetail) {
                     sensorProgress.snapTo((sensorStart * (1f - event.progress)).coerceIn(0f, 1f))
+                }
+                if (showHdrLab) {
+                    hdrProgress.snapTo((hdrStart * (1f - event.progress)).coerceIn(0f, 1f))
                 }
             }
             // 手势完成 — 关闭当前覆盖层，重置进度
@@ -343,14 +364,19 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     selectedSensorForDetail = null
                     sensorAlive = false
                 }
+                showHdrLab -> {
+                    hdrProgress.snapTo(0f)
+                    showHdrLab = false
+                    hdrAlive = false
+                }
                 showSettings -> showSettings = false
                 showFloatConfig -> showFloatConfig = false
-                showHdrLab -> showHdrLab = false
             }
         } catch (e: CancellationException) {
             // 手势取消 — Spring 平滑回弹 (仅支持预测的 ROM 会触发)
             backProgress.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
             if (showSensorDetail) sensorProgress.animateTo(1f, SENSOR_EXIT_SPRING)
+            if (showHdrLab) hdrProgress.animateTo(1f, SENSOR_EXIT_SPRING)
         }
     }
 
@@ -398,10 +424,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     sensorRevealOrigin = origin
                     openSensorDetail(sensor)
                 },
-                onOpenHdrLab = { origin ->
-                    hdrLabOrigin = origin
-                    showHdrLab = true
-                }
+                onOpenHdrLab = { openHdrLab() }
             )
 
             // ── 覆盖层 (graphicsLayer 透明动画, 保持 composition 存活) ──
@@ -468,30 +491,40 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
-            // ── HDR 实验室（详情页二层 — 局部 EDR 真机验证; F3 水波纹中心展开）──
-            if (hdrLabReveal.isRevealing || showHdrLab) {
-                Box(Modifier.fillMaxSize()
-                    .circularReveal(
-                        progress = { hdrLabReveal.progress.value },
-                        origin = { hdrLabReveal.origin },
-                    )
-                    .graphicsLayer {
-                        alpha = (1f - backProgress.value * 0.35f).coerceIn(0f, 1f)
+            // ── HDR 实验室（详情页二层 — 局部 EDR 真机验证; F5 可打断过渡, 主时钟 hdrProgress）──
+            //   渲染条件读 hdrAlive State; 从屏幕中心触发点 scale/slide 位移展开,
+            //   预测返回手势 snapTo 跟手、取消回弹 1f、完成 animateTo(0f) 后移出组合。
+            if (hdrAlive || showHdrLab) {
+                Box(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier.fillMaxSize()
+                            .graphicsLayer {
+                                val p = hdrProgress.value
+                                alpha = p
+                                // F5 入口位移形变: 以屏幕中心为 pivot 微缩放 + 横向滑入 (可打断, 无 sharedElement)
+                                val pivotX = (fallbackOrigin.x / size.width).coerceIn(0f, 1f)
+                                val pivotY = (fallbackOrigin.y / size.height).coerceIn(0f, 1f)
+                                transformOrigin = TransformOrigin(pivotX, pivotY)
+                                val s = 0.9f + 0.1f * p
+                                scaleX = s
+                                scaleY = s
+                                translationX = (1f - p) * size.width * 0.06f
+                            }
+                            .acrylic(
+                                tintColor = CyberCardStart,
+                                tintOpacity = 0.85f,
+                                noiseOpacity = 0.04f,
+                                borderColor = NeonPurple.copy(alpha = 0.25f),
+                                enableNoise = false  // ★ 同设置页：全屏覆盖层禁用噪点（性能）
+                            )
+                    ) {
+                        HdrLabScreen(onBack = { closeHdrLab() })
+                        LightCircleBackButton(
+                            onClick = { closeHdrLab() },
+                            btnSize = 48.dp,
+                            modifier = Modifier.padding(top = 8.dp, start = 16.dp).align(Alignment.TopStart)
+                        )
                     }
-                    .acrylic(
-                        tintColor = CyberCardStart,
-                        tintOpacity = 0.85f,
-                        noiseOpacity = 0.04f,
-                        borderColor = NeonPurple.copy(alpha = 0.25f),
-                        enableNoise = false  // ★ 同设置页：全屏覆盖层禁用噪点（性能）
-                    )
-                ) {
-                    HdrLabScreen(onBack = { showHdrLab = false })
-                    LightCircleBackButton(
-                        onClick = { showHdrLab = false },
-                        btnSize = 48.dp,
-                        modifier = Modifier.padding(top = 8.dp, start = 16.dp).align(Alignment.TopStart)
-                    )
                 }
             }
 
@@ -546,7 +579,7 @@ private fun MainTabs(
     onOpenFloat: (Offset) -> Unit,
     onGpsTabChanged: (Boolean) -> Unit = {},
     onOpenSensorDetail: (com.rb.cybermonitorpro.data.model.SensorItemInfo, Offset) -> Unit = { _, _ -> },
-    onOpenHdrLab: (Offset) -> Unit = {}
+    onOpenHdrLab: () -> Unit = {}
 ) {
     val topTabs = rememberTopTabs()
     // 智能 GPS: 仅"网络" (index 5) 和 "GPS" (index 6) Tab 启用定位
@@ -555,14 +588,6 @@ private fun MainTabs(
     // F3: 按钮触发点坐标 — onGloballyPositioned 上报中心(boundsInRoot; RIPPLE-04 备 positionInWindow 降级)
     var floatBtnOrigin by remember { mutableStateOf(Offset.Zero) }
     var settingsBtnOrigin by remember { mutableStateOf(Offset.Zero) }
-    // HDR 实验室 P0: 屏幕中心展开(RowItemClickable 无 modifier 参数, 不改签名 — RIPPLE-03)
-    val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
-    val screenCenter = remember(configuration, density) {
-        with(density) {
-            Offset(configuration.screenWidthDp.dp.toPx() / 2f, configuration.screenHeightDp.dp.toPx() / 2f)
-        }
-    }
     LaunchedEffect(currentPage) {
         val isGpsRelated = currentPage == 5 || currentPage == 6
         onGpsTabChanged(isGpsRelated)
@@ -713,7 +738,7 @@ private fun MainTabs(
                 7 -> SensorsScreen(
                     onNavigateToSensor = onOpenSensorDetail
                 )
-                8 -> DeviceScreen(onOpenHdrLab = { onOpenHdrLab(screenCenter) })
+                8 -> DeviceScreen(onOpenHdrLab = onOpenHdrLab)
             }
             } // end StaggeredPageProvider (per-page)
         }
