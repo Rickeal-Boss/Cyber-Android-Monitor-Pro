@@ -320,6 +320,7 @@
     <string name="sensor_axis_distance">距離</string>
     <string name="sensor_axis_humidity">濕度</string>
     <string name="sensor_axis_temperature">溫度</string>
+    <string name="sensor_axis_steps">步數</string>
     <string name="sensor_axis_x">X</string>
     <string name="sensor_axis_y">Y</string>
     <string name="sensor_axis_z">Z</string>
@@ -880,6 +881,20 @@
     <string name="sensor_yes">是</string>
     <string name="sensor_no">否</string>
     <string name="sensor_type_step_counter">步數計數器</string>
+    <string name="sensor_type_step_detector">步數偵測器</string>
+
+    <!-- F4 氣壓海拔與步數 -->
+    <string name="altitude_title">氣壓海拔</string>
+    <string name="altitude_relative">相對</string>
+    <string name="altitude_absolute">絕對</string>
+    <string name="altitude_set_reference">設為參考點</string>
+    <string name="altitude_gps_calibrate">GPS 校準</string>
+    <string name="altitude_gps_unavailable">GPS 海拔不可用，定位後重試</string>
+    <string name="altitude_rate">%1$+.1f 公尺/分</string>
+    <string name="altitude_reference_pressure">EMA %1$.2f hPa</string>
+    <string name="step_total_title">累計 %1$d</string>
+    <string name="step_today_title">今日步數</string>
+    <string name="step_boot_since">本次開機 %1$d</string>
 
     <!-- Device 基礎欄位 -->
     <string name="device_title">裝置詳細資料</string>

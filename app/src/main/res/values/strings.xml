@@ -278,6 +278,20 @@
     <string name="sensor_type_humidity">Humidity Sensor</string>
     <string name="sensor_type_ambient_temperature">Ambient Temperature</string>
     <string name="sensor_type_step_counter">Step Counter</string>
+    <string name="sensor_type_step_detector">Step Detector</string>
+
+    <!-- F4 barometer altitude & steps -->
+    <string name="altitude_title">Barometric Altitude</string>
+    <string name="altitude_relative">Relative</string>
+    <string name="altitude_absolute">Absolute</string>
+    <string name="altitude_set_reference">Set Reference</string>
+    <string name="altitude_gps_calibrate">GPS Calibrate</string>
+    <string name="altitude_gps_unavailable">GPS altitude unavailable, retry after a fix</string>
+    <string name="altitude_rate">%1$+.1f m/min</string>
+    <string name="altitude_reference_pressure">EMA %1$.2f hPa</string>
+    <string name="step_total_title">Total %1$d</string>
+    <string name="step_today_title">Today Steps</string>
+    <string name="step_boot_since">Since boot %1$d</string>
 
     <!-- ═══ Device 详情 ═══ -->
     <string name="device_title">Device Details</string>
@@ -597,6 +611,7 @@
     <string name="sensor_axis_distance">Distance</string>
     <string name="sensor_axis_humidity">Humidity</string>
     <string name="sensor_axis_temperature">Temperature</string>
+    <string name="sensor_axis_steps">Steps</string>
     <string name="sensor_axis_x">X</string>
     <string name="sensor_axis_y">Y</string>
     <string name="sensor_axis_z">Z</string>

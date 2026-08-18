@@ -71,6 +71,8 @@ enum class SensorTypeMeta(
     GYROSCOPE(4, R.string.sensor_type_gyroscope, "rad/s"),
     LIGHT(5, R.string.sensor_type_light, "lx", listOf(R.string.sensor_axis_illumination), 1),
     PRESSURE(6, R.string.sensor_type_pressure, "hPa", listOf(R.string.sensor_axis_pressure), 1),
+    STEP_DETECTOR(18, R.string.sensor_type_step_detector, "steps", listOf(R.string.sensor_axis_steps), 1),
+    STEP_COUNTER(19, R.string.sensor_type_step_counter, "steps", listOf(R.string.sensor_axis_steps), 1),
     PROXIMITY(8, R.string.sensor_type_proximity, "cm", listOf(R.string.sensor_axis_distance), 1),
     GRAVITY(9, R.string.sensor_type_gravity, "m/s²"),
     LINEAR_ACCELERATION(10, R.string.sensor_type_linear_accel, "m/s²"),

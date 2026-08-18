@@ -82,6 +82,17 @@ class AppSettings private constructor(context: Context) {
         get() = prefs.getFloat("cyber_nightlight_turboxdr_intensity", 1.0f).coerceIn(1.0f, 8.0f)
         set(value) = prefs.edit { putFloat("cyber_nightlight_turboxdr_intensity", value.coerceIn(1.0f, 8.0f)) }
 
+    // ── 气压海拔校准 (BARO-03: -1f 哨兵 = 未标定; 绝不存 NaN, 部分 ROM SP 读回 NaN 变 0f) ──
+    // 相对模式: 用户「设为参考点」时的 EMA 气压 (hPa); 绝对模式: GPS 海拔反解的 P0 (hPa)。
+    // 调用侧约定: 值 < 0 视为未标定。
+    var baroReferenceP0Hpa: Float
+        get() = prefs.getFloat("baro_ref_p0", -1f)
+        set(value) = prefs.edit { putFloat("baro_ref_p0", value) }
+
+    var baroGpsCalibratedP0Hpa: Float
+        get() = prefs.getFloat("baro_gps_p0", -1f)
+        set(value) = prefs.edit { putFloat("baro_gps_p0", value) }
+
     // ── 震动反馈 ──
     var hapticEnabled: Boolean
         get() = prefs.getBoolean("haptic_enabled", true)

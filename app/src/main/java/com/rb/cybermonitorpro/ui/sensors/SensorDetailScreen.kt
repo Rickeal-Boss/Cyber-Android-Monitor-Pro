@@ -56,6 +56,9 @@ fun SensorDetailScreen(
 ) {
     val meta = SensorTypeMeta.fromTypeId(sensor.type)
     val liveData by viewModel.liveData.observeAsState()
+    // F4: 气压海拔 / 步数账本状态（PressureAltimeterCard / StepCounterCard 消费）
+    val altitudeUi by viewModel.altitudeUi.observeAsState()
+    val stepUi by viewModel.stepUi.observeAsState()
 
     // ★ 改用本地 Compose 状态列表 + LaunchedEffect, 直接消费 sensorLiveData
     //   避免依赖 repo.sensorHistoryData 的间接 LiveData 管线
@@ -75,6 +78,8 @@ fun SensorDetailScreen(
         snapshotFlow { liveData }
             .filterNotNull()
             .collect { ld ->
+                // F4: 气压/步数分支按需喂样（页面在组合树内才驱动 EMA 与账本）
+                viewModel.onSample(ld)
                 if (isSingleAxis) {
                     val idx = when (meta) {
                         SensorTypeMeta.LIGHT,
@@ -143,15 +148,31 @@ fun SensorDetailScreen(
             // ── 实时数值卡片 (含光线等级/距离状态) ──
             SensorValueCard(sensor = sensor, meta = meta, liveData = liveData)
 
-            // ── 实时波形图 (增强动画) ──
-            SensorChartCard(
-                meta = meta,
-                chartPoints = if (isSingleAxis) chartPoints else emptyList(),
-                chartPointsX = chartPointsX,
-                chartPointsY = chartPointsY,
-                chartPointsZ = chartPointsZ,
-                liveData = liveData
-            )
+            // ── 实时波形图 (增强动画; 步数类不画波形, 由 StepCounterCard 展示) ──
+            if (meta != SensorTypeMeta.STEP_COUNTER && meta != SensorTypeMeta.STEP_DETECTOR) {
+                SensorChartCard(
+                    meta = meta,
+                    chartPoints = if (isSingleAxis) chartPoints else emptyList(),
+                    chartPointsX = chartPointsX,
+                    chartPointsY = chartPointsY,
+                    chartPointsZ = chartPointsZ,
+                    liveData = liveData
+                )
+            }
+
+            // ── F4: 气压计海拔卡 (仅 PRESSURE, 无滑块) ──
+            if (meta == SensorTypeMeta.PRESSURE) {
+                PressureAltimeterCard(
+                    state = altitudeUi,
+                    onSetReference = { viewModel.calibrateRelative() },
+                    onGpsCalibrate = { viewModel.calibrateFromGps() },
+                )
+            }
+
+            // ── F4: 步数卡 (STEP_COUNTER / STEP_DETECTOR, 无滑块) ──
+            if (meta == SensorTypeMeta.STEP_COUNTER || meta == SensorTypeMeta.STEP_DETECTOR) {
+                StepCounterCard(state = stepUi)
+            }
 
             // ── 传感器静态信息 ──
             SensorInfoCard(sensor = sensor, meta = meta)
@@ -233,6 +254,8 @@ private fun SensorValueCard(
                         SensorTypeMeta.PRESSURE -> "%.1f".format(value)
                         SensorTypeMeta.HUMIDITY -> "%.1f".format(value)
                         SensorTypeMeta.AMBIENT_TEMPERATURE -> "%.1f".format(value)
+                        SensorTypeMeta.STEP_COUNTER,
+                        SensorTypeMeta.STEP_DETECTOR -> "%.0f".format(value)
                         else -> "%.2f".format(value)
                     }
                 } else "---"
@@ -417,6 +440,213 @@ private fun SensorValueCard(
                     )
                 }
             }
+        }
+    }
+}
+
+// ============================================================
+//  F4: 气压计海拔卡 (EMA 气压 / 相对海拔 / 升降速率 / 双校准, 无滑块)
+// ============================================================
+@Composable
+private fun PressureAltimeterCard(
+    state: AltitudeUiState?,
+    onSetReference: () -> Unit,
+    onGpsCalibrate: () -> Boolean,
+) {
+    // GPS 校准失败提示（无 GPS 海拔样本时按需点亮 GPS 监听，稍后重试）
+    var gpsUnavailable by remember { mutableStateOf(false) }
+
+    Card(
+        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    stringResource(R.string.altitude_title),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    stringResource(if (state?.referenceSet == true) R.string.altitude_relative
+                    else R.string.altitude_absolute),
+                    fontSize = 11.sp,
+                    color = if (state?.referenceSet == true) SuccessNeon else NeonCyan
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // ── 大数字: 相对海拔 (设参考点后原地 ≈ 0) ──
+            Text(
+                if (state != null && !state.relativeAltitudeM.isNaN())
+                    "%+.1f m".format(state.relativeAltitudeM) else "---",
+                fontSize = 40.sp,
+                fontWeight = FontWeight.Bold,
+                color = NeonPurpleBright
+            )
+            if (state != null && !state.absoluteAltitudeM.isNaN()) {
+                Text(
+                    stringResource(R.string.altitude_absolute) + " %+.1f m".format(state.absoluteAltitudeM),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // ── EMA 气压 / 升降速率 ──
+            // ★ 占位符直传数值（Float/Double），禁止 "%.2f".format 预格式化成 String
+            //   否则 String.format 抛 IllegalFormatConversionException（同 L330 历史教训）
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    if (state != null)
+                        stringResource(R.string.altitude_reference_pressure, state.emaPressureHpa)
+                    else "---",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    if (state?.rateMPerMin != null)
+                        stringResource(R.string.altitude_rate, state.rateMPerMin)
+                    else "---",
+                    fontSize = 12.sp,
+                    color = when {
+                        state?.rateMPerMin == null -> MaterialTheme.colorScheme.onSurfaceVariant
+                        state.rateMPerMin > 0.5 -> SuccessNeon
+                        state.rateMPerMin < -0.5 -> WarningNeon
+                        else -> NeonCyan
+                    }
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── 两个校准按钮 ──
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { onSetReference() },
+                    modifier = Modifier.weight(1f),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
+                ) {
+                    Text(stringResource(R.string.altitude_set_reference), maxLines = 1)
+                }
+                OutlinedButton(
+                    onClick = { gpsUnavailable = !onGpsCalibrate() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(stringResource(R.string.altitude_gps_calibrate), maxLines = 1)
+                }
+            }
+
+            if (gpsUnavailable) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.altitude_gps_unavailable),
+                    fontSize = 11.sp,
+                    color = WarningNeon
+                )
+            }
+        }
+    }
+}
+
+// ============================================================
+//  F4: 步数卡 (今日主数字 / 累计 / 本次开机 / 60s 步频小图, 无滑块)
+// ============================================================
+@Composable
+private fun StepCounterCard(state: StepUiState?) {
+    // 60s 步频历史（简单柱状小图, 最多 40 桶）
+    val rateHistory = remember { mutableStateListOf<Int>() }
+    if (state != null && (rateHistory.isEmpty() || rateHistory.last() != state.ratePerMin)) {
+        rateHistory.add(state.ratePerMin)
+        if (rateHistory.size > 40) rateHistory.removeAt(0)
+    }
+
+    Card(
+        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(
+            Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                stringResource(R.string.step_today_title),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            // ── 大数字: 今日步数 ──
+            Text(
+                state?.todaySteps?.toString() ?: "---",
+                fontSize = 48.sp,
+                fontWeight = FontWeight.Bold,
+                color = NeonPurpleBright
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            // ── 累计 / 本次开机 ──
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    stringResource(R.string.step_total_title, state?.totalSteps ?: 0L),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    stringResource(R.string.step_boot_since, state?.stepsSinceBoot ?: 0L),
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // ── 60s 步频柱状小图 ──
+            Canvas(Modifier.fillMaxWidth().height(40.dp)) {
+                if (rateHistory.isEmpty()) return@Canvas
+                val maxRate = (rateHistory.maxOrNull() ?: 1).coerceAtLeast(1)
+                val barW = size.width / rateHistory.size
+                rateHistory.forEachIndexed { i, r ->
+                    val h = (r.toFloat() / maxRate) * size.height
+                    drawRect(
+                        color = if (r > 0) NeonPurpleBright.copy(alpha = 0.65f)
+                        else NeonPurple.copy(alpha = 0.2f),
+                        topLeft = Offset(i * barW, size.height - h),
+                        size = androidx.compose.ui.geometry.Size(barW * 0.7f, h)
+                    )
+                }
+            }
+            Text(
+                (state?.ratePerMin ?: 0).toString() + " /min",
+                fontSize = 11.sp,
+                color = NeonCyan
+            )
         }
     }
 }

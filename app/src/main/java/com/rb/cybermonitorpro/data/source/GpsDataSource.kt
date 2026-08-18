@@ -103,6 +103,7 @@ class GpsDataSource(private val context: Context) {
                     li.longitude = lastLoc.longitude
                     li.accuracy = lastLoc.accuracy
                     li.speedMps = if (lastLoc.hasSpeed()) lastLoc.speed else -1f
+                    li.altitude = if (lastLoc.hasAltitude()) lastLoc.altitude else Double.NaN
                     callback.onGpsStatusUpdate(li)
                     synchronized(statusLock) { lastRealStatus = li }
                     Log.d("GpsDS", "Got last known location")
@@ -119,6 +120,7 @@ class GpsDataSource(private val context: Context) {
                     li.longitude = location.longitude
                     li.accuracy = location.accuracy
                     li.speedMps = if (location.hasSpeed()) location.speed else -1f
+                    li.altitude = if (location.hasAltitude()) location.altitude else Double.NaN
                     // 保留卫星数据（线程安全）
                     synchronized(statusLock) {
                         lastRealStatus?.satellites?.let { li.satellites = it }
@@ -211,6 +213,8 @@ class GpsDataSource(private val context: Context) {
                                     si.latitude = r.latitude
                                     si.longitude = r.longitude
                                     si.accuracy = r.accuracy
+                                    si.speedMps = r.speedMps
+                                    si.altitude = r.altitude
                                 }
                             }
                             lastRealStatus = si
@@ -287,6 +291,8 @@ class GpsDataSource(private val context: Context) {
                                     si.latitude = r.latitude
                                     si.longitude = r.longitude
                                     si.accuracy = r.accuracy
+                                    si.speedMps = r.speedMps
+                                    si.altitude = r.altitude
                                 }
                             }
                             lastRealStatus = si
@@ -409,6 +415,8 @@ class GpsDataSource(private val context: Context) {
                                     si.latitude = r.latitude
                                     si.longitude = r.longitude
                                     si.accuracy = r.accuracy
+                                    si.speedMps = r.speedMps
+                                    si.altitude = r.altitude
                                 }
                             }
                             lastRealStatus = si
