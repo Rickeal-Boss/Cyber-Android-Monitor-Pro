@@ -1,8 +1,10 @@
 package com.rb.cybermonitorpro.ui.nightlight
 
+import android.graphics.RectF
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.abs
 
 /**
  * 线程安全的 HDR 贴片注册表。
@@ -34,19 +36,46 @@ object HdrPatchRegistry {
     @Volatile var surfaceRootY: Float = 0f
 
     fun upsert(p: HdrPatch) = synchronized(mutex) {
-        // ★ pre18c：贴片内容未变化（同包围盒 + 同位图引用 + 同颜色）时跳过发射。
-        //   垂直滚动停止瞬间 onGloballyPositioned 会再上报一次相同坐标的贴片，
-        //   无条件发射会触发渲染器多余的重渲染 → 贴片闪断。去重后滚动中坐标变化
-        //   仍正常发射（贴片跟随），停止时坐标稳定则不再重渲染。
-        //   颜色（含电池温度语义描边）变化走 color0/color1 contentEquals，不会被吞掉。
+        // ★ pre19-B：去重判定补全（pre18c 只比 bounds/bitmap/color 有三个口子）：
+        //   1) bounds 改亚像素容差比较——localToRoot 变换链/布局取整的 ±0.0x px 抖动
+        //      会击穿逐位 float 相等，滚动停止时照样全量发射重渲染；
+        //   2) points（折线/网格几何）参与比较——否则静止期 HDR 折线随数据刷新被吞
+        //      （去重误判为"相同"），折线冻结、下次滚动才跳到最新 → 视觉跳变；
+        //   3) 补全 bias/visible/color1/cornerRadius/strokeWidth/text 等几何与样式字段。
+        //   真实变化（坐标移动 >0.5px / 数据刷新 / 颜色/样式变化）仍正常发射。
         val old = map[p.id]
-        if (old != null && old.bounds == p.bounds && old.bitmap === p.bitmap &&
-            old.color0.contentEquals(p.color0) && old.color1.contentEquals(p.color1)
-        ) {
-            return
-        }
+        if (old != null && samePatch(old, p)) return
         map[p.id] = p
         _flow.value = map.values.toList()
+    }
+
+    /** 贴片内容是否可视为未变（注册表去重）。仅在 [mutex] 内调用。 */
+    private fun samePatch(a: HdrPatch, b: HdrPatch): Boolean {
+        if (a.bitmap !== b.bitmap) return false
+        if (!sameBounds(a.bounds, b.bounds)) return false
+        if (!a.color0.contentEquals(b.color0)) return false
+        if (!a.color1.contentEquals(b.color1)) return false
+        if (a.bias != b.bias) return false
+        if (a.visible != b.visible) return false
+        if (a.cornerRadiusPx != b.cornerRadiusPx) return false
+        if (a.strokeWidthPx != b.strokeWidthPx) return false
+        if (a.text != b.text) return false
+        if (a.textSizePx != b.textSizePx) return false
+        if (a.textBold != b.textBold) return false
+        if (a.textMonospace != b.textMonospace) return false
+        if (a.letterSpacingEm != b.letterSpacingEm) return false
+        if (a.tailDotRadiusPx != b.tailDotRadiusPx) return false
+        if (a.topZone != b.topZone) return false
+        // points（折线/网格）：任一为空或内容不同 → 视为变化
+        if (a.points == null || b.points == null) return a.points == null && b.points == null
+        return a.points.contentEquals(b.points)
+    }
+
+    /** 亚像素容差包围盒比较：0.5px 内视为相同。滚动中真实移动远超此值，仍正常发射。 */
+    private fun sameBounds(a: RectF, b: RectF): Boolean {
+        val eps = 0.5f
+        return abs(a.left - b.left) <= eps && abs(a.top - b.top) <= eps &&
+            abs(a.right - b.right) <= eps && abs(a.bottom - b.bottom) <= eps
     }
 
     fun remove(id: String) = synchronized(mutex) {
