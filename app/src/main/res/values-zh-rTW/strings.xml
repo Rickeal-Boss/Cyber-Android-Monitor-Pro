@@ -944,6 +944,7 @@
     <string name="float_show_items">顯示專案</string>
     <string name="float_battery">電池</string>
     <string name="float_starting">懸浮窗已啟動</string>
+    <string name="float_stopped">懸浮窗已停止</string>
 
     <!-- Permission 基礎欄位 -->
     <string name="permission_location_desc">需要定位許可權以讀取 GPS 衛星資訊和網路訊號資料</string>
@@ -1190,6 +1191,25 @@
     <string name="export_used">已用:</string>
     <string name="export_vendor">廠商:</string>
     <string name="float_fps">即時 FPS</string>
+    <!-- F1 懸浮窗樣式自訂 -->
+    <string name="float_section_style">外觀</string>
+    <string name="float_text_size">文字大小</string>
+    <string name="float_text_color">文字顏色</string>
+    <string name="float_window_alpha">視窗透明度</string>
+    <string name="float_bg_color">背景顏色</string>
+    <string name="float_color_purple">紫色</string>
+    <string name="float_color_cyan">青色</string>
+    <string name="float_color_magenta">洋紅</string>
+    <string name="float_color_green">綠色</string>
+    <string name="float_color_amber">琥珀</string>
+    <string name="float_color_white">白色</string>
+    <string name="float_color_steel">鋼藍</string>
+    <string name="float_bg_dark">深灰</string>
+    <string name="float_bg_black">純黑</string>
+    <string name="float_bg_deep_purple">深紫</string>
+    <string name="float_bg_dark_blue">深藍</string>
+    <string name="float_bg_dark_green">深綠</string>
+    <string name="float_bg_dark_red">深紅</string>
     <string name="float_overlay_hint">提示: Android 14+ 需手動授予 &quot;顯示在其他應用程式上層&quot; 許可權</string>
     <string name="float_permission_toast">請授予懸浮窗許可權</string>
     <string name="float_section_realtime">即時指標</string>

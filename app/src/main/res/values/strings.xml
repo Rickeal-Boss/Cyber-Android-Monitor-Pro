@@ -1193,6 +1193,25 @@
     <string name="export_used">Used:</string>
     <string name="export_vendor">Vendor:</string>
     <string name="float_fps">Real-time FPS</string>
+    <!-- F1 floating window style -->
+    <string name="float_section_style">Appearance</string>
+    <string name="float_text_size">Text Size</string>
+    <string name="float_text_color">Text Color</string>
+    <string name="float_window_alpha">Window Opacity</string>
+    <string name="float_bg_color">Background Color</string>
+    <string name="float_color_purple">Purple</string>
+    <string name="float_color_cyan">Cyan</string>
+    <string name="float_color_magenta">Magenta</string>
+    <string name="float_color_green">Green</string>
+    <string name="float_color_amber">Amber</string>
+    <string name="float_color_white">White</string>
+    <string name="float_color_steel">Steel Blue</string>
+    <string name="float_bg_dark">Dark Gray</string>
+    <string name="float_bg_black">Pure Black</string>
+    <string name="float_bg_deep_purple">Deep Purple</string>
+    <string name="float_bg_dark_blue">Dark Blue</string>
+    <string name="float_bg_dark_green">Dark Green</string>
+    <string name="float_bg_dark_red">Deep Red</string>
     <string name="float_overlay_hint">Tip: Android 14+ requires manually granting &quot;Display over other apps&quot; permission</string>
     <string name="float_permission_toast">Please grant overlay permission</string>
     <string name="float_section_realtime">Real-time Metrics</string>

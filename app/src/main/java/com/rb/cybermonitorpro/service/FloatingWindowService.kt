@@ -45,9 +45,12 @@ class FloatingWindowService : Service() {
         private const val TAG = "FloatWinSvc"
         private const val CHANNEL_ID = "floating_window"
         private const val NOTIF_ID = 1001
-        private val BG_COLOR = android.graphics.Color.argb(220, 10, 10, 15)
-        private val TEXT_COLOR = android.graphics.Color.argb(255, 160, 92, 255)
     }
+
+    // ── F1: 样式实时应用 — 4 个样式 Flow combine 后统一 applyStyle ──
+    private data class StyleParams(val textSizeSp: Float, val textColor: Int,
+                                   val windowAlpha: Float, val bgColor: Int)
+    private var lastTextSizeSp: Float = FloatingWindowConfig.DEFAULT_TEXT_SIZE_SP
 
     private var wm: WindowManager? = null
     private val windows = mutableMapOf<String, View?>()
@@ -124,6 +127,16 @@ class FloatingWindowService : Service() {
                 FloatingWindowConfig.visibleMetricsFlow.collect {
                     handler.post { refreshVisibility() }
                 }
+            }
+            // ★ F1: 样式流 combine → applyStyle 实时应用（serviceScope 已在主线程, 直接调用 — P3-2）
+            serviceScope.launch {
+                combine(
+                    FloatingWindowConfig.textSizeFlow,
+                    FloatingWindowConfig.textColorFlow,
+                    FloatingWindowConfig.windowAlphaFlow,
+                    FloatingWindowConfig.bgColorFlow,
+                ) { s, tc, wa, bg -> StyleParams(s, tc, wa, bg) }
+                    .collect { style -> applyStyle(style) }
             }
             // ★ 综合刷新间隔: 用户设置 × 省电模式 (后台不再降频)
             serviceScope.launch {
@@ -239,9 +252,12 @@ class FloatingWindowService : Service() {
     @SuppressLint("ClickableViewAccessibility")
     private fun makeItem(key: String, initialText: String, x: Int, y: Int): View? {
         val tv = TextView(this).apply {
-            text = initialText; textSize = 11f
-            setTextColor(TEXT_COLOR); setBackgroundColor(BG_COLOR)
-            setPadding(12, 6, 12, 6); alpha = 0.85f
+            text = initialText
+            // ★ F1: 样式读配置(默认值与原硬编码一致), 后续变更由 applyStyle 实时应用
+            textSize = FloatingWindowConfig.textSizeSp
+            setTextColor(FloatingWindowConfig.textColor)
+            setBackgroundColor(FloatingWindowConfig.bgColor)
+            setPadding(12, 6, 12, 6); alpha = FloatingWindowConfig.windowAlpha
         }
         val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -284,6 +300,27 @@ class FloatingWindowService : Service() {
     private fun removeAllWindows() {
         windows.values.filterNotNull().forEach { try { wm?.removeView(it) } catch (e: Throwable) {} }
         windows.clear()
+    }
+
+    /**
+     * ★ F1: 样式实时应用到全部悬浮窗视图。
+     * View.textSize getter 返回 px 而非 sp, 不能用于比较, 故用 lastTextSizeSp 缓存比较;
+     * 仅字号变化才 updateViewLayout 触发重测量(P3-1), 颜色/透明度变更零布局开销。
+     */
+    private fun applyStyle(style: StyleParams) {
+        val sizeChanged = style.textSizeSp != lastTextSizeSp
+        windows.values.filterNotNull().forEach { view ->
+            if (view is TextView) {
+                view.textSize = style.textSizeSp
+                view.setTextColor(style.textColor)
+                view.setBackgroundColor(style.bgColor)
+            }
+            view.alpha = style.windowAlpha
+            if (sizeChanged) {
+                try { wm?.updateViewLayout(view, view.layoutParams) } catch (_: Throwable) {}
+            }
+        }
+        lastTextSizeSp = style.textSizeSp
     }
 
     private fun startDataCollection() {

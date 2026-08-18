@@ -6,7 +6,11 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import com.rb.cybermonitorpro.ui.components.CyberIcons
@@ -41,9 +46,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -162,6 +172,9 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
                     FloatingWindowConfig.setVisible(mt.key, v)
                 }
             }
+
+            // ★ F1: 外观样式自定义（独立分区, 与刷新间隔卡拉开距离）
+            AppearanceCard()
         }
 
         Spacer(Modifier.height(16.dp))
@@ -261,4 +274,176 @@ private fun canDrawOverlays(ctx: Context): Boolean {
     return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         Settings.canDrawOverlays(ctx)
     } else true
+}
+
+// ═══════ F1: 外观样式自定义 ═══════
+
+/** 颜色预设（ARGB Int + 本地化标签资源） */
+private data class ColorPreset(val argb: Int, val labelResId: Int)
+
+/** 文字色 7 预设（默认紫 = 原硬编码 0xFFA05CFF） */
+private val textColorPresets = listOf(
+    ColorPreset(0xFFA05CFF.toInt(), R.string.float_color_purple),
+    ColorPreset(0xFF00D4FF.toInt(), R.string.float_color_cyan),
+    ColorPreset(0xFFF43F5E.toInt(), R.string.float_color_magenta),
+    ColorPreset(0xFF34C759.toInt(), R.string.float_color_green),
+    ColorPreset(0xFFFFAB00.toInt(), R.string.float_color_amber),
+    ColorPreset(0xFFFFFFFF.toInt(), R.string.float_color_white),
+    ColorPreset(0xFF3D70B8.toInt(), R.string.float_color_steel),
+)
+
+/** 背景色 6 预设（默认深灰 = 原硬编码 0xDC0A0A0F） */
+private val bgColorPresets = listOf(
+    ColorPreset(0xDC0A0A0F.toInt(), R.string.float_bg_dark),
+    ColorPreset(0xE6000000.toInt(), R.string.float_bg_black),
+    ColorPreset(0xDC1E1035.toInt(), R.string.float_bg_deep_purple),
+    ColorPreset(0xDC0A1A2E.toInt(), R.string.float_bg_dark_blue),
+    ColorPreset(0xDC0A241A.toInt(), R.string.float_bg_dark_green),
+    ColorPreset(0xDC2E0A0A.toInt(), R.string.float_bg_dark_red),
+)
+
+/** 选中态对勾颜色: 按预设色亮度取黑/白, 保证任意底色可见 */
+private fun contrastCheckTint(argb: Int): Color {
+    val r = (argb shr 16 and 0xFF) / 255f
+    val g = (argb shr 8 and 0xFF) / 255f
+    val b = (argb and 0xFF) / 255f
+    val luminance = 0.299f * r + 0.587f * g + 0.114f * b
+    return if (luminance > 0.6f) Color(0xFF1A1A2E) else Color.White
+}
+
+/**
+ * F1 外观卡 — 文字大小/窗口透明度两个 FancySlider（拖拽中预览实时渲染）+ 两组色板。
+ * 预览与悬浮窗同构: 背景色自带 alpha × 整体 alpha 乘算（P1-1）。
+ */
+@Composable
+private fun AppearanceCard() {
+    val textColor by FloatingWindowConfig.textColorFlow.collectAsState()
+    val bgColor by FloatingWindowConfig.bgColorFlow.collectAsState()
+
+    var dragTextSize by remember { mutableFloatStateOf(FloatingWindowConfig.textSizeSp) }
+    var isDraggingText by remember { mutableStateOf(false) }
+    var dragAlpha by remember { mutableFloatStateOf(FloatingWindowConfig.windowAlpha) }
+    var isDraggingAlpha by remember { mutableStateOf(false) }
+
+    // 外部配置变化时同步 drag 预览值（拖拽中不打断）
+    LaunchedEffect(FloatingWindowConfig.textSizeSp) { if (!isDraggingText) dragTextSize = FloatingWindowConfig.textSizeSp }
+    LaunchedEffect(FloatingWindowConfig.windowAlpha) { if (!isDraggingAlpha) dragAlpha = FloatingWindowConfig.windowAlpha }
+
+    Spacer(Modifier.height(16.dp))
+    Text(stringResource(R.string.float_section_style), fontSize = 15.sp,
+        fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+
+    Card(
+        Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+            // ★ P1-1: 预览用 drag 值实时渲染, 与悬浮窗同构(背景色自带 alpha × 整体 alpha)
+            Box(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                    .background(Color(bgColor))
+                    .alpha(dragAlpha),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("GPU 45%   CPU 38°C", color = Color(textColor),
+                    fontSize = dragTextSize.sp,
+                    modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // ── 文字大小（FancySlider, 9~22sp, 松手写回）──
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.float_text_size), fontSize = 15.sp, color = TextPrimary)
+                Text("${dragTextSize.toInt()}sp", fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                    color = NeonPurpleBright)
+            }
+            FancySlider(
+                value = dragTextSize,
+                onValueChange = {
+                    dragTextSize = it
+                    if (!isDraggingText) isDraggingText = true
+                },
+                onValueChangeFinished = {
+                    isDraggingText = false
+                    FloatingWindowConfig.textSizeSp = dragTextSize
+                },
+                valueRange = FloatingWindowConfig.TEXT_SIZE_RANGE.start..FloatingWindowConfig.TEXT_SIZE_RANGE.endInclusive,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(Modifier.height(6.dp))
+
+            // ── 窗口透明度（FancySlider, 20%~100%, 松手写回）──
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.float_window_alpha), fontSize = 15.sp, color = TextPrimary)
+                Text("${(dragAlpha * 100).toInt()}%", fontSize = 18.sp, fontWeight = FontWeight.Bold,
+                    color = NeonPurpleBright)
+            }
+            FancySlider(
+                value = dragAlpha,
+                onValueChange = {
+                    dragAlpha = it
+                    if (!isDraggingAlpha) isDraggingAlpha = true
+                },
+                onValueChangeFinished = {
+                    isDraggingAlpha = false
+                    FloatingWindowConfig.windowAlpha = dragAlpha
+                },
+                valueRange = FloatingWindowConfig.ALPHA_RANGE.start..FloatingWindowConfig.ALPHA_RANGE.endInclusive,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(Modifier.height(10.dp))
+
+            // ── 文字颜色（7 色预设）──
+            Text(stringResource(R.string.float_text_color), fontSize = 15.sp, color = TextPrimary)
+            Spacer(Modifier.height(8.dp))
+            ColorPresetRow(textColorPresets, textColor) { FloatingWindowConfig.textColor = it }
+
+            Spacer(Modifier.height(10.dp))
+
+            // ── 背景颜色（6 色预设）──
+            Text(stringResource(R.string.float_bg_color), fontSize = 15.sp, color = TextPrimary)
+            Spacer(Modifier.height(8.dp))
+            ColorPresetRow(bgColorPresets, bgColor) { FloatingWindowConfig.bgColor = it }
+        }
+    }
+}
+
+/** 色板行 — 外层 weight(1f)+48dp 触控目标, 内层 30dp 视觉圆点（P2-1） */
+@Composable
+private fun ColorPresetRow(presets: List<ColorPreset>, current: Int, onSelect: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        presets.forEach { p ->
+            val selected = p.argb == current
+            val desc = stringResource(p.labelResId)
+            Box(
+                Modifier.weight(1f).height(48.dp)   // 外层均分宽度, 48dp 触控目标
+                    .clip(CircleShape)
+                    .clickable { onSelect(p.argb) }
+                    .semantics { contentDescription = desc },
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    Modifier.size(30.dp).clip(CircleShape)   // 内层 30dp 视觉圆点
+                        .background(Color(p.argb))
+                        .then(
+                            if (selected) Modifier.border(2.dp, NeonPurpleBright, CircleShape)
+                            else Modifier
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (selected) {
+                        Icon(CyberIcons.Check, null, tint = contrastCheckTint(p.argb),
+                            modifier = Modifier.size(14.dp))
+                    }
+                }
+            }
+        }
+    }
 }
