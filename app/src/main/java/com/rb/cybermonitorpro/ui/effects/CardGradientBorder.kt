@@ -3,7 +3,7 @@ package com.rb.cybermonitorpro.ui.effects
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -50,12 +50,25 @@ fun Modifier.cardGradientBorder(
     return this
         // 行业首创：TurboXDR 开启时把卡片描边本体上报为 HDR 贴片（SDF 圆角描边），叠加增亮
         .then(if (CyberNightlightSwitch.enabled) Modifier.hdrCardBorderPatch(key, cornerPx, strokePx) else Modifier)
-        .drawWithContent {
-            drawContent()
-
+        // 层缓存：静态描边参数与默认渐变 Brush 只随 size 失效重建一次，重放零分配；
+        // dynamicColor 保持在 onDrawWithContent 内逐帧读取，防止电池温度语义色被缓存冻结
+        .drawWithCache {
     val bandPx = bandWidth.toPx()
     val halfPx = bandPx / 2f
     val cornerPx = cornerDp.toPx()
+
+    // ── 默认描边光晕 Brush（缓存区只放静态渐变，dynamicColor 分支不进缓存） ──
+    val glowBrush: Brush = Brush.linearGradient(
+        colors = listOf(
+            NeonPurple.copy(alpha = 0.65f),
+            NeonSteelBlue.copy(alpha = 0.55f)
+        ),
+        start = Offset.Zero,                    // 左上
+        end = Offset(size.width, size.height)   // 右下
+    )
+
+    onDrawWithContent {
+            drawContent()
 
     // ── HDR 细高亮反光（合并绘制，z-order 最底层，参数与旧 hdrHighlight 一致：0.22α / 1.0dp） ──
     if (hdrHighlight) {
@@ -68,22 +81,11 @@ fun Modifier.cardGradientBorder(
         )
     }
 
-    // ── 靠外 1/2：描边光晕（默认紫→蓝对角渐变；dynamicColor 非空时为纯色） ──
-    val glowBrush: Brush = if (dynamicColor != null) {
-        SolidColor(dynamicColor)
-    } else {
-        Brush.linearGradient(
-            colors = listOf(
-                NeonPurple.copy(alpha = 0.65f),
-                NeonSteelBlue.copy(alpha = 0.55f)
-            ),
-            start = Offset.Zero,                    // 左上
-            end = Offset(size.width, size.height)   // 右下
-        )
-    }
+    // ── 靠外 1/2：描边光晕（默认紫→蓝对角渐变；dynamicColor 非空时为纯色，逐帧求值） ──
+    val brush = if (dynamicColor != null) SolidColor(dynamicColor) else glowBrush
     // 描边中线内缩 halfPx/2，使外缘恰好贴卡片边缘（覆盖 0 .. halfPx）
     drawRoundRect(
-        brush = glowBrush,
+        brush = brush,
         topLeft = Offset(halfPx / 2f, halfPx / 2f),
         size = size.copy(width = size.width - halfPx, height = size.height - halfPx),
         cornerRadius = CornerRadius(cornerPx - halfPx / 2f),
@@ -101,6 +103,7 @@ fun Modifier.cardGradientBorder(
         cornerRadius = CornerRadius((cornerPx - halfPx * 1.5f).coerceAtLeast(0f)),
         style = Stroke(width = halfPx)
     )
+    }
 }
 }
 
