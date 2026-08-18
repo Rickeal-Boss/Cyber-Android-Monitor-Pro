@@ -2,6 +2,11 @@
 <resources>
     <!-- No Action Bar — 使用平台原生 Material 主题（无需 appcompat 依赖） -->
     <style name="Theme.DeviceInfoViewer" parent="@android:style/Theme.Material.NoActionBar">
+        <!-- ★ pre17：windowBackground 显式置为 CyberBackground(#0A0A0F)。
+             父主题 Theme.Material.NoActionBar 默认 windowBackground 为白色，
+             当全屏透明 HDR SurfaceView(setZOrderOnTop) 打孔/首帧未渲染时，
+             白色窗口背景会从孔洞透出，导致「背景透明无了」的白底现象。 -->
+        <item name="android:windowBackground">#0A0A0F</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
