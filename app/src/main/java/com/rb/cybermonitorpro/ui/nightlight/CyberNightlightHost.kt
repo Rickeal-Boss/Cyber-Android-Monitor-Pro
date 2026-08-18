@@ -54,15 +54,21 @@ fun CyberNightlightHost(
         onDispose { NightlightState.detach(context) }
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { ctx: Context ->
-            HdrLumeSurfaceView(ctx).also { viewRef.value = it }
-        }
-    )
-
     // 主动作：开关 on / 覆盖层切换 → setActive（内部触发一次性边缘闪光）
     val effective = enabled && !hidden && !suppressed
+
+    // ★ pre18：仅当 effective 时才挂载 HdrLumeSurfaceView，关闭时完全移除。
+    //   与 HdrPatchHost 同理：全屏透明 PQ SurfaceView 会让窗口合成层变透明、系统桌面透出，
+    //   关闭（含默认 NightlightBarSwitch.enabled=false）时移除 SurfaceView 保持窗口不透明。
+    if (effective) {
+        AndroidView(
+            modifier = modifier,
+            factory = { ctx: Context ->
+                HdrLumeSurfaceView(ctx).also { viewRef.value = it }
+            }
+        )
+    }
+
     LaunchedEffect(effective) {
         val view = viewRef.value ?: return@LaunchedEffect
         if (lastActive != effective) {

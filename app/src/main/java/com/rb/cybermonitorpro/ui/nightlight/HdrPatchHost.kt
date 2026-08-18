@@ -41,27 +41,39 @@ fun HdrPatchHost(
     val suppressed by NightlightState.suppressed
     val scope = rememberCoroutineScope()
     val viewRef = remember { mutableStateOf<HdrPatchSurfaceView?>(null) }
-
-    AndroidView(
-        modifier = modifier
-            // 上报 surface 左上角的根坐标，供渲染器把贴片根坐标统一转为 surface 像素坐标
-            .onGloballyPositioned { coords ->
-                val root = coords.localToRoot(Offset.Zero)
-                HdrPatchRegistry.surfaceRootX = root.x
-                HdrPatchRegistry.surfaceRootY = root.y
-            },
-        factory = { ctx ->
-            HdrPatchSurfaceView(ctx).also {
-                viewRef.value = it
-                it.attachRegistry(scope)
-            }
-        }
-    )
-
-    // 主动作：闸门变化 → setActive（开启即申请余量 + 事件驱动渲染；关闭补一帧透明）
+    // 主动作：闸门变化 → setActive（开启即进入事件驱动渲染；关闭移除 SurfaceView）
     val effective = enabled && !hidden && !suppressed
+
+    // ★ pre18：仅当 effective 时才挂载 HdrPatchSurfaceView，关闭时完全移除 SurfaceView。
+    //   根因：全屏透明 PQ SurfaceView（setZOrderOnTop + 带 alpha 的 PixelFormat.RGBA_1010102）
+    //   在部分 ROM（小米/HyperOS Android 16）上会让窗口合成层变为透明，系统桌面从孔洞透出
+    //   （「背景板整块不见了」）。关闭时移除 SurfaceView 后窗口恢复不透明，背景稳定。
+    if (effective) {
+        AndroidView(
+            modifier = modifier
+                // 上报 surface 左上角的根坐标，供渲染器把贴片根坐标统一转为 surface 像素坐标
+                .onGloballyPositioned { coords ->
+                    val root = coords.localToRoot(Offset.Zero)
+                    HdrPatchRegistry.surfaceRootX = root.x
+                    HdrPatchRegistry.surfaceRootY = root.y
+                },
+            factory = { ctx ->
+                HdrPatchSurfaceView(ctx).also {
+                    viewRef.value = it
+                    it.attachRegistry(scope)
+                }
+            }
+        )
+    }
+
     LaunchedEffect(effective) {
-        viewRef.value?.setActive(effective)
+        if (effective) {
+            viewRef.value?.setActive(true)
+        } else {
+            // 关闭：SurfaceView 已从组合树移除，补清全局贴片防幽灵残留
+            viewRef.value?.setActive(false)
+            HdrPatchRegistry.clear()
+        }
     }
 
     // 强度同步：slider 实时写入贴片 surface 的 headroom（1.0×–8.0×），
