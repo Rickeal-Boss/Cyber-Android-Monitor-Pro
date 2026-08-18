@@ -18,7 +18,7 @@ import javax.microedition.khronos.opengles.GL10
  *    闪光结束后由 SurfaceView 切回 RENDERMODE_WHEN_DIRTY 待机。
  *
  * 强度语义：uFlash 仅承担"闪光 alpha"曲线，与 HDR 亮度倍数（1.0×–8.0×）无关。
- * 亮度倍数由 HdrLumeSurfaceView.setDesiredHdrHeadroom 控制（System 级 headroom）。
+ * ★ pre16：亮度由 PQ surface（EGL 0x3340）按内容自动分配余量，不再手动 setDesiredHdrHeadroom。
  */
 class LumeRenderer : GLSurfaceView.Renderer {
 
