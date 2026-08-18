@@ -86,7 +86,9 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
         active = enabled
         lumeRenderer.setEnabled(enabled)
         if (Build.VERSION.SDK_INT >= 35) {
-            val headroom = if (enabled) intensityMultiplier else 1f
+            // ★ pre15：闪光 headroom 固定 LUME_HEADROOM，不再跟随滑块（避免与 Patch 一起把
+            //   headroom 拉到 8×，触发屏幕级 HDR 合成、把底层 SDR 背景"整屏 HDR 化"导致失真）。
+            val headroom = if (enabled) LUME_HEADROOM else 1f
             runCatching { setDesiredHdrHeadroom(headroom) }
         }
         if (enabled) {
@@ -103,11 +105,8 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
      * 参考 qr.txt: Xiaomi 24069RA21C / Android 16 上 "Maximum supported: 8.0×"。
      */
     fun setIntensity(v: Float) {
-        val clamped = v.coerceIn(1.0f, 8.0f)
-        intensityMultiplier = clamped
-        if (Build.VERSION.SDK_INT >= 35 && active) {
-            runCatching { setDesiredHdrHeadroom(clamped) }
-        }
+        // ★ pre15：闪光 headroom 固定 LUME_HEADROOM，滑块不再改 headroom（multiplier 仅保留供诊断）。
+        intensityMultiplier = v.coerceIn(1.0f, 8.0f)
     }
 
     /**
@@ -156,5 +155,7 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
     private companion object {
         private val mainHandler = Handler(Looper.getMainLooper())
         private const val FLASH_END_TOKEN = 0xCAFE_F1A5.toInt()
+        /** ★ pre15：闪光 surface 的 HDR 余量固定（边缘闪光亮度 2× SDR 白足够，避免过度 HDR 化背景）。 */
+        private const val LUME_HEADROOM = 2f
     }
 }

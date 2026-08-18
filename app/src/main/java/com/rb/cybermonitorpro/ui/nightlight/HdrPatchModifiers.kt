@@ -250,7 +250,9 @@ fun HdrMetricText(
         // ★ pre14-G1：不再手动 recycle 源位图。源位图交 GC 管理，GL 线程经 ensureBitmapTex 的
         //   copy 持有独立副本；手动 recycle 会与 GL 线程 bmp.copy()/texImage2D 竞态
         //   （快速翻页时旧页 dispose recycle 源位图，GL 线程恰在 copy → IllegalStateException → 闪退）。
-        onDispose { bitmapState.value = null }
+        // ★ pre15：onDispose 置空——既不 recycle（崩溃），也不置 null（置 null 会让 bitmapState 出现
+        //   空窗口，report 看到 null → remove → 重新 upsert → 闪烁）。旧位图由新 effect 覆盖后 GC 回收。
+        onDispose { }
     }
 
     val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
@@ -541,8 +543,8 @@ fun Modifier.hdrTabIconPatch(key: String, selected: Boolean, iconRes: Int): Modi
     DisposableEffect(key, iconRes) {
         val bmp = buildIconBitmap(context, iconRes, density)
         bitmapState.value = bmp
-        // ★ pre14-G1：不 recycle，交 GC（理由同 HdrMetricText：防与 GL 线程 copy/texImage2D 竞态）。
-        onDispose { bitmapState.value = null }
+        // ★ pre14-G1/pre15：不 recycle，交 GC；onDispose 置空（置 null 会引发 remove→upsert 闪烁）。
+        onDispose { }
     }
 
     val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }
@@ -687,8 +689,8 @@ fun Modifier.hdrVectorIconPatch(
     DisposableEffect(key, imageVector) {
         val bmp = buildVectorIconBitmap(imageVector, density, sizeDp)
         bitmapState.value = bmp
-        // ★ pre14-G1：不 recycle，交 GC（理由同 HdrMetricText）。
-        onDispose { bitmapState.value = null }
+        // ★ pre14-G1/pre15：不 recycle，交 GC；onDispose 置空（置 null 会引发 remove→upsert 闪烁）。
+        onDispose { }
     }
 
     val posState = remember { mutableStateOf<android.graphics.RectF?>(null) }

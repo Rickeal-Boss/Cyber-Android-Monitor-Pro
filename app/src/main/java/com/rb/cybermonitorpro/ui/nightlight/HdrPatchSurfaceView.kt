@@ -97,14 +97,15 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
     /**
      * 由 HdrPatchHost 调用：开启 = 申请 HDR 余量 + 进入事件驱动渲染；关闭 = 余量归 1.0 并补一帧透明。
      *
-     * 注意：贴片 surface 的 HDR 余量现在**跟随滑块**([CyberNightlightSwitch.intensity])，
-     * 而非 [HdrCapabilityDetector.computeHeadroom] 的常数（Xiaomi 上恒=8×，与滑块无关）。
-     * 渲染模式改回 [RENDERMODE_WHEN_DIRTY]，仅由注册表流/滑块变化 [requestRender] 驱动，
-     * 砍掉持续合成的帧成本（治 现象A 卡顿 + 双 surface 并发）。
+     * ★ pre15：HDR 余量固定为贴片设计峰值 [MAX_HEADROOM]（max bias = TAB 6×），不再跟随滑块。
+     *   滑块只经 [PatchRenderer.pqEnc] 的 effMult 控制贴片亮度；headroom 只需覆盖贴片峰值。
+     *   跟随滑块会把 headroom 拉到 8×，触发屏幕级 HDR 合成，把底层 SDR 背景（淡蓝光晕）
+     *   也一并"HDR 化"导致颜色失真（真机反馈「背景淡蓝色失败」）。
+     * 渲染模式为 [RENDERMODE_WHEN_DIRTY]，仅由注册表流/滑块变化 [requestRender] 驱动。
      */
     fun setActive(enabled: Boolean) {
-        val headroom = if (enabled) CyberNightlightSwitch.intensity else 1f
-        if (Build.VERSION.SDK_INT >= 35) runCatching { setDesiredHdrHeadroom(headroom.coerceIn(1f, 8f)) }
+        val headroom = if (enabled) MAX_HEADROOM else 1f
+        if (Build.VERSION.SDK_INT >= 35) runCatching { setDesiredHdrHeadroom(headroom) }
         renderer.setEnabled(enabled)
         // 事件驱动：贴片注册表变化 / 滑块变化才会 requestRender（见 attachRegistry / setIntensity）
         renderMode = RENDERMODE_WHEN_DIRTY
@@ -112,20 +113,11 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
     }
 
     /**
-     * 设定贴片 surface 的 HDR 强度倍率 ∈ [1.0×, 8.0×]，直接对应 SurfaceView.setDesiredHdrHeadroom
-     * （对齐 [HdrLumeSurfaceView.setIntensity]）。仅当 active 时实时改 headroom，否则只是记住。
-     *
-     * 由于渲染模式为 [RENDERMODE_WHEN_DIRTY]，滑块变化后必须 [requestRender] 一帧，
-     * 让 [PatchRenderer.pqEnc] 用新 [CyberNightlightSwitch.intensity] 重算贴片亮度
-     * （否则滑块拉不动贴片亮度，现象B 修复失效）。
+     * ★ pre15：滑块只经 [PatchRenderer.pqEnc] 的 effMult 控制贴片亮度，headroom 固定 [MAX_HEADROOM]
+     *   不再跟随滑块。仅 requestRender 一帧，让 pqEnc 用新 [CyberNightlightSwitch.intensity] 重算贴片亮度。
      */
     fun setIntensity(v: Float) {
-        val clamped = v.coerceIn(1.0f, 8.0f)
-        // ★ pre13-E：headroom 仅在 API≥35 生效，但无论 API 高低，active 时都需 requestRender 一帧，
-        //   让 PatchRenderer.pqEnc 用新 intensity 重算贴片亮度（API<35 原因 requestRender 被门控而空操作）。
-        if (Build.VERSION.SDK_INT >= 35 && renderer.isActive()) {
-            runCatching { setDesiredHdrHeadroom(clamped) }
-        }
+        // headroom 固定 MAX_HEADROOM；滑块变化只重绘（pqEnc 重算亮度），不再 setDesiredHdrHeadroom。
         if (renderer.isActive()) requestRender()
     }
 
@@ -151,5 +143,11 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
         runCatching { queueEvent { renderer.clearGpuCaches() } }
         detachRegistry()
         super.onDetachedFromWindow()
+    }
+
+    private companion object {
+        /** ★ pre15：贴片 surface 的 HDR 余量固定为贴片设计峰值（max bias = TAB 6×）。
+         *   覆盖所有贴片亮度、避免跟随滑块拉到 8× 过度抬升/压缩 SDR 背景。 */
+        private const val MAX_HEADROOM = 6f
     }
 }
