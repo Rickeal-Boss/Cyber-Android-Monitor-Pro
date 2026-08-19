@@ -1,5 +1,6 @@
 package com.rb.cybermonitorpro.ui.effects
 
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect

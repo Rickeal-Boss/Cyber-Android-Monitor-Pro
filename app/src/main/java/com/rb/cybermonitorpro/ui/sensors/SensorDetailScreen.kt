@@ -1,5 +1,7 @@
 package com.rb.cybermonitorpro.ui.sensors
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -26,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.HistoryDataPoint
@@ -128,24 +131,10 @@ fun SensorDetailContent(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             // ── F5-2 标题容器: matching sharedElement(卡片 ↔ 详情标题形变), 不套 sensorProgress 变换 ──
+            //   compose 1.8 的 sharedElement 需 AnimatedVisibilityScope, 用 AnimatedVisibility 包裹提供;
+            //   scope 为 null（未包裹/降级）时跳过 sharedElement, 布局与视觉不变
             val sharedScope = com.rb.cybermonitorpro.ui.effects.LocalSharedTransitionScope.current
-            Box(
-                Modifier
-                    .then(
-                        if (sharedScope != null) with(sharedScope) {
-                            Modifier.sharedElement(
-                                rememberSharedContentState(key = "sensor_${sensor.sensorId}"),
-                                boundsTransform = { _, _ ->
-                                    androidx.compose.animation.core.spring(
-                                        dampingRatio = 0.85f,
-                                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
-                                    )
-                                }
-                            )
-                        } else Modifier
-                    )
-                    .fillMaxWidth()
-            ) {
+            val titleContent: @Composable BoxScope.() -> Unit = {
                 Column {
                     // ── 传感器名称 ──
                     Text(
@@ -167,13 +156,34 @@ fun SensorDetailContent(
                     }
                 }
             }
+            if (sharedScope != null) {
+                with(sharedScope) {
+                    AnimatedVisibility(visible = true, enter = fadeIn()) {
+                        Box(
+                            Modifier.sharedElement(
+                                rememberSharedContentState(key = "sensor_${sensor.sensorId}"),
+                                animatedVisibilityScope = this,
+                                boundsTransform = { _, _ ->
+                                    androidx.compose.animation.core.spring(
+                                        dampingRatio = 0.85f,
+                                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                                    )
+                                }
+                            ).fillMaxWidth(),
+                            content = titleContent
+                        )
+                    }
+                }
+            } else {
+                Box(Modifier.fillMaxWidth(), content = titleContent)
+            }
 
             // ── F5: 非标题内容 — alpha + 24dp 上移由 sensorProgress 驱动 (draw 阶段, 零重组) ──
             Column(
                 Modifier.graphicsLayer {
                     val p = progress.value
                     alpha = p
-                    translationY = with(density) { androidx.compose.ui.util.lerp(24.dp, 0.dp, p).toPx() }
+                    translationY = with(density) { lerp(24.dp, 0.dp, p).toPx() }  // ui.unit.lerp: Dp 版
                 },
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {

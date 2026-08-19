@@ -4,7 +4,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.minimumInteractiveComponentSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -36,7 +35,7 @@ import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
  *
  * SLIDER-01：material3 1.3.2 的 track lambda 签名是 (SliderState) -> Unit，
  * SliderPositions.fraction 已废弃不可用，进度比由 value/valueRange 自行计算。
- * SLIDER-02：thumb 补 minimumInteractiveComponentSize，保住 48dp 触控目标。
+ * SLIDER-02：thumb 用 48dp Box 包裹保住触控目标（minimumInteractiveComponentSize 在当前依赖下解析失败，已弃用）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,17 +106,21 @@ fun FancySlider(
                 }
             }
         },
-        // SLIDER-02: thumb 补 minimumInteractiveComponentSize
+        // SLIDER-02: thumb 用 48dp Box 保证触控目标 (不依赖 minimumInteractiveComponentSize)
         thumb = {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = thumbColor,
-                modifier = Modifier
-                    .size(iconSize)
-                    .minimumInteractiveComponentSize()
-                    .graphicsLayer { rotationZ = rotationDegrees * fraction },
-            )
+            Box(
+                modifier = Modifier.size(48.dp),   // 48dp 触控目标
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = thumbColor,
+                    modifier = Modifier
+                        .size(iconSize)
+                        .graphicsLayer { rotationZ = rotationDegrees * fraction },
+                )
+            }
         },
     )
 }

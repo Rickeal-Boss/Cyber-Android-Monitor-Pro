@@ -1,10 +1,13 @@
 package com.rb.cybermonitorpro.ui.sensors
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -103,29 +106,16 @@ private fun SensorItemCard(sensor: SensorItemInfo, onClick: (Offset) -> Unit, mo
     // F3: 卡片中心触点（boundsInRoot; RIPPLE-04: 偏移异常时降级 positionInWindow 换算）
     var cardCenter by remember { mutableStateOf(Offset.Zero) }
 
-    Card(
-        // ★ F5-2: sharedElement 插在修饰链头 — 后接 staggeredSwipe→cardGradientBorder→cardRipple 链序不动;
-        //   key 与 SensorDetailContent 标题容器一致 ("sensor_"+sensorId); scope 为 null 时优雅降级
-        Modifier
-            .then(
-                if (sharedScope != null) with(sharedScope) {
-                    Modifier.sharedElement(
-                        rememberSharedContentState(key = "sensor_${sensor.sensorId}"),
-                        boundsTransform = { _, _ ->
-                            spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
-                        }
-                    )
-                } else Modifier
-            )
-            .then(modifier)
-            .fillMaxWidth()
-            .onGloballyPositioned { cardCenter = it.boundsInRoot().center }
-            .cardGradientBorder(20.dp, hdrHighlight = true)
-            .cardRipple(onClick = { onClick(cardCenter) }),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-    ) {
+    // ★ F5-2: sharedElement 依赖 AnimatedVisibilityScope，卡片整体包进 AnimatedVisibility 提供该 scope；
+    //   key 与 SensorDetailContent 标题容器一致 ("sensor_"+sensorId); scope 为 null 时优雅降级
+    val cardModifier = Modifier
+        .then(modifier)
+        .fillMaxWidth()
+        .onGloballyPositioned { cardCenter = it.boundsInRoot().center }
+        .cardGradientBorder(20.dp, hdrHighlight = true)
+        .cardRipple(onClick = { onClick(cardCenter) })
+
+    val cardContent: @Composable ColumnScope.() -> Unit = {
         Column(Modifier.padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(
@@ -173,5 +163,33 @@ private fun SensorItemCard(sensor: SensorItemInfo, onClick: (Offset) -> Unit, mo
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         }
+    }
+
+    if (sharedScope != null) {
+        with(sharedScope) {
+            AnimatedVisibility(visible = true, enter = fadeIn()) {
+                Card(
+                    Modifier.sharedElement(
+                        rememberSharedContentState(key = "sensor_${sensor.sensorId}"),
+                        animatedVisibilityScope = this,
+                        boundsTransform = { _, _ ->
+                            spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                        }
+                    ).then(cardModifier),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    content = cardContent
+                )
+            }
+        }
+    } else {
+        Card(
+            cardModifier,
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+            content = cardContent
+        )
     }
 }
