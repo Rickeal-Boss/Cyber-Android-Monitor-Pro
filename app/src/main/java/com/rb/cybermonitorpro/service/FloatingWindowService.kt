@@ -175,11 +175,13 @@ class FloatingWindowService : Service() {
                     // 隐藏: 移除全部悬浮窗并停采集, 通知文案 → "点击打开"
                     removeAllWindows()
                     stopDataCollection()
+                    stopFpsMonitor()  // ★ 与 stopDataCollection 对称: 隐藏态移除 Choreographer 回调, 消除空转
                 } else {
                     // 显示: 先保证前台服务状态, 再建窗 + 启采集
                     startForegroundSafe()
                     createAllWindows()
                     startDataCollection()
+                    startFpsMonitor()  // ★ 与 startDataCollection 对称
                 }
                 updateForegroundNotification()
                 return START_STICKY

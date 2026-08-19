@@ -502,8 +502,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 val p = hdrProgress.value
                                 alpha = p
                                 // F5 入口位移形变: 以屏幕中心为 pivot 微缩放 + 横向滑入 (可打断, 无 sharedElement)
-                                val pivotX = (fallbackOrigin.x / size.width).coerceIn(0f, 1f)
-                                val pivotY = (fallbackOrigin.y / size.height).coerceIn(0f, 1f)
+                                // size.width/height 首帧可能为 0, 先 takeIf 守卫再相除, 避免 NaN 落到 TransformOrigin
+                                val pivotX = (size.width.takeIf { it > 0f }?.let { fallbackOrigin.x / it } ?: 0.5f).coerceIn(0f, 1f)
+                                val pivotY = (size.height.takeIf { it > 0f }?.let { fallbackOrigin.y / it } ?: 0.5f).coerceIn(0f, 1f)
                                 transformOrigin = TransformOrigin(pivotX, pivotY)
                                 val s = 0.9f + 0.1f * p
                                 scaleX = s

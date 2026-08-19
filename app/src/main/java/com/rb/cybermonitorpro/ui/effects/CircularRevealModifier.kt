@@ -27,7 +27,7 @@ fun Modifier.circularReveal(
         hypot(size.width - p.x, p.y),
         hypot(p.x, size.height - p.y),
         hypot(size.width - p.x, size.height - p.y),
-    ).max()   // 覆盖四角的最长对角线
+    ).maxOrNull() ?: 0f   // 覆盖四角的最长对角线 (maxOrNull 替代已废弃的 max)
 
     onDrawWithContent {
         val t = progress()   // draw 阶段读 Animatable.value → 零重组

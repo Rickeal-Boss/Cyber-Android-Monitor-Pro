@@ -87,11 +87,17 @@ class AppSettings private constructor(context: Context) {
     // 调用侧约定: 值 < 0 视为未标定。
     var baroReferenceP0Hpa: Float
         get() = prefs.getFloat("baro_ref_p0", -1f)
-        set(value) = prefs.edit { putFloat("baro_ref_p0", value) }
+        set(value) {
+            if (value.isNaN()) return  // 防御: 绝不落 NaN (部分 ROM SP 读回 NaN 变 0f, 调用侧另有守卫)
+            prefs.edit { putFloat("baro_ref_p0", value) }
+        }
 
     var baroGpsCalibratedP0Hpa: Float
         get() = prefs.getFloat("baro_gps_p0", -1f)
-        set(value) = prefs.edit { putFloat("baro_gps_p0", value) }
+        set(value) {
+            if (value.isNaN()) return  // 防御: 同上
+            prefs.edit { putFloat("baro_gps_p0", value) }
+        }
 
     // ── 震动反馈 ──
     var hapticEnabled: Boolean

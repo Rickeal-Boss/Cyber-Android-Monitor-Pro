@@ -110,6 +110,7 @@ class SensorDetailViewModel(
             }
             Sensor.TYPE_STEP_DETECTOR -> {
                 // 降级路径: 检测器每步一事件(值 1.0)，仅监听期计数
+                // TODO(语义): 降级路径显示的为会话内步数, 非真实今日步数
                 detectorSessionSteps++
                 val total = detectorBaseTotal + detectorSessionSteps
                 pushStepUi(total, detectorSessionSteps, detectorSessionSteps, fromDetector = true)
