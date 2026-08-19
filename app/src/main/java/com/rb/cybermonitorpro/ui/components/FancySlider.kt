@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -18,20 +19,20 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.rb.cybermonitorpro.ui.theme.NeonPurple
-import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
+import com.rb.cybermonitorpro.ui.theme.NeonMagentaPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleDeep
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
 
 /**
- * FancySlider — 厚胶囊轨道 + 房子图标旋转 thumb。
+ * FancySlider — 厚胶囊轨道 + 设置齿轮图标旋转 thumb。
  *
  * 使用 M3 原生 Slider 负责拖动/无障碍/语义，只替换 thumb 与 track 渲染：
- * - track：38dp 厚胶囊，已选段 NeonPurple / 未选段钢蓝 30%，NeonPurpleDeep 30% 描边；
- * - thumb：ic_cyber_home 图标按进度旋转（默认 1080° = 3 整圈首尾同角回正）。
+ * - track：38dp 厚胶囊，已选段 NeonMagentaPurple / 未选段钢蓝 30%，NeonPurpleDeep 30% 描边；
+ * - thumb：ic_cyber_settings 齿轮图标按进度旋转（默认 1080° = 3 整圈首尾同角回正）。
  *
  * SLIDER-01：material3 1.3.2 的 track lambda 签名是 (SliderState) -> Unit，
  * SliderPositions.fraction 已废弃不可用，进度比由 value/valueRange 自行计算。
@@ -47,12 +48,13 @@ fun FancySlider(
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
     steps: Int = 0,
     enabled: Boolean = true,
-    icon: ImageVector = CyberIcons.Home,
+    icon: Painter = painterResource(R.drawable.ic_cyber_settings),
     iconSize: Dp = 26.dp,
     trackHeight: Dp = 38.dp,
     rotationDegrees: Float = 1080f,
-    thumbColor: Color = NeonPurpleBright,
-    activeTrackColor: Color = NeonPurple,
+    // P1: 白齿轮在紫红 (NeonMagentaPurple) 轨道上对比更清晰; 若需改回霓虹紫高亮 thumb，需重新 import NeonPurpleBright
+    thumbColor: Color = Color.White,
+    activeTrackColor: Color = NeonMagentaPurple,
     inactiveTrackColor: Color = NeonSteelBlue.copy(alpha = 0.3f),
     borderColor: Color = NeonPurpleDeep.copy(alpha = 0.3f),
 ) {
@@ -113,11 +115,13 @@ fun FancySlider(
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = icon,
+                    painter = icon,
                     contentDescription = null,
                     tint = thumbColor,
+                    // P1: 图标左移半个身位, 视觉落在已选色条内部 + 滑块边缘; 旋转动画保留
                     modifier = Modifier
                         .size(iconSize)
+                        .offset(x = -(iconSize / 2))
                         .graphicsLayer { rotationZ = rotationDegrees * fraction },
                 )
             }

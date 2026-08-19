@@ -16,6 +16,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.pointerInput
 import androidx.compose.foundation.layout.*
 import android.util.Log
 import androidx.compose.foundation.pager.HorizontalPager
@@ -512,11 +514,14 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
             // ── HDR 实验室（CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考）──
             //   与传感器详情同款转场: 右上角锚点缩放 0.42→1.0 + 起始位移 + 内容渐变;
-            //   容器半透明 (0.92) + scrim 0.35; SurfaceView 延迟到进入动画完成后挂载
+            //   容器不透明 (CyberCardStart, 去 0.92 alpha) + scrim 0.35; SurfaceView 延迟到进入动画完成后挂载
             //   (hdrSurfacesVisible 门控, 防 punch-through 突跳);
             //   渲染条件读 hdrAlive State; 预测返回手势 snapTo 跟手、取消回弹 1f。
             if (hdrAlive || showHdrLab) {
-                Box(Modifier.fillMaxSize()) {
+                // P1: 覆盖层根 Box 消费点击, 隔绝主界面触摸 (内部交互仍由子节点优先消费)
+                Box(Modifier.fillMaxSize()
+                    .pointerInput(Unit) { detectTapGestures { } }
+                ) {
                     // ① scrim: 全屏压暗层 (alpha 由 hdrProgress 驱动, 半透明)
                     Box(Modifier.fillMaxSize()
                         .background(Color.Black)
@@ -536,7 +541,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         .padding(horizontal = 18.dp, vertical = 40.dp)
                         .shadow(24.dp, RoundedCornerShape(28.dp), clip = false)
                         .clip(RoundedCornerShape(28.dp))
-                        .background(CyberCardStart.copy(alpha = 0.92f))
+                        .background(CyberCardStart)
                     ) {
                         // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载)
                         Box(Modifier.fillMaxSize()
@@ -561,14 +566,17 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             // ── 传感器详情 (CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考) ──
             //   容器: 右上角锚点 TransformOrigin(1,0) + scale 0.42→1.0 + 起始位移至屏幕中上部
             //   (0.25W, 0.15H) — 与 frames"小卡片→全屏"形态一致;
-            //   容器半透明 (0.92) + scrim 0.35 → 底下传感器卡片与 SDR 描边可透出;
+            //   容器不透明 (CyberCardStart, 去 0.92 alpha) + scrim 0.35 (不再透出底层, 隔绝误触);
             //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由卡片缩放先行、内容跟进;
             //   渲染条件读 sensorAlive State, 绝不在组合期读 sensorProgress.value。
             if (sensorAlive || showSensorDetail) {
                 val sensor = selectedSensorForDetail
                 if (sensor != null) {
                     val density = LocalDensity.current
-                    Box(Modifier.fillMaxSize()) {
+                    // P1: 覆盖层根 Box 消费点击, 隔绝主界面触摸 (内部交互仍由子节点优先消费)
+                    Box(Modifier.fillMaxSize()
+                        .pointerInput(Unit) { detectTapGestures { } }
+                    ) {
                         // ① scrim: 全屏压暗层 (alpha 由 sensorProgress 驱动, 半透明)
                         Box(Modifier.fillMaxSize()
                             .background(Color.Black)
@@ -588,7 +596,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             .padding(horizontal = 18.dp, vertical = 40.dp)
                             .shadow(24.dp, RoundedCornerShape(28.dp), clip = false)
                             .clip(RoundedCornerShape(28.dp))
-                            .background(CyberCardStart.copy(alpha = 0.92f))
+                            .background(CyberCardStart)
                         ) {
                             // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组)
                             Box(Modifier.fillMaxSize()

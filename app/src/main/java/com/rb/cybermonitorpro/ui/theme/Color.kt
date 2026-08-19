@@ -25,6 +25,7 @@ val NeonPurpleDeep      = Color(0xFF4C1D95)   // 深紫边框
 val NeonSteelBlue       = Color(0xFF3D70B8)   // 钢蓝 (非激活Tab)
 val NeonCyan            = Color(0xFF00D4FF)   // 霓虹青
 val NeonMagenta         = Color(0xFFF43F5E)   // 玫瑰红 (Ardot Accent)
+val NeonMagentaPurple   = Color(0xFFD946EF)   // 紫红 (FancySlider 已选轨道/强调)
 
 // ── 辉光阴影色 ──
 val PurpleGlow          = Color(0x267C3AED)   // ~15% 紫色辉光

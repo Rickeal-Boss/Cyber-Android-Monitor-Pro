@@ -53,6 +53,7 @@ import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.theme.CyberCardEnd
 import com.rb.cybermonitorpro.ui.theme.CyberCardStart
 import com.rb.cybermonitorpro.ui.theme.NeonCyan
+import com.rb.cybermonitorpro.ui.theme.NeonMagentaPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
@@ -293,10 +294,10 @@ fun HdrLabScreen(onBack: () -> Unit = {}, surfaceVisible: Boolean = true) {
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(horizontal = 8.dp),
-                                // SLIDER-06: disabled 态用 if(canControl) 外部选色，与原三色降透明度视觉一致
-                                thumbColor = if (canControl) NeonPurpleBright
+                                // SLIDER-06: disabled 态用钢蓝降透明度; enabled 态对齐全仓新配色 (White 齿轮 thumb / NeonMagentaPurple 轨道)
+                                thumbColor = if (canControl) Color.White
                                     else NeonSteelBlue.copy(alpha = 0.4f),
-                                activeTrackColor = if (canControl) NeonPurple
+                                activeTrackColor = if (canControl) NeonMagentaPurple
                                     else NeonSteelBlue.copy(alpha = 0.3f),
                                 inactiveTrackColor = if (canControl) NeonSteelBlue.copy(alpha = 0.3f)
                                     else NeonSteelBlue.copy(alpha = 0.2f),
