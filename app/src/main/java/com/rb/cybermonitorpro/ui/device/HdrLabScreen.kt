@@ -85,7 +85,7 @@ private val HdrLabCardGradient = Brush.linearGradient(listOf(CyberCardStart, Cyb
  * 注意：截图会被系统色调映射到 SDR，亮度差异只能真机肉眼 + ratio 双确认，勿凭截图判断。
  */
 @Composable
-fun HdrLabScreen(onBack: () -> Unit = {}) {
+fun HdrLabScreen(onBack: () -> Unit = {}, surfaceVisible: Boolean = true) {
     val ctx = LocalContext.current
 
     // Display 句柄：API 30+ 用 Context.display；低版本回退 WindowManager.defaultDisplay（deprecated 但可用）
@@ -226,15 +226,21 @@ fun HdrLabScreen(onBack: () -> Unit = {}) {
                                         .height(140.dp)
                                         .clip(RoundedCornerShape(16.dp))
                                 ) {
-                                    AndroidView(
-                                        factory = { c ->
-                                            HdrTestSurfaceView(c).also {
-                                                hdrView.value = it
-                                                it.applyRequestedHeadroom(desired)   // 初始即请求 HDR 余量
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxSize()
-                                    )
+                                    // CAMP 修复: SurfaceView 延迟挂载门控 — 进入动画完成前画静态占位, 避免 punch-through 突跳
+                                    if (surfaceVisible) {
+                                        AndroidView(
+                                            factory = { c ->
+                                                HdrTestSurfaceView(c).also {
+                                                    hdrView.value = it
+                                                    it.applyRequestedHeadroom(desired)   // 初始即请求 HDR 余量
+                                                }
+                                            },
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    } else {
+                                        // 占位块: 避免空块布局跳动, 动画结束后无缝切换到 SurfaceView
+                                        Box(Modifier.fillMaxSize().background(CyberCardStart.copy(alpha = 0.6f)))
+                                    }
                                 }
                                 Row(
                                     Modifier.fillMaxWidth().padding(top = 6.dp),

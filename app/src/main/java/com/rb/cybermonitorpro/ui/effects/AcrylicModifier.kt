@@ -54,7 +54,8 @@ import kotlin.random.Random
  * - Glassmorphism-Compose (Deiivid): Compose 原生实现
  *
  * @param tintColor 色调颜色, 默认 CyberCardStart (暗紫黑色)
- * @param tintOpacity 色调不透明度, 默认 0.7f
+ * @param tintOpacity 色调不透明度(顶部), 默认 0.7f
+ * @param endOpacityMultiplier 底部不透明度乘子, 默认 0.85f（底部 alpha = tintOpacity * endOpacityMultiplier）
  * @param noiseOpacity 噪点纹理不透明度, 默认 0.03f
  * @param borderColor 边框高光颜色, 默认 NeonPurple.copy(alpha=0.3f)
  * @param borderWidth 边框宽度, 默认 1.dp
@@ -65,6 +66,7 @@ import kotlin.random.Random
 fun Modifier.acrylic(
     tintColor: Color = CyberCardStart,
     tintOpacity: Float = 0.7f,
+    endOpacityMultiplier: Float = 0.85f,
     noiseOpacity: Float = 0.03f,
     borderColor: Color = NeonPurple.copy(alpha = 0.3f),
     borderWidth: androidx.compose.ui.unit.Dp = 1.dp,
@@ -76,6 +78,7 @@ fun Modifier.acrylic(
         name = "acrylic"
         properties["tintColor"] = tintColor
         properties["tintOpacity"] = tintOpacity
+        properties["endOpacityMultiplier"] = endOpacityMultiplier
         properties["noiseOpacity"] = noiseOpacity
         properties["cornerRadius"] = cornerRadius
     }
@@ -99,7 +102,7 @@ fun Modifier.acrylic(
                 brush = Brush.verticalGradient(
                     colors = listOf(
                         tintColor.copy(alpha = tintOpacity),
-                        tintColor.copy(alpha = tintOpacity * 0.85f)
+                        tintColor.copy(alpha = tintOpacity * endOpacityMultiplier)
                     ),
                     startY = 0f,
                     endY = size.height

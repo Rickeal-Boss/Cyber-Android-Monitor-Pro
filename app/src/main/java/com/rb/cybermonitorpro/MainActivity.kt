@@ -13,6 +13,8 @@ import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import android.util.Log
@@ -150,9 +152,9 @@ class MainActivity : ComponentActivity() {
 
 private data class TopTabItem(val title: String, val iconRes: Int)
 
-// F5: 传感器详情过渡弹簧 — 进入平顺跟手、退出带回弹
-private val SENSOR_ENTRY_SPRING = spring<Float>(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
-private val SENSOR_EXIT_SPRING = spring<Float>(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium)
+// F5 → CAMP 修复: 传感器/HDR 卡片式进出 — 固定时长缓动(对齐目标视频 v4: 进 750ms / 出 500ms, 减速无回弹)
+private val CARD_ENTRY_SPEC = tween<Float>(durationMillis = 750, easing = FastOutSlowInEasing)
+private val CARD_EXIT_SPEC  = tween<Float>(durationMillis = 500, easing = FastOutSlowInEasing)
 
 /** 赛博风格线条矢量图标 — 与 Tab 含义一一对应 */
 private val topTabIcons = listOf(
@@ -261,34 +263,40 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         selectedSensorForDetail = sensor
         showSensorDetail = true
         sensorAlive = true
-        scope.launch { sensorProgress.animateTo(1f, SENSOR_ENTRY_SPRING) }
+        scope.launch { sensorProgress.animateTo(1f, CARD_ENTRY_SPEC) }
     }
 
     fun closeSensorDetail() {
         scope.launch {
-            sensorProgress.animateTo(0f, SENSOR_EXIT_SPRING)
+            sensorProgress.animateTo(0f, CARD_EXIT_SPEC)
             showSensorDetail = false
             selectedSensorForDetail = null
             sensorAlive = false
         }
     }
 
-    // ── F5 扩展: HDR 实验室覆盖层 — 同传感器模式的可打断过渡 (keepAlive 守卫 + Animatable 主时钟) ──
-    //   进入: animateTo(1f, ENTRY) 从屏幕中心触发点 scale/slide 位移展开;
-    //   预测返回: snapTo 跟手 / 取消回弹 1f / 完成 animateTo(0f) 后 showHdrLab=false;
-    //   渲染条件读 hdrAlive State, 绝不读 hdrProgress.value 组合判断 → 零重组。
+    // ── F5 → CAMP 修复: HDR 实验室覆盖层 — scrim + 卡片中心缩放(可打断过渡, 主时钟 hdrProgress) ──
+    //   进入: animateTo(1f, CARD_ENTRY_SPEC) 750ms 中心锚定缩放展开;
+    //   SurfaceView 延迟到进入动画完成后挂载(防 punch-through 突跳);
+    //   预测返回: snapTo 跟手 / 取消回弹 1f / 完成 animateTo(0f) 后移出组合。
     val hdrProgress = remember { Animatable(0f) }
     var hdrAlive by remember { mutableStateOf(false) }
+    var hdrSurfacesVisible by remember { mutableStateOf(false) }
 
     fun openHdrLab() {
         showHdrLab = true
         hdrAlive = true
-        scope.launch { hdrProgress.animateTo(1f, SENSOR_ENTRY_SPRING) }
+        hdrSurfacesVisible = false
+        scope.launch {
+            hdrProgress.animateTo(1f, CARD_ENTRY_SPEC)
+            hdrSurfacesVisible = true   // 动画完成后才挂载 SurfaceView, 防 punch-through 突跳
+        }
     }
 
     fun closeHdrLab() {
+        hdrSurfacesVisible = false     // 先卸载, 再播退出遮罩
         scope.launch {
-            hdrProgress.animateTo(0f, SENSOR_EXIT_SPRING)
+            hdrProgress.animateTo(0f, CARD_EXIT_SPEC)
             showHdrLab = false
             hdrAlive = false
         }
@@ -375,8 +383,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         } catch (e: CancellationException) {
             // 手势取消 — Spring 平滑回弹 (仅支持预测的 ROM 会触发)
             backProgress.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
-            if (showSensorDetail) sensorProgress.animateTo(1f, SENSOR_EXIT_SPRING)
-            if (showHdrLab) hdrProgress.animateTo(1f, SENSOR_EXIT_SPRING)
+            if (showSensorDetail) sensorProgress.animateTo(1f, CARD_EXIT_SPEC)
+            if (showHdrLab) hdrProgress.animateTo(1f, CARD_EXIT_SPEC)
         }
     }
 
@@ -444,7 +452,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     }
                     .acrylic(
                         tintColor = CyberCardStart,
-                        tintOpacity = 0.85f,
+                        tintOpacity = 1f,
+                        endOpacityMultiplier = 1f,
                         noiseOpacity = 0.04f,
                         borderColor = NeonPurple.copy(alpha = 0.25f),
                         // ★ 性能优化 (2026-06-20): 全屏覆盖层禁用噪点
@@ -476,7 +485,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     }
                     .acrylic(
                         tintColor = CyberCardStart,
-                        tintOpacity = 0.85f,
+                        tintOpacity = 1f,
+                        endOpacityMultiplier = 1f,
                         noiseOpacity = 0.04f,
                         borderColor = NeonPurple.copy(alpha = 0.25f),
                         enableNoise = false  // ★ 同设置页
@@ -491,35 +501,31 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
-            // ── HDR 实验室（详情页二层 — 局部 EDR 真机验证; F5 可打断过渡, 主时钟 hdrProgress）──
-            //   渲染条件读 hdrAlive State; 从屏幕中心触发点 scale/slide 位移展开,
+            // ── HDR 实验室（CAMP 修复: scrim + 中心缩放卡片, 替代原 alpha+scale(pivot)+slide）──
+            //   渲染条件读 hdrAlive State; 进入 750ms 中心锚定圆角卡片缩放展开,
+            //   SurfaceView 延迟到进入动画完成后挂载(hdrSurfacesVisible 门控);
             //   预测返回手势 snapTo 跟手、取消回弹 1f、完成 animateTo(0f) 后移出组合。
             if (hdrAlive || showHdrLab) {
                 Box(Modifier.fillMaxSize()) {
-                    Box(
-                        Modifier.fillMaxSize()
-                            .graphicsLayer {
-                                val p = hdrProgress.value
-                                alpha = p
-                                // F5 入口位移形变: 以屏幕中心为 pivot 微缩放 + 横向滑入 (可打断, 无 sharedElement)
-                                // size.width/height 首帧可能为 0, 先 takeIf 守卫再相除, 避免 NaN 落到 TransformOrigin
-                                val pivotX = (size.width.takeIf { it > 0f }?.let { fallbackOrigin.x / it } ?: 0.5f).coerceIn(0f, 1f)
-                                val pivotY = (size.height.takeIf { it > 0f }?.let { fallbackOrigin.y / it } ?: 0.5f).coerceIn(0f, 1f)
-                                transformOrigin = TransformOrigin(pivotX, pivotY)
-                                val s = 0.9f + 0.1f * p
-                                scaleX = s
-                                scaleY = s
-                                translationX = (1f - p) * size.width * 0.06f
-                            }
-                            .acrylic(
-                                tintColor = CyberCardStart,
-                                tintOpacity = 0.85f,
-                                noiseOpacity = 0.04f,
-                                borderColor = NeonPurple.copy(alpha = 0.25f),
-                                enableNoise = false  // ★ 同设置页：全屏覆盖层禁用噪点（性能）
-                            )
+                    // ① scrim: 全屏黑色压暗层 (alpha 由 hdrProgress 驱动)
+                    Box(Modifier.fillMaxSize()
+                        .background(Color.Black)
+                        .graphicsLayer { alpha = hdrProgress.value * 0.5f }
+                    )
+                    // ② 圆角卡片容器: 中心锚定缩放(0.85→1.0), 无 alpha/无位移
+                    Box(Modifier.fillMaxSize()
+                        .graphicsLayer {
+                            val p = hdrProgress.value
+                            val s = 0.85f + 0.15f * p
+                            scaleX = s
+                            scaleY = s
+                        }
+                        .padding(horizontal = 18.dp, vertical = 40.dp)
+                        .shadow(24.dp, RoundedCornerShape(28.dp), clip = false)
+                        .clip(RoundedCornerShape(28.dp))
+                        .background(CyberCardStart)
                     ) {
-                        HdrLabScreen(onBack = { closeHdrLab() })
+                        HdrLabScreen(onBack = { closeHdrLab() }, surfaceVisible = hdrSurfacesVisible)
                         LightCircleBackButton(
                             onClick = { closeHdrLab() },
                             btnSize = 48.dp,
@@ -529,37 +535,40 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
-            // ── 传感器详情 (F5: sensorProgress 主时钟 + keepAlive 守卫, 零重组) ──
-            // 渲染条件读 sensorAlive State，绝不在组合期读 sensorProgress.value；
-            // acrylic 背景与非标题内容的 alpha/位移全部由 Animatable 在 draw/layout 阶段驱动。
+            // ── 传感器详情 (CAMP 修复: scrim + 中心缩放卡片, 替代原 circularReveal+双层alpha) ──
+            //   渲染条件读 sensorAlive State，绝不在组合期读 sensorProgress.value；
+            //   进入 750ms 中心锚定圆角卡片缩放展开, scrim 渐入压暗;
+            //   内容完全由卡片缩放 + scrim 揭示, 无内容级淡化/位移("中部先出现"由缩放+压暗自然产生)。
             if (sensorAlive || showSensorDetail) {
                 val sensor = selectedSensorForDetail
                 if (sensor != null) {
                     val density = LocalDensity.current
-                    // F3: 传感器覆盖层只做一行挂接 — sensorProgress(F5 主时钟)驱动圆形展开, 不引入自己的 reveal state
-                    Box(Modifier.fillMaxSize()
-                        .circularReveal(
-                            progress = { sensorProgress.value },
-                            origin = { if (sensorRevealOrigin != Offset.Zero) sensorRevealOrigin else fallbackOrigin },
+                    Box(Modifier.fillMaxSize()) {
+                        // ① scrim: 全屏黑色压暗层 (alpha 由 sensorProgress 驱动)
+                        Box(Modifier.fillMaxSize()
+                            .background(Color.Black)
+                            .graphicsLayer { alpha = sensorProgress.value * 0.5f }
                         )
-                    ) {
-                        Box(
-                            Modifier.fillMaxSize()
-                                .graphicsLayer { alpha = sensorProgress.value }
-                                .acrylic(
-                                    tintColor = CyberCardStart,
-                                    tintOpacity = 0.85f,
-                                    noiseOpacity = 0.04f,
-                                    borderColor = NeonPurple.copy(alpha = 0.25f),
-                                    enableNoise = false  // ★ 同设置页
-                                )
-                        )
-                        SensorDetailContent(
-                            sensor = sensor,
-                            progress = sensorProgress,
-                            density = density,
-                            onBack = { closeSensorDetail() }
-                        )
+                        // ② 圆角卡片容器: 中心锚定缩放(0.85→1.0), 无 alpha/无位移
+                        Box(Modifier.fillMaxSize()
+                            .graphicsLayer {
+                                val p = sensorProgress.value
+                                val s = 0.85f + 0.15f * p
+                                scaleX = s
+                                scaleY = s
+                            }
+                            .padding(horizontal = 18.dp, vertical = 40.dp)
+                            .shadow(24.dp, RoundedCornerShape(28.dp), clip = false)
+                            .clip(RoundedCornerShape(28.dp))
+                            .background(CyberCardStart)
+                        ) {
+                            SensorDetailContent(
+                                sensor = sensor,
+                                progress = sensorProgress,
+                                density = density,
+                                onBack = { closeSensorDetail() }
+                            )
+                        }
                     }
                 }
             }

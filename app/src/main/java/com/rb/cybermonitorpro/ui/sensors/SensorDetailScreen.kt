@@ -178,13 +178,8 @@ fun SensorDetailContent(
                 Box(Modifier.fillMaxWidth(), content = titleContent)
             }
 
-            // ── F5: 非标题内容 — alpha + 24dp 上移由 sensorProgress 驱动 (draw 阶段, 零重组) ──
+            // ── CAMP 修复: 非标题内容 — 不再有 alpha/位移动画(由卡片缩放+scrim统一驱动) ──
             Column(
-                Modifier.graphicsLayer {
-                    val p = progress.value
-                    alpha = p
-                    translationY = with(density) { lerp(24.dp, 0.dp, p).toPx() }  // ui.unit.lerp: Dp 版
-                },
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
             // ── 实时数值卡片 (含光线等级/距离状态) ──
