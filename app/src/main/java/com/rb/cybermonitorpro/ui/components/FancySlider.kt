@@ -1,5 +1,6 @@
 package com.rb.cybermonitorpro.ui.components
 
+import com.rb.cybermonitorpro.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
