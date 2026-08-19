@@ -313,12 +313,16 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     var floatOrigin by remember { mutableStateOf(Offset.Zero) }
     var sensorRevealOrigin by remember { mutableStateOf(Offset.Zero) }
 
-    // 兜底原点: 触发点未上报时从屏幕中心展开（方式 B: LocalConfiguration + density，无需 BoxWithConstraints）
+    // 兜底原点: 触发点未上报时从右上角按钮区展开（与悬浮窗/设置按钮同区, CAMP 二轮修复:
+    //   原屏幕中心兜底导致冷启动首开圆形从中心展开, 与按钮位置脱节）
     val configuration = LocalConfiguration.current
     val revealDensity = LocalDensity.current
     val fallbackOrigin = remember(configuration, revealDensity) {
         with(revealDensity) {
-            Offset(configuration.screenWidthDp.dp.toPx() / 2f, configuration.screenHeightDp.dp.toPx() / 2f)
+            Offset(
+                configuration.screenWidthDp.dp.toPx() - 56.dp.toPx(),  // 药丸头部右侧按钮区
+                40.dp.toPx()
+            )
         }
     }
 
@@ -331,9 +335,13 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         else floatReveal.collapse()
     }
 
-    // ★ 预测性返回手势进度 (2026-06-19): 驱动覆盖层缩放/位移，替代纯 alpha 动画
-    //   手指拖拽返回时 progress 0→1，覆盖层缩小+右移模拟"被拽走"；
-    //   手势完成关闭覆盖层，手势取消则 spring 回弹。
+    // ── 预测性返回: PredictiveBackHandler 接收手指拖拽进度 ──
+    // activity-compose 1.9.0 中 PredictiveBackHandler 已稳定（无需 @OptIn）
+    // CAMP 二轮修复: 手势进度直接驱动各自覆盖层的过渡主时钟 —
+    //   设置/悬浮窗 → 水波纹圆形收缩 (settingsReveal/floatReveal.progress);
+    //   传感器/HDR → 卡片缩放收缩 (sensorProgress/hdrProgress)。
+    //   放开手: 完成 → 收缩到底并关闭; 中途取消 → 回弹至 1f。
+    //   不支持预测的 ROM flow 为空 → 立即完成, 等价普通 BackHandler。
     //
     //   国产 ROM (MIUI/ColorOS/OriginOS/HarmonyOS) 兼容性策略:
     //   1. AndroidManifest application+activity 均已声明 enableOnBackInvokedCallback="true"
@@ -342,28 +350,24 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     //      等价普通 BackHandler，覆盖层仍能正常关闭（仅无缩放进度动画）
     //   4. 与 MainTabs 的 pager BackHandler 互斥: overlayVisible 时本回调启用，
     //      MainTabs BackHandler enabled = (currentPage!=0 && !overlayVisible) 为 false
-    //   5. 不支持预测时 backProgress 保持 0f，覆盖层以 F3 圆形展开/收缩弹簧
-    //      提供进入/退出过渡（进入 1f 扩散、退出 0f 收缩）
-    //   6. BackGestureCompat 工具在启动时输出诊断日志，辅助排查 ROM 兼容性问题
+    //   5. BackGestureCompat 工具在启动时输出诊断日志，辅助排查 ROM 兼容性问题
     val backProgress = remember { Animatable(0f) }
 
-    // ── 预测性返回: PredictiveBackHandler 接收手指拖拽进度 ──
-    // activity-compose 1.9.0 中 PredictiveBackHandler 已稳定（无需 @OptIn）
-    // F5: 传感器/HDR实验室 分支 — 手势期各自 progress 从起点跟手退回，取消回弹到 1f
     PredictiveBackHandler(enabled = overlayVisible) { progress: Flow<BackEventCompat> ->
+        val settingsStart = if (showSettings) settingsReveal.progress.value else 0f
+        val floatStart = if (showFloatConfig) floatReveal.progress.value else 0f
         val sensorStart = if (showSensorDetail) sensorProgress.value else 0f
         val hdrStart = if (showHdrLab) hdrProgress.value else 0f
         try {
             progress.collect { event ->
                 backProgress.snapTo(event.progress)
-                if (showSensorDetail) {
-                    sensorProgress.snapTo((sensorStart * (1f - event.progress)).coerceIn(0f, 1f))
-                }
-                if (showHdrLab) {
-                    hdrProgress.snapTo((hdrStart * (1f - event.progress)).coerceIn(0f, 1f))
-                }
+                val t = 1f - event.progress
+                if (showSettings) settingsReveal.progress.snapTo((settingsStart * t).coerceIn(0f, 1f))
+                if (showFloatConfig) floatReveal.progress.snapTo((floatStart * t).coerceIn(0f, 1f))
+                if (showSensorDetail) sensorProgress.snapTo((sensorStart * t).coerceIn(0f, 1f))
+                if (showHdrLab) hdrProgress.snapTo((hdrStart * t).coerceIn(0f, 1f))
             }
-            // 手势完成 — 关闭当前覆盖层，重置进度
+            // 手势完成 — 各覆盖层收缩到底后关闭, 重置进度
             backProgress.snapTo(0f)
             when {
                 showSensorDetail -> {
@@ -373,18 +377,27 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     sensorAlive = false
                 }
                 showHdrLab -> {
+                    hdrSurfacesVisible = false
                     hdrProgress.snapTo(0f)
                     showHdrLab = false
                     hdrAlive = false
                 }
-                showSettings -> showSettings = false
-                showFloatConfig -> showFloatConfig = false
+                showSettings -> {
+                    settingsReveal.progress.snapTo(0f)
+                    showSettings = false
+                }
+                showFloatConfig -> {
+                    floatReveal.progress.snapTo(0f)
+                    showFloatConfig = false
+                }
             }
         } catch (e: CancellationException) {
-            // 手势取消 — Spring 平滑回弹 (仅支持预测的 ROM 会触发)
+            // 手势取消 — 平滑回弹至展开态 (仅支持预测的 ROM 会触发)
             backProgress.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
-            if (showSensorDetail) sensorProgress.animateTo(1f, CARD_EXIT_SPEC)
-            if (showHdrLab) hdrProgress.animateTo(1f, CARD_EXIT_SPEC)
+            if (showSettings) settingsReveal.progress.animateTo(1f, tween(400))
+            if (showFloatConfig) floatReveal.progress.animateTo(1f, tween(400))
+            if (showSensorDetail) sensorProgress.animateTo(1f, CARD_ENTRY_SPEC)
+            if (showHdrLab) hdrProgress.animateTo(1f, CARD_ENTRY_SPEC)
         }
     }
 
@@ -440,20 +453,19 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             //   覆盖层在退出动画期间仍留在 composition 树中,
             //   系统预测性返回 (Android 15+) 可以跨页面渐变动画。
 
-            // ── 设置 (F3: 水波纹圆形展开; 预测返回仅压暗) ──
+            // ── 设置 (F3: 水波纹圆形展开; 预测返回手势驱动圆形收缩, 见 PredictiveBackHandler) ──
+            //   CAMP 二轮修复: 覆盖层回归半透明 (0.85/0.85) — 底下传感器卡片与 SDR 描边可透出,
+            //   圆形展开本身即揭示过程, 无需实心化。
             if (settingsReveal.isRevealing || showSettings) {
                 Box(Modifier.fillMaxSize()
                     .circularReveal(
                         progress = { settingsReveal.progress.value },
-                        origin = { settingsReveal.origin },
+                        origin = { if (settingsOrigin != Offset.Zero) settingsOrigin else fallbackOrigin },
                     )
-                    .graphicsLayer {
-                        alpha = (1f - backProgress.value * 0.35f).coerceIn(0f, 1f)
-                    }
                     .acrylic(
                         tintColor = CyberCardStart,
-                        tintOpacity = 1f,
-                        endOpacityMultiplier = 1f,
+                        tintOpacity = 0.85f,
+                        endOpacityMultiplier = 0.85f,
                         noiseOpacity = 0.04f,
                         borderColor = NeonPurple.copy(alpha = 0.25f),
                         // ★ 性能优化 (2026-06-20): 全屏覆盖层禁用噪点
@@ -473,20 +485,17 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
-            // ── 悬浮窗 (F3: 水波纹圆形展开; 预测返回仅压暗) ──
+            // ── 悬浮窗 (F3: 水波纹圆形展开; 预测返回手势驱动圆形收缩, 见 PredictiveBackHandler) ──
             if (floatReveal.isRevealing || showFloatConfig) {
                 Box(Modifier.fillMaxSize()
                     .circularReveal(
                         progress = { floatReveal.progress.value },
-                        origin = { floatReveal.origin },
+                        origin = { if (floatOrigin != Offset.Zero) floatOrigin else fallbackOrigin },
                     )
-                    .graphicsLayer {
-                        alpha = (1f - backProgress.value * 0.35f).coerceIn(0f, 1f)
-                    }
                     .acrylic(
                         tintColor = CyberCardStart,
-                        tintOpacity = 1f,
-                        endOpacityMultiplier = 1f,
+                        tintOpacity = 0.85f,
+                        endOpacityMultiplier = 0.85f,
                         noiseOpacity = 0.04f,
                         borderColor = NeonPurple.copy(alpha = 0.25f),
                         enableNoise = false  // ★ 同设置页
@@ -501,73 +510,102 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
-            // ── HDR 实验室（CAMP 修复: scrim + 中心缩放卡片, 替代原 alpha+scale(pivot)+slide）──
-            //   渲染条件读 hdrAlive State; 进入 750ms 中心锚定圆角卡片缩放展开,
-            //   SurfaceView 延迟到进入动画完成后挂载(hdrSurfacesVisible 门控);
-            //   预测返回手势 snapTo 跟手、取消回弹 1f、完成 animateTo(0f) 后移出组合。
+            // ── HDR 实验室（CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考）──
+            //   与传感器详情同款转场: 右上角锚点缩放 0.42→1.0 + 起始位移 + 内容渐变;
+            //   容器半透明 (0.92) + scrim 0.35; SurfaceView 延迟到进入动画完成后挂载
+            //   (hdrSurfacesVisible 门控, 防 punch-through 突跳);
+            //   渲染条件读 hdrAlive State; 预测返回手势 snapTo 跟手、取消回弹 1f。
             if (hdrAlive || showHdrLab) {
                 Box(Modifier.fillMaxSize()) {
-                    // ① scrim: 全屏黑色压暗层 (alpha 由 hdrProgress 驱动)
+                    // ① scrim: 全屏压暗层 (alpha 由 hdrProgress 驱动, 半透明)
                     Box(Modifier.fillMaxSize()
                         .background(Color.Black)
-                        .graphicsLayer { alpha = hdrProgress.value * 0.5f }
+                        .graphicsLayer { alpha = hdrProgress.value * 0.35f }
                     )
-                    // ② 圆角卡片容器: 中心锚定缩放(0.85→1.0), 无 alpha/无位移
+                    // ② 卡片容器: 右上角锚点缩放 + 位移
                     Box(Modifier.fillMaxSize()
                         .graphicsLayer {
                             val p = hdrProgress.value
-                            val s = 0.85f + 0.15f * p
+                            transformOrigin = TransformOrigin(1f, 0f)
+                            val s = 0.42f + 0.58f * p
                             scaleX = s
                             scaleY = s
+                            translationX = (1f - p) * size.width * -0.33f
+                            translationY = (1f - p) * size.height * 0.15f
                         }
                         .padding(horizontal = 18.dp, vertical = 40.dp)
                         .shadow(24.dp, RoundedCornerShape(28.dp), clip = false)
                         .clip(RoundedCornerShape(28.dp))
-                        .background(CyberCardStart)
+                        .background(CyberCardStart.copy(alpha = 0.92f))
                     ) {
-                        HdrLabScreen(onBack = { closeHdrLab() }, surfaceVisible = hdrSurfacesVisible)
-                        LightCircleBackButton(
-                            onClick = { closeHdrLab() },
-                            btnSize = 48.dp,
-                            modifier = Modifier.padding(top = 8.dp, start = 16.dp).align(Alignment.TopStart)
-                        )
+                        // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载)
+                        Box(Modifier.fillMaxSize()
+                            .graphicsLayer {
+                                val p = hdrProgress.value
+                                val ca = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
+                                alpha = ca
+                                translationY = (1f - ca) * 24.dp.toPx()
+                            }
+                        ) {
+                            HdrLabScreen(onBack = { closeHdrLab() }, surfaceVisible = hdrSurfacesVisible)
+                            LightCircleBackButton(
+                                onClick = { closeHdrLab() },
+                                btnSize = 48.dp,
+                                modifier = Modifier.padding(top = 8.dp, start = 16.dp).align(Alignment.TopStart)
+                            )
+                        }
                     }
                 }
             }
 
-            // ── 传感器详情 (CAMP 修复: scrim + 中心缩放卡片, 替代原 circularReveal+双层alpha) ──
-            //   渲染条件读 sensorAlive State，绝不在组合期读 sensorProgress.value；
-            //   进入 750ms 中心锚定圆角卡片缩放展开, scrim 渐入压暗;
-            //   内容完全由卡片缩放 + scrim 揭示, 无内容级淡化/位移("中部先出现"由缩放+压暗自然产生)。
+            // ── 传感器详情 (CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考) ──
+            //   容器: 右上角锚点 TransformOrigin(1,0) + scale 0.42→1.0 + 起始位移至屏幕中上部
+            //   (0.25W, 0.15H) — 与 frames"小卡片→全屏"形态一致;
+            //   容器半透明 (0.92) + scrim 0.35 → 底下传感器卡片与 SDR 描边可透出;
+            //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由卡片缩放先行、内容跟进;
+            //   渲染条件读 sensorAlive State, 绝不在组合期读 sensorProgress.value。
             if (sensorAlive || showSensorDetail) {
                 val sensor = selectedSensorForDetail
                 if (sensor != null) {
                     val density = LocalDensity.current
                     Box(Modifier.fillMaxSize()) {
-                        // ① scrim: 全屏黑色压暗层 (alpha 由 sensorProgress 驱动)
+                        // ① scrim: 全屏压暗层 (alpha 由 sensorProgress 驱动, 半透明)
                         Box(Modifier.fillMaxSize()
                             .background(Color.Black)
-                            .graphicsLayer { alpha = sensorProgress.value * 0.5f }
+                            .graphicsLayer { alpha = sensorProgress.value * 0.35f }
                         )
-                        // ② 圆角卡片容器: 中心锚定缩放(0.85→1.0), 无 alpha/无位移
+                        // ② 卡片容器: 右上角锚点缩放 + 位移 (进入=从屏幕中上部小卡片展开至全屏)
                         Box(Modifier.fillMaxSize()
                             .graphicsLayer {
                                 val p = sensorProgress.value
-                                val s = 0.85f + 0.15f * p
+                                transformOrigin = TransformOrigin(1f, 0f)
+                                val s = 0.42f + 0.58f * p
                                 scaleX = s
                                 scaleY = s
+                                translationX = (1f - p) * size.width * -0.33f
+                                translationY = (1f - p) * size.height * 0.15f
                             }
                             .padding(horizontal = 18.dp, vertical = 40.dp)
                             .shadow(24.dp, RoundedCornerShape(28.dp), clip = false)
                             .clip(RoundedCornerShape(28.dp))
-                            .background(CyberCardStart)
+                            .background(CyberCardStart.copy(alpha = 0.92f))
                         ) {
-                            SensorDetailContent(
-                                sensor = sensor,
-                                progress = sensorProgress,
-                                density = density,
-                                onBack = { closeSensorDetail() }
-                            )
+                            // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组)
+                            Box(Modifier.fillMaxSize()
+                                .graphicsLayer {
+                                    val p = sensorProgress.value
+                                    val ca = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
+                                    alpha = ca
+                                    translationY = (1f - ca) * 24.dp.toPx()
+                                }
+                            ) {
+                                SensorDetailContent(
+                                    sensor = sensor,
+                                    progress = sensorProgress,
+                                    density = density,
+                                    onBack = { closeSensorDetail() }
+                                )
+                            }
                         }
                     }
                 }
