@@ -18,7 +18,8 @@ data class StepLedger(
  * - STEP_COUNTER 硬件计数自开机累积、重启归零；
  * - 重启检测: 新原始读数 < 上次原始读数 → 硬件计数器已归零，上次已知总量并入
  *   offset、基线重置为本次读数 → 跨重启累计不丢；
- * - 跨日检测: 当日编号变化 → 当日起始总步数重置为当前总量。
+ * - 跨日检测: 当日编号变化 → 当日起始总步数重置为昨日最后总量
+ *   （本分支执行于写 LAST_TOTAL 之前，此处读到的仍是昨日总量，即今日起点）。
  *
  * 持久化经 read/write lambda 注入（SharedPreferences / 测试用 Map 均可），
  * 全部写操作 apply 异步、读操作容错降级（OEM ROM SP 偶发异常防御）。
@@ -65,7 +66,8 @@ class StepCounterStore(
         val dayStamp = now / DAY_MS
         var dayStart = read(KEY_DAY_START, -1L)
         if (dayStart < 0 || read(KEY_DAY_STAMP, -1L) != dayStamp) {
-            dayStart = total
+            // 当日起点 = 昨日最后总量（此处 LAST_TOTAL 尚未被下方覆盖, 读到的仍是旧值）
+            dayStart = read(KEY_LAST_TOTAL, 0L)
             write(KEY_DAY_STAMP, dayStamp)
         }
         val today = (total - dayStart).coerceAtLeast(0L)

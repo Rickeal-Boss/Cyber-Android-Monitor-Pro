@@ -76,6 +76,7 @@ class StepCounterStoreTest {
         assertEquals(0L, f.store.lastKnownTotal())
         f.store.onHardwareReading(100, now = f.now)
         f.store.onHardwareReading(300, now = f.now + 1000)
-        assertEquals(300L, f.store.lastKnownTotal())
+        // lastKnownTotal 返回账本总量 (offset 0 + sinceBoot 300-100 = 200), 非硬件原始读数 300
+        assertEquals(200L, f.store.lastKnownTotal())
     }
 }
