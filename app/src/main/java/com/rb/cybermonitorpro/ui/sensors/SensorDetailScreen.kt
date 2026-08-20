@@ -1,7 +1,5 @@
 package com.rb.cybermonitorpro.ui.sensors
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -49,7 +47,6 @@ private val axisColors = listOf(NeonPurple, NeonCyan, NeonMagenta)
  * 非标题内容的 alpha 与 24dp→0 上移全部由其在 draw 阶段驱动（零重组）。
  * 滚动必须用 rememberHdrScrollState()（pre20 回归红线，勿回退 rememberScrollState）。
  */
-@OptIn(androidx.compose.animation.ExperimentalSharedTransitionApi::class)
 @Composable
 fun SensorDetailContent(
     sensor: SensorItemInfo,
@@ -130,10 +127,6 @@ fun SensorDetailContent(
                 .padding(start = 16.dp, end = 16.dp, top = 50.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // ── F5-2 标题容器: matching sharedElement(卡片 ↔ 详情标题形变), 不套 sensorProgress 变换 ──
-            //   compose 1.8 的 sharedElement 需 AnimatedVisibilityScope, 用 AnimatedVisibility 包裹提供;
-            //   scope 为 null（未包裹/降级）时跳过 sharedElement, 布局与视觉不变
-            val sharedScope = com.rb.cybermonitorpro.ui.effects.LocalSharedTransitionScope.current
             val titleContent: @Composable BoxScope.() -> Unit = {
                 Column {
                     // ── 传感器名称 ──
@@ -156,27 +149,7 @@ fun SensorDetailContent(
                     }
                 }
             }
-            if (sharedScope != null) {
-                with(sharedScope) {
-                    AnimatedVisibility(visible = true, enter = fadeIn()) {
-                        Box(
-                            Modifier.sharedElement(
-                                rememberSharedContentState(key = "sensor_${sensor.sensorId}"),
-                                animatedVisibilityScope = this,
-                                boundsTransform = { _, _ ->
-                                    androidx.compose.animation.core.spring(
-                                        dampingRatio = 0.85f,
-                                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
-                                    )
-                                }
-                            ).fillMaxWidth(),
-                            content = titleContent
-                        )
-                    }
-                }
-            } else {
-                Box(Modifier.fillMaxWidth(), content = titleContent)
-            }
+            Box(Modifier.fillMaxWidth(), content = titleContent)
 
             // ── CAMP 修复: 非标题内容 — 不再有 alpha/位移动画(由卡片缩放+scrim统一驱动) ──
             Column(

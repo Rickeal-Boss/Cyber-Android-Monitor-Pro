@@ -1,10 +1,5 @@
 package com.rb.cybermonitorpro.ui.sensors
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -37,7 +32,6 @@ import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.SensorItemInfo
 import com.rb.cybermonitorpro.data.model.SensorTypeMeta
-import com.rb.cybermonitorpro.ui.effects.LocalSharedTransitionScope
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
@@ -97,17 +91,13 @@ private fun SensorListContent(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun SensorItemCard(sensor: SensorItemInfo, onClick: (Offset) -> Unit, modifier: Modifier = Modifier) {
     val meta = SensorTypeMeta.fromTypeId(sensor.type)
     val ctx = LocalContext.current
-    val sharedScope = LocalSharedTransitionScope.current
     // F3: 卡片中心触点（boundsInRoot; RIPPLE-04: 偏移异常时降级 positionInWindow 换算）
     var cardCenter by remember { mutableStateOf(Offset.Zero) }
 
-    // ★ F5-2: sharedElement 依赖 AnimatedVisibilityScope，卡片整体包进 AnimatedVisibility 提供该 scope；
-    //   key 与 SensorDetailContent 标题容器一致 ("sensor_"+sensorId); scope 为 null 时优雅降级
     val cardModifier = Modifier
         .then(modifier)
         .fillMaxWidth()
@@ -165,31 +155,11 @@ private fun SensorItemCard(sensor: SensorItemInfo, onClick: (Offset) -> Unit, mo
         }
     }
 
-    if (sharedScope != null) {
-        with(sharedScope) {
-            AnimatedVisibility(visible = true, enter = fadeIn()) {
-                Card(
-                    Modifier.sharedElement(
-                        rememberSharedContentState(key = "sensor_${sensor.sensorId}"),
-                        animatedVisibilityScope = this,
-                        boundsTransform = { _, _ ->
-                            spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
-                        }
-                    ).then(cardModifier),
-                    shape = RoundedCornerShape(20.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    content = cardContent
-                )
-            }
-        }
-    } else {
-        Card(
-            cardModifier,
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-            content = cardContent
-        )
-    }
+    Card(
+        cardModifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        content = cardContent
+    )
 }

@@ -42,12 +42,11 @@ fun HdrPatchHost(
     val scope = rememberCoroutineScope()
     val viewRef = remember { mutableStateOf<HdrPatchSurfaceView?>(null) }
     // 主动作：闸门变化 → setActive（开启即进入事件驱动渲染；关闭移除 SurfaceView）
-    val effective = enabled && !hidden && !suppressed && TurboXdrCompat.supported
+    val effective = enabled && !hidden && !suppressed
 
-    // ★ pre18：仅当 effective 时才挂载 HdrPatchSurfaceView，关闭时完全移除 SurfaceView。
-    //   根因：全屏透明 PQ SurfaceView（setZOrderOnTop + 带 alpha 的 PixelFormat.RGBA_1010102）
-    //   在部分 ROM（小米/HyperOS Android 16）上会让窗口合成层变为透明，系统桌面从孔洞透出
-    //   （「背景板整块不见了」）。关闭时移除 SurfaceView 后窗口恢复不透明，背景稳定。
+    // ★ pre8：移除 pre7 的 ROM 守卫 TurboXdrCompat。真正 punch-through 根因在
+    //   HdrPatchSurfaceView.setZOrderMediaOverlay（见 A-4），本宿主不再做 ROM 降级判定；
+    //   仅当 effective（开关开 + 覆盖层不可见 + 未抑制）时才挂载 SurfaceView，关闭时移除。
     if (effective) {
         AndroidView(
             modifier = modifier

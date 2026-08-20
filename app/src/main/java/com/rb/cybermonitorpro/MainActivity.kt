@@ -513,7 +513,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
             // ── HDR 实验室（CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考）──
             //   与传感器详情同款转场: 屏幕中心锚点缩放 0.42→1.0 + 起始位移 + 内容渐变;
-            //   容器不透明 (CyberCardStart, 去 0.92 alpha) + scrim 0.35; SurfaceView 延迟到进入动画完成后挂载
+            //   容器不透明 (CyberCardStart, 去 0.92 alpha; 背景仅 p>0.6 收尾淡入, 消除动画期全黑) + scrim 0.35; SurfaceView 延迟到进入动画完成后挂载
             //   (hdrSurfacesVisible 门控, 防 punch-through 突跳);
             //   渲染条件读 hdrAlive State; 预测返回手势 snapTo 跟手、取消回弹 1f。
             if (hdrAlive || showHdrLab) {
@@ -526,16 +526,16 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         .background(Color.Black)
                         .graphicsLayer { alpha = (hdrProgress.value * hdrProgress.value) * 0.22f }
                     )
-                    // ② 卡片容器: 屏幕中心锚点缩放展开至全屏 (动画过程半透明可见主界面)
+                    // ② 卡片容器: 屏幕中心锚点缩放展开至全屏 (scale 起点 0.3, 背景仅 p>0.6 收尾淡入, 过渡更顺)
                     val hdrP = hdrProgress.value
                     Box(Modifier.fillMaxSize()
                         .graphicsLayer {
                             transformOrigin = TransformOrigin(0.5f, 0.5f)
-                            val s = 0.42f + 0.58f * hdrP
+                            val s = 0.3f + 0.7f * hdrP
                             scaleX = s
                             scaleY = s
                         }
-                        .background(CyberCardStart.copy(alpha = (hdrP * hdrP).coerceIn(0f, 1f)))
+                        .background(CyberCardStart.copy(alpha = ((hdrP - 0.6f) / 0.4f).coerceIn(0f, 1f)))
                     ) {
                         // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载)
                         Box(Modifier.fillMaxSize()
@@ -558,7 +558,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             }
 
             // ── 传感器详情 (CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考) ──
-            //   容器: 屏幕中心锚点 TransformOrigin(0.5f,0.5f) + scale 0.42→1.0 + 起始位移至屏幕中上部
+            //   容器: 屏幕中心锚点 TransformOrigin(0.5f,0.5f) + scale 0.3→1.0 + 起始位移至屏幕中上部 (背景仅 p>0.6 收尾淡入)
             //   (0.25W, 0.15H) — 与 frames"小卡片→全屏"形态一致;
             //   容器不透明 (CyberCardStart, 去 0.92 alpha) + scrim 0.35 (不再透出底层, 隔绝误触);
             //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由卡片缩放先行、内容跟进;
@@ -581,11 +581,11 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         Box(Modifier.fillMaxSize()
                             .graphicsLayer {
                                 transformOrigin = TransformOrigin(0.5f, 0.5f)
-                                val s = 0.42f + 0.58f * sensorP
+                                val s = 0.3f + 0.7f * sensorP
                                 scaleX = s
                                 scaleY = s
                             }
-                            .background(CyberCardStart.copy(alpha = (sensorP * sensorP).coerceIn(0f, 1f)))
+                            .background(CyberCardStart.copy(alpha = ((sensorP - 0.6f) / 0.4f).coerceIn(0f, 1f)))
                         ) {
                             // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组)
                             Box(Modifier.fillMaxSize()
