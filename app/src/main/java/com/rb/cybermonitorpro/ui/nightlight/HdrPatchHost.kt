@@ -44,8 +44,10 @@ fun HdrPatchHost(
     // 主动作：闸门变化 → setActive（开启即进入事件驱动渲染；关闭移除 SurfaceView）
     val effective = enabled && !hidden && !suppressed
 
-    // ★ pre8：移除 pre7 的 ROM 守卫 TurboXdrCompat。真正 punch-through 根因在
-    //   HdrPatchSurfaceView.setZOrderMediaOverlay（见 A-4），本宿主不再做 ROM 降级判定；
+    // ★ pre9：pre8 把 PQ 贴片层改为 setZOrderMediaOverlay(true)，在用户真机 ROM 上导致
+    //   卡片内部 HDR 贴片被不透明 SDR 卡片压住（仅剩描边）+ 背景透明穿透到桌面；
+    //   现 revert 回 HdrPatchSurfaceView.setZOrderOnTop(true)（见 A-4），透明区由不透明
+    //   windowBackground(#0A0A0F) 兜底，桌面不再穿透；本宿主不做 ROM 降级判定；
     //   仅当 effective（开关开 + 覆盖层不可见 + 未抑制）时才挂载 SurfaceView，关闭时移除。
     if (effective) {
         AndroidView(

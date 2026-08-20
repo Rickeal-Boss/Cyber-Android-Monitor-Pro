@@ -513,7 +513,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
             // ── HDR 实验室（CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考）──
             //   与传感器详情同款转场: 屏幕中心锚点缩放 0.42→1.0 + 起始位移 + 内容渐变;
-            //   容器不透明 (CyberCardStart, 去 0.92 alpha; 背景仅 p>0.6 收尾淡入, 消除动画期全黑) + scrim 0.35; SurfaceView 延迟到进入动画完成后挂载
+            //   容器半透明 (CyberCardStart, × 0.92 alpha，比设置/浮窗 0.85 更不透; 背景仅 p>0.6 收尾淡入, 消除动画期全黑) + scrim 0.35; SurfaceView 延迟到进入动画完成后挂载
             //   (hdrSurfacesVisible 门控, 防 punch-through 突跳);
             //   渲染条件读 hdrAlive State; 预测返回手势 snapTo 跟手、取消回弹 1f。
             if (hdrAlive || showHdrLab) {
@@ -560,7 +560,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             // ── 传感器详情 (CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考) ──
             //   容器: 屏幕中心锚点 TransformOrigin(0.5f,0.5f) + scale 0.3→1.0 + 起始位移至屏幕中上部 (背景仅 p>0.6 收尾淡入)
             //   (0.25W, 0.15H) — 与 frames"小卡片→全屏"形态一致;
-            //   容器不透明 (CyberCardStart, 去 0.92 alpha) + scrim 0.35 (不再透出底层, 隔绝误触);
+            //   容器半透明 (CyberCardStart, × 0.92 alpha，比设置/浮窗 0.85 更不透) + scrim 0.35 (不再透出底层, 隔绝误触);
             //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由卡片缩放先行、内容跟进;
             //   渲染条件读 sensorAlive State, 绝不在组合期读 sensorProgress.value。
             if (sensorAlive || showSensorDetail) {
