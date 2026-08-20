@@ -28,9 +28,10 @@
 
 ## 4. TurboXDR / PQ 透明合成（已知大坑）
 - 渲染管线路径：`CyberNightlightSwitch.enabled`（总开关，默认 false）→ `HdrPatchHost`/`CyberNightlightHost` 挂载全屏透明 PQ `GLSurfaceView`（`RGBA_1010102`）、`HdrPatchSurfaceView`/`HdrLumeSurfaceView`。
-- **★ pre8 更正（推翻 pre7/pre18 的 ROM 误诊）**：pre18 曾把"窗口透明/背景板消失"归因于 ROM（小米/HyperOS Android 16），pre7 据此加 `TurboXdrCompat` 守卫（小米/Redmi/POCO + API≥36 → `effective=false` 不挂载）。**pre8 确认真因是 `HdrPatchSurfaceView.setZOrderOnTop(true)`**：onTop 表面透明区透出**窗口背后的桌面**；而 `setZOrderMediaOverlay(true)` 透明区透出**本窗口 SDR 内容**（SDR 卡可见）且 HDR 描边仍压 SDR 之上。
-- **pre8 修复**：删除 `TurboXdrCompat.kt`（守卫整体移除，`effective = enabled && !hidden && !suppressed`）；`HdrPatchSurfaceView` 改 `setZOrderMediaOverlay(true)`（与 Lume 一致）。**两个 PQ surface 均不可再用 `setZOrderOnTop`**（两个 onTop 10-bit surface 还会争抢 HDR overlay 平面致 SF crash，pre13 已有教训）。
-- HDR 卡片描边经 `hdrCardBorderPatch` 上报 PQ 表面；`hdrSurfacesVisible` 门控保留（mediaOverlay 下无 punch-through，保留避免描边突跳更稳）。
+- **★ pre8 误诊（pre9 真机验证后推翻）**：pre8 把 pre7 的 `setZOrderOnTop(true)` 改成 `setZOrderMediaOverlay(true)`，理由据称是"onTop 透明区透出桌面、mediaOverlay 透出本窗口 SDR 内容且 HDR 描边仍压其上"。**但 pre9 用户真机验证结论相反**：① mediaOverlay 把 PQ 表面压到不透明 SDR 卡片之下 → 卡片内部贴片（TEXT_GLYPH/CHART_LINE/CHART_GRID，无"卡内填充"类型）被盖住，只剩顶部透明区 CARD_BORDER 描边可见（现象："TurboXDR 只剩 HDR 描边"）；② mediaOverlay 透明区仍穿透到窗口背后的桌面（背景透明可见桌面，正是 pre8 声称修好的老 bug 复现）。
+- **pre9 修复 + 关键认知**：`HdrPatchSurfaceView` **revert 回 `setZOrderOnTop(true)`**。`onTop` 透明区是否漏桌面，取决于**窗口本身是否透明**——CAM-P 窗口背景是**不透明** `windowBackground=#0A0A0F`（themes.xml），故 onTop 透明区只压在这层不透明窗口背景之上，**桌面不穿透**。pre8"onTop 漏桌面"的前提是基于透明窗口，对 CAM-P 不成立。
+- **z-order 最终定论**：`HdrPatchSurfaceView`=onTop；`HdrLumeSurfaceView`（夜光条）=保持 `setZOrderMediaOverlay(true)`。**全局仅一个 onTop 10-bit 表面**（两个 onTop 会争抢 HDR overlay 平面致 SF crash，pre13 教训仍有效）。pre8"两个 PQ surface 均不可用 onTop"过于绝对——patch 表面回归 onTop 是安全的，只要 Lume 仍是 mediaOverlay 即可保证唯一 onTop。
+- HDR 卡片描边经 `hdrCardBorderPatch` 上报 PQ 表面；`hdrSurfacesVisible` 门控保留（避免描边突跳）。
 
 ## 5. sharedElement / 共享转场（round4 大坑，勿再误用）
 - **pre8 移除**：列表传感器卡（`SensorsScreen.SensorItemCard`）与详情标题（`SensorDetailScreen`）曾用同名 key `sensor_<id>` 的 `sharedElement`：列表包**整张 Card**（大 bounds）、详情只包**标题 Box**（小 bounds），且双方 `AnimatedVisibility(visible=true)` 永不退场 → 形变副本卡在 overlay 顶层，出现"某张卡浮顶盖住其它卡、其余不可见"。
@@ -41,8 +42,9 @@
 - lambda 内定义的局部变量（如 `p`）在 lambda 外不可见 → "Unresolved reference"。同样外提。
 
 ## 7. Round 历史
-- pre1 success / pre3 failure / pre4 success / pre5 failure / pre6 success / pre7 success（run #32333367929，`e53aa745`）/ pre8 success（run #32343534924，`8a454d0`，round4）。
+- pre1 success / pre3 failure / pre4 success / pre5 failure / pre6 success / pre7 success（run #32333367929，`e53aa745`）/ pre8 success（run #32343534924，`8a454d0`，round4）/ pre9（big-fix2，CI run 待记）。
 - **pre8 = round4 回归修复**：① 撤 TurboXdrCompat 守卫（修 pre7 导致的 TurboXDR/夜光条全失效）；② 移除传感器 sharedElement（修"传感器32"卡浮顶盖住其它卡）；③ 覆盖层 bg 收尾淡入 + scale 起点 0.3（修动画全黑/过渡突变）。锚点修复（pre7 中心锚点）保留未动。
+- **pre9 = round5（big-fix2）回归修复（推翻 pre8 的 PQ z-order 误诊）**：① `HdrPatchSurfaceView` revert 回 `setZOrderOnTop(true)`（修 pre8 引入的 TurboXDR 内部 HDR 贴片消失 + 背景透明穿透桌面）；`HdrLumeSurfaceView` 保持 mediaOverlay（全局仅一个 onTop 10-bit 表面，避开 pre13 SF crash）；② HDR/Sensor 覆盖层容器 bg 由全不透明改为 ×0.92（半透明，比设置/浮窗 0.85 更不透）；③ 设置覆盖层 `fillMaxSize()`+`Spacer(weight(1f))` 铺满屏幕（与悬浮窗对齐）。验证前提：onTop 安全依赖不透明 `windowBackground=#0A0A0F` 兜底，仍需真机复测桌面不穿透（CI 仅编译不跑设备）。
 
 ## 8. 协作/工具
 - 频率限制：hy3/reasoning 模型易 429；成员沉默/限流时主理人直接兜底。
