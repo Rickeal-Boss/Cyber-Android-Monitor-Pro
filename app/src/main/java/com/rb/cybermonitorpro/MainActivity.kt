@@ -30,6 +30,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
@@ -550,9 +551,15 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     .pointerInput(Unit) { detectTapGestures { } }
                 ) {
                     // ① scrim: 全屏压暗层 (alpha 由 hdrScrim 驱动, 二次曲线半透明; scrim 与容器 hdrProgress 解耦, 打开时容器先展开→scrim 后到位, 关闭时 scrim 先解除→容器后收起)
+                    //   pre12 修复: 改 drawBehind 直接以目标 alpha 画黑矩形, 取代 "background(Color.Black)+graphicsLayer{alpha}" —
+                    //   后者把实心黑填进离屏 alpha 层, 首帧离屏缓冲被清成不透明黑 → scrim 下出现全黑闪层。
                     Box(Modifier.fillMaxSize()
-                        .background(Color.Black)
-                        .graphicsLayer { alpha = (hdrScrim.value * hdrScrim.value) * 0.22f }
+                        .drawBehind {
+                            drawRect(
+                                color = Color.Black,
+                                alpha = (hdrScrim.value * hdrScrim.value) * 0.22f
+                            )
+                        }
                     )
                     // ② 卡片容器: scale 0.3→1.0 跟 hdrProgress; 背景(CyberCardStart ×0.92) 跟 hdrScrim —
                     //   scale 与 bg 解耦: 打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
@@ -564,7 +571,14 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             scaleX = s
                             scaleY = s
                         }
-                        .background(CyberCardStart.copy(alpha = ((hdrScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f))
+                        // pre12 修复: 容器背景 alpha 移出任何层属性, 改 drawBehind 直接画带 alpha 的 CyberCardStart,
+                        // 避免 bg 被卷入离屏层导致黑闪 (scale 仍保留在 graphicsLayer)。
+                        .drawBehind {
+                            drawRect(
+                                color = CyberCardStart,
+                                alpha = ((hdrScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f
+                            )
+                        }
                     ) {
                         // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载)
                         Box(Modifier.fillMaxSize()
@@ -603,9 +617,14 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         .pointerInput(Unit) { detectTapGestures { } }
                     ) {
                         // ① scrim: 全屏压暗层 (alpha 由 sensorScrim 驱动, 二次曲线半透明; scrim 与容器 sensorProgress 解耦, 打开时容器先展开→scrim 后到位, 关闭时 scrim 先解除→容器后收起)
+                        //   pre12 修复: 同 HDR scrim, 改 drawBehind 直接以目标 alpha 画黑矩形, 根除黑闪。
                         Box(Modifier.fillMaxSize()
-                            .background(Color.Black)
-                            .graphicsLayer { alpha = (sensorScrim.value * sensorScrim.value) * 0.22f }
+                            .drawBehind {
+                                drawRect(
+                                    color = Color.Black,
+                                    alpha = (sensorScrim.value * sensorScrim.value) * 0.22f
+                                )
+                            }
                         )
                         // ② 卡片容器: scale 0.3→1.0 跟 sensorProgress; 背景(CyberCardStart ×0.92) 跟 sensorScrim —
                         //   scale 与 bg 解耦: 打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
@@ -617,7 +636,13 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 scaleX = s
                                 scaleY = s
                             }
-                            .background(CyberCardStart.copy(alpha = ((sensorScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f))
+                            // pre12 修复: 容器背景 alpha 移出层属性, 改 drawBehind 直接画带 alpha 的 CyberCardStart。
+                            .drawBehind {
+                                drawRect(
+                                    color = CyberCardStart,
+                                    alpha = ((sensorScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f
+                                )
+                            }
                         ) {
                             // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组)
                             Box(Modifier.fillMaxSize()
