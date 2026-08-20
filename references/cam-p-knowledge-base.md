@@ -21,7 +21,7 @@
   - 打开：先 `animateTo` 容器展开（progress→1）→ **然后** 才 `animateTo` scrim 到位（主界面被完全隔绝）。
   - 关闭：先 `animateTo` scrim 解除（scrim→0）→ **最后** 才 `animateTo` 容器收起（progress→0）。
   - 预测返回（关闭拖拽）：容器跟手 `* t`；scrim 领先解除 `* t * t`；完成两者归 0，取消两者回弹 1。
-- HDR/Sensor 覆盖层三段式：① scrim（`Box`+`Color.Black`+`graphicsLayer{alpha = s²·0.22}`，跟 *Scrim）；② 容器（`graphicsLayer{scale 0.3→1.0 + transformOrigin}` 跟 *Progress，`background(CyberCardStart ×0.92)` 跟 *Scrim — **scale 与 bg 解耦**，pre11 起）；③ 内容（`graphicsLayer{alpha 阈值 + 上移}`，跟 *Progress）。根 `Box` `pointerInput` 消费点击隔绝误触。
+- HDR/Sensor 覆盖层三段式：① scrim（**pre12 起**：透明 `Box`+`drawBehind{drawRect(Color.Black, alpha=s²·0.22)}`，不再用 `background(Color.Black)+graphicsLayer{alpha}`——后者把实心黑填进离屏 alpha 层，首帧离屏缓冲被清成不透明黑 → "scrim 下出现全黑闪层"；drawBehind 直接以目标 alpha 合成、不建离屏层，根除黑闪。跟 *Scrim）；② 容器（`graphicsLayer{scale 0.3→1.0 + transformOrigin}` 跟 *Progress，`drawBehind{drawRect(CyberCardStart ×0.92)}` 跟 *Scrim — **scale 与 bg 解耦**，pre11 起；bg alpha 改 drawBehind 移出层属性，pre12 起）；③ 内容（`graphicsLayer{alpha 阈值 + 上移}`，跟 *Progress，根透明无实心填充、无黑闪风险）。根 `Box` `pointerInput` 消费点击隔绝误触。
 - **pre7 定稿**：锚点 `TransformOrigin(0.5f,0.5f)`（屏幕中心）；scrim alpha `(p²)*0.22`、容器 bg alpha `(p²).coerceIn(0,1)`（二次曲线，展开早期透明、主界面可见，消除"先全黑再展开"）。
 - **pre8 修正（覆盖层全黑 + 缩放不够小）**：容器 bg 引入 `((x-0.6f)/0.4f).coerceIn(0,1)` 收尾淡入（**pre8~pre10 x=progress，pre11 起 x=scrim**——见 pre11）；scale 起点 `0.42→0.3`——起点更小、叠加无黑底，过渡更顺。HDR 与传感器两容器同步改。
 - `fallbackOrigin`（右上角按钮区）仍用于设置/悬浮窗揭示；`sensorRevealOrigin` 自 pre7 起仅写不读（死代码，待清理）。
@@ -52,11 +52,12 @@
 - **审查清单必加一项**：新增/修改 Compose 修饰符后，逐项核对每个新调用的修饰符是否已在作用域可见（import 或 scope 扩展），否则 CI 才暴露 `Unresolved reference`/`internal` 错误（本地无 JDK 无法预编译）。
 
 ## 7. Round 历史
-- pre1 success / pre3 failure / pre4 success / pre5 failure / pre6 success / pre7 success（run #32333367929，`e53aa745`）/ pre8 success（run #32343534924，`8a454d0`，round4）/ pre9（big-fix2，`757a4f1`，CI 经 2 次编译失败修复后成功：run #32354937648 失败 fillMaxSize 缺 import → #32355525518 失败 weight 显式 import 冲突 → 修后成功）/ pre10（big-fix2，**不彻底**——仅解耦 0.22 scrim，0.92 容器 bg 仍跟 progress，真机视觉无变化）/ pre11（big-fix2，**pre10 状态派生修正：容器 0.92 bg 改跟 *Scrim**）。
+- pre1 success / pre3 failure / pre4 success / pre5 failure / pre6 success / pre7 success（run #32333367929，`e53aa745`）/ pre8 success（run #32343534924，`8a454d0`，round4）/ pre9（big-fix2，`757a4f1`，CI 经 2 次编译失败修复后成功：run #32354937648 失败 fillMaxSize 缺 import → #32355525518 失败 weight 显式 import 冲突 → 修后成功）/ pre10（big-fix2，**不彻底**——仅解耦 0.22 scrim，0.92 容器 bg 仍跟 progress，真机视觉无变化）/ pre11（big-fix2，**pre10 状态派生修正：容器 0.92 bg 改跟 *Scrim**）/ pre12（big-fix2，**黑闪修复：scrim/容器背景改 drawBehind 取代 background+graphicsLayer{alpha}，根除离屏层黑闪**）。
 - **pre8 = round4 回归修复**：① 撤 TurboXdrCompat 守卫（修 pre7 导致的 TurboXDR/夜光条全失效）；② 移除传感器 sharedElement（修"传感器32"卡浮顶盖住其它卡）；③ 覆盖层 bg 收尾淡入 + scale 起点 0.3（修动画全黑/过渡突变）。锚点修复（pre7 中心锚点）保留未动。
 - **pre9 = round5（big-fix2）回归修复（推翻 pre8 的 PQ z-order 误诊）**：① `HdrPatchSurfaceView` revert 回 `setZOrderOnTop(true)`（修 pre8 引入的 TurboXDR 内部 HDR 贴片消失 + 背景透明穿透桌面）；`HdrLumeSurfaceView` 保持 mediaOverlay（全局仅一个 onTop 10-bit 表面，避开 pre13 SF crash）；② HDR/Sensor 覆盖层容器 bg 由全不透明改为 ×0.92（半透明，比设置/浮窗 0.85 更不透）；③ 设置覆盖层 `fillMaxSize()`+`Spacer(weight(1f))` 铺满屏幕（与悬浮窗对齐）。验证前提：onTop 安全依赖不透明 `windowBackground=#0A0A0F` 兜底，仍需真机复测桌面不穿透（CI 仅编译不跑设备）。
 - **pre10 = round6（big-fix2）转场排序重构（**不彻底**）**：将 HDR/Sensor 覆盖层的 **0.22 scrim 层**从单一主时钟 *Progress 解耦为独立 *Scrim，open/close animateTo 顺序正确反转。但 **0.92 容器背景(CyberCardStart)** 仍误绑在 *Progress，导致用户感知的"完全隔绝/黑色隔板"（实际是 0.92 bg，不是 0.22 scrim）与容器 scale 同相位——真机上看似转场顺序未变，仅时长变慢（1.1s）。预测返回拖拽期 scrim 用 `* t * t` 领先解除、完成归零、取消回弹。
 - **pre11 = round7（big-fix2）pre10 状态派生修正**：HDR/Sensor 覆盖层 0.92 容器背景从 *Progress 改跟 *Scrim 驱动（curve 保留 `((s-0.6)/0.4).coerceIn(0,1)*0.92`）。scale（*Progress）与 bg（*Scrim）真正解耦——打开 = 容器 scale 0.3→1.0（背景透明可见主界面）→ scrim→1 + bg→0.92（主界面被完全隔绝）；关闭 = scrim→0 + bg→0（隔绝解除）→ progress→0（容器收起）。预测返回拖拽：bg 跟 scrim *t² 同步（s<0.6 即 0），完成归零、取消回弹。视觉验证仍需真机（CI 仅编译不跑设备）。
+- **pre12 = round8（big-fix2）黑闪修复**：用户真机发现"scrim 下出现真正全黑层（开始时全黑→渐变到正常背景）"。根因 = `background(Color.Black)+graphicsLayer{alpha}` 把实心黑填进离屏 alpha 层，首帧离屏缓冲被清成不透明黑（OEM GPU 常见黑闪）。**修复**：scrim 改透明 `Box`+`drawBehind{drawRect(Black, alpha=s²·0.22)}`；容器 bg 同步改 `drawBehind`（scale 仍留 graphicsLayer）；内容层③根透明无实心填充、低风险保留。顺序逻辑(pre11)不变。CI 仅编译不跑设备，黑闪是否消失须真机复测。
 
 ## 8. 协作/工具
 - 频率限制：hy3/reasoning 模型易 429；成员沉默/限流时主理人直接兜底。
