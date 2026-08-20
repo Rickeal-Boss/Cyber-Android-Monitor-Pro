@@ -116,15 +116,14 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'io.insert-koin:koin-android:3.5.6'
     implementation 'io.insert-koin:koin-androidx-compose:3.5.6'
-    implementation platform('androidx.compose:compose-bom:2025.06.00')
+    implementation platform('androidx.compose:compose-bom:2026.03.01')
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
     implementation('androidx.compose.material3:material3') {
-        // ★ 裁剪 material-icons-core: 全仓 22 处通用图标已由 CyberIcons 自绘替代，
-        //   强制排除 material3 传递引入的 material-icons-core，进一步缩小 APK / dex。
-        //   注意: 若未来 M3 组件内部硬编码引用 Icons.*，此处 exclude 会导致运行时崩溃，
-        //   故替换后须全页面冒烟测试。
+        // ★ material3 1.4.0 (BOM 2026.03.01) 已移除 material-icons-core 传递依赖，
+        //   此 exclude 为 no-op 安全保留，确保降级时也不会误引入。
+        //   全仓通用图标已由 CyberIcons.kt 自绘替代（22 处）。
         exclude group: 'androidx.compose.material', module: 'material-icons-core'
     }
     // ★ 裁剪 material-icons-extended: 全仓仅 6 图标依赖 (Window/Language/DragHandle/Sensors/Schedule/BatteryFull),
