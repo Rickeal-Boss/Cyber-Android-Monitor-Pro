@@ -257,19 +257,26 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     //   进入: animateTo(1f, ENTRY_SPRING) / 预测返回: snapTo 跟手 /
     //   手势取消: animateTo(1f) 回弹 / 完成或返回键: animateTo(0f) 后移出组合。
     //   渲染条件用 sensorAlive(keepAlive 守卫)，绝不读 sensorProgress.value 组合判断 → 零重组。
+    //   scrim(sensorScrim) 现已与容器进度解耦并独立排序: 打开时容器先展开→scrim 后到位; 关闭时 scrim 先解除→容器后收起。
     val sensorProgress = remember { Animatable(0f) }
+    // scrim 主时钟, 与容器进度解耦: 打开时容器先展开→scrim 后到位; 关闭时 scrim 先解除→容器后收起
+    val sensorScrim = remember { Animatable(0f) }
     var sensorAlive by remember { mutableStateOf(false) }
 
     fun openSensorDetail(sensor: com.rb.cybermonitorpro.data.model.SensorItemInfo) {
         selectedSensorForDetail = sensor
         showSensorDetail = true
         sensorAlive = true
-        scope.launch { sensorProgress.animateTo(1f, CARD_ENTRY_SPEC) }
+        scope.launch {
+            sensorProgress.animateTo(1f, CARD_ENTRY_SPEC)   // ① 先播放容器展开动画
+            sensorScrim.animateTo(1f, CARD_ENTRY_SPEC)      // ② 然后 scrim 到位 (主界面被完全隔绝)
+        }
     }
 
     fun closeSensorDetail() {
         scope.launch {
-            sensorProgress.animateTo(0f, CARD_EXIT_SPEC)
+            sensorScrim.animateTo(0f, CARD_EXIT_SPEC)       // ① 先移除隔绝
+            sensorProgress.animateTo(0f, CARD_EXIT_SPEC)    // ② 再播容器收起动画
             showSensorDetail = false
             selectedSensorForDetail = null
             sensorAlive = false
@@ -280,7 +287,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     //   进入: animateTo(1f, CARD_ENTRY_SPEC) 550ms 中心锚定缩放展开;
     //   SurfaceView 延迟到进入动画完成后挂载(防 punch-through 突跳);
     //   预测返回: snapTo 跟手 / 取消回弹 1f / 完成 animateTo(0f) 后移出组合。
+    //   scrim(hdrScrim) 现已与容器进度解耦并独立排序: 打开时容器先展开→scrim 后到位; 关闭时 scrim 先解除→容器后收起。
     val hdrProgress = remember { Animatable(0f) }
+    // scrim 主时钟, 与容器进度解耦 (见 sensorScrim 注释)
+    val hdrScrim = remember { Animatable(0f) }
     var hdrAlive by remember { mutableStateOf(false) }
     var hdrSurfacesVisible by remember { mutableStateOf(false) }
 
@@ -289,15 +299,17 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         hdrAlive = true
         hdrSurfacesVisible = false
         scope.launch {
-            hdrProgress.animateTo(1f, CARD_ENTRY_SPEC)
-            hdrSurfacesVisible = true   // 动画完成后才挂载 SurfaceView, 防 punch-through 突跳
+            hdrProgress.animateTo(1f, CARD_ENTRY_SPEC)      // ① 先播放容器展开动画
+            hdrScrim.animateTo(1f, CARD_ENTRY_SPEC)         // ② 然后 scrim 到位
+            hdrSurfacesVisible = true   // 进入动画完成后才挂载 SurfaceView, 防 punch-through 突跳
         }
     }
 
     fun closeHdrLab() {
         hdrSurfacesVisible = false     // 先卸载, 再播退出遮罩
         scope.launch {
-            hdrProgress.animateTo(0f, CARD_EXIT_SPEC)
+            hdrScrim.animateTo(0f, CARD_EXIT_SPEC)          // ① 先移除隔绝
+            hdrProgress.animateTo(0f, CARD_EXIT_SPEC)       // ② 再播容器收起动画
             showHdrLab = false
             hdrAlive = false
         }
@@ -365,14 +377,21 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 val t = 1f - event.progress
                 if (showSettings) settingsReveal.progress.snapTo((settingsStart * t).coerceIn(0f, 1f))
                 if (showFloatConfig) floatReveal.progress.snapTo((floatStart * t).coerceIn(0f, 1f))
-                if (showSensorDetail) sensorProgress.snapTo((sensorStart * t).coerceIn(0f, 1f))
-                if (showHdrLab) hdrProgress.snapTo((hdrStart * t).coerceIn(0f, 1f))
+                if (showSensorDetail) {
+                    sensorProgress.snapTo((sensorStart * t).coerceIn(0f, 1f))
+                    sensorScrim.snapTo((sensorStart * t * t).coerceIn(0f, 1f))   // 关闭拖拽: scrim 先行解除隔绝
+                }
+                if (showHdrLab) {
+                    hdrProgress.snapTo((hdrStart * t).coerceIn(0f, 1f))
+                    hdrScrim.snapTo((hdrStart * t * t).coerceIn(0f, 1f))
+                }
             }
             // 手势完成 — 各覆盖层收缩到底后关闭, 重置进度
             backProgress.snapTo(0f)
             when {
                 showSensorDetail -> {
                     sensorProgress.snapTo(0f)
+                    sensorScrim.snapTo(0f)
                     showSensorDetail = false
                     selectedSensorForDetail = null
                     sensorAlive = false
@@ -380,6 +399,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 showHdrLab -> {
                     hdrSurfacesVisible = false
                     hdrProgress.snapTo(0f)
+                    hdrScrim.snapTo(0f)
                     showHdrLab = false
                     hdrAlive = false
                 }
@@ -397,8 +417,14 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             backProgress.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
             if (showSettings) settingsReveal.progress.animateTo(1f, tween(400))
             if (showFloatConfig) floatReveal.progress.animateTo(1f, tween(400))
-            if (showSensorDetail) sensorProgress.animateTo(1f, CARD_ENTRY_SPEC)
-            if (showHdrLab) hdrProgress.animateTo(1f, CARD_ENTRY_SPEC)
+            if (showSensorDetail) {
+                sensorProgress.animateTo(1f, CARD_ENTRY_SPEC)
+                sensorScrim.animateTo(1f, CARD_ENTRY_SPEC)
+            }
+            if (showHdrLab) {
+                hdrProgress.animateTo(1f, CARD_ENTRY_SPEC)
+                hdrScrim.animateTo(1f, CARD_ENTRY_SPEC)
+            }
         }
     }
 
@@ -513,7 +539,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
             // ── HDR 实验室（CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考）──
             //   与传感器详情同款转场: 屏幕中心锚点缩放 0.42→1.0 + 起始位移 + 内容渐变;
-            //   容器半透明 (CyberCardStart, × 0.92 alpha，比设置/浮窗 0.85 更不透; 背景仅 p>0.6 收尾淡入, 消除动画期全黑) + scrim 0.35; SurfaceView 延迟到进入动画完成后挂载
+            //   容器半透明 (CyberCardStart, × 0.92 alpha，比设置/浮窗 0.85 更不透; 背景仅 p>0.6 收尾淡入, 消除动画期全黑) + scrim 0.22; SurfaceView 延迟到进入动画完成后挂载
             //   (hdrSurfacesVisible 门控, 防 punch-through 突跳);
             //   渲染条件读 hdrAlive State; 预测返回手势 snapTo 跟手、取消回弹 1f。
             if (hdrAlive || showHdrLab) {
@@ -521,10 +547,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 Box(Modifier.fillMaxSize()
                     .pointerInput(Unit) { detectTapGestures { } }
                 ) {
-                    // ① scrim: 全屏压暗层 (alpha 由 hdrProgress 驱动, 二次曲线半透明, 展开初期更透使主界面可见)
+                    // ① scrim: 全屏压暗层 (alpha 由 hdrScrim 驱动, 二次曲线半透明; scrim 与容器 hdrProgress 解耦, 打开时容器先展开→scrim 后到位, 关闭时 scrim 先解除→容器后收起)
                     Box(Modifier.fillMaxSize()
                         .background(Color.Black)
-                        .graphicsLayer { alpha = (hdrProgress.value * hdrProgress.value) * 0.22f }
+                        .graphicsLayer { alpha = (hdrScrim.value * hdrScrim.value) * 0.22f }
                     )
                     // ② 卡片容器: 屏幕中心锚点缩放展开至全屏 (scale 起点 0.3, 背景仅 p>0.6 收尾淡入, 过渡更顺)
                     val hdrP = hdrProgress.value
@@ -560,7 +586,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             // ── 传感器详情 (CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考) ──
             //   容器: 屏幕中心锚点 TransformOrigin(0.5f,0.5f) + scale 0.3→1.0 + 起始位移至屏幕中上部 (背景仅 p>0.6 收尾淡入)
             //   (0.25W, 0.15H) — 与 frames"小卡片→全屏"形态一致;
-            //   容器半透明 (CyberCardStart, × 0.92 alpha，比设置/浮窗 0.85 更不透) + scrim 0.35 (不再透出底层, 隔绝误触);
+            //   容器半透明 (CyberCardStart, × 0.92 alpha，比设置/浮窗 0.85 更不透) + scrim 0.22 (不再透出底层, 隔绝误触);
             //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由卡片缩放先行、内容跟进;
             //   渲染条件读 sensorAlive State, 绝不在组合期读 sensorProgress.value。
             if (sensorAlive || showSensorDetail) {
@@ -571,10 +597,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     Box(Modifier.fillMaxSize()
                         .pointerInput(Unit) { detectTapGestures { } }
                     ) {
-                        // ① scrim: 全屏压暗层 (alpha 由 sensorProgress 驱动, 二次曲线半透明, 展开初期更透使主界面可见)
+                        // ① scrim: 全屏压暗层 (alpha 由 sensorScrim 驱动, 二次曲线半透明; scrim 与容器 sensorProgress 解耦, 打开时容器先展开→scrim 后到位, 关闭时 scrim 先解除→容器后收起)
                         Box(Modifier.fillMaxSize()
                             .background(Color.Black)
-                            .graphicsLayer { alpha = (sensorProgress.value * sensorProgress.value) * 0.22f }
+                            .graphicsLayer { alpha = (sensorScrim.value * sensorScrim.value) * 0.22f }
                         )
                         // ② 卡片容器: 屏幕中心缩放展开至全屏 (动画过程半透明可见主界面)
                         val sensorP = sensorProgress.value
