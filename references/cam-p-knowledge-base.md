@@ -41,6 +41,11 @@
 - `LocalDensity.current` / `LocalConfiguration.current` 是 @Composable，**不能**在 `graphicsLayer { }` 这类非 Composable lambda 内调用 → 编译失败。必须外提到 graphicsLayer 前的普通 `val`。
 - lambda 内定义的局部变量（如 `p`）在 lambda 外不可见 → "Unresolved reference"。同样外提。
 
+## 6b. Compose 修饰符 import 解析坑（pre9 踩坑）
+- **`weight` 切勿显式 `import androidx.compose.foundation.layout.weight`**：该包内同时存在公开的顶层 `Modifier.weight()` 函数与 **internal 的 `RowColumnParentData.weight` 属性**，`import ...layout.weight` 按简单名导入时会绑定到 internal 属性 → 报 `Cannot access 'val RowColumnParentData?.weight: Float': it is internal in file`。仓库内 `MainActivity` 用 `import androidx.compose.foundation.layout.*` 通配、`DashboardScreen`/`SettingsScreen` 等**从不按名 import weight**，全靠 Row/Column 作用域内 `RowScope`/`ColumnScope.weight` 自动解析（`Spacer(Modifier.weight(1f))` 在 Column 内即合法）。
+- **`fillMaxSize` 等无同名 internal 属性，可安全显式 import**（pre9 首次引入 `.fillMaxSize()` 时即这样加，正常）。
+- **审查清单必加一项**：新增/修改 Compose 修饰符后，逐项核对每个新调用的修饰符是否已在作用域可见（import 或 scope 扩展），否则 CI 才暴露 `Unresolved reference`/`internal` 错误（本地无 JDK 无法预编译）。
+
 ## 7. Round 历史
 - pre1 success / pre3 failure / pre4 success / pre5 failure / pre6 success / pre7 success（run #32333367929，`e53aa745`）/ pre8 success（run #32343534924，`8a454d0`，round4）/ pre9（big-fix2，CI run 待记）。
 - **pre8 = round4 回归修复**：① 撤 TurboXdrCompat 守卫（修 pre7 导致的 TurboXDR/夜光条全失效）；② 移除传感器 sharedElement（修"传感器32"卡浮顶盖住其它卡）；③ 覆盖层 bg 收尾淡入 + scale 起点 0.3（修动画全黑/过渡突变）。锚点修复（pre7 中心锚点）保留未动。
