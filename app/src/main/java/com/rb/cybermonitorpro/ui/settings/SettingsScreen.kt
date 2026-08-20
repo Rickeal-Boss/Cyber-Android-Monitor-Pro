@@ -90,6 +90,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = koinViewModel()) {
 
     Column(
         modifier = Modifier
+            .fillMaxSize()
             .padding(start = 16.dp, end = 16.dp, top = 60.dp, bottom = 16.dp)
             .verticalScroll(scroll),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -141,6 +142,7 @@ fun SettingsScreen(viewModel: SettingsViewModel = koinViewModel()) {
         }
 
         Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.weight(1f))
     }
 }
 

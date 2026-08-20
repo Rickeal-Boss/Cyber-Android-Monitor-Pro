@@ -23,13 +23,14 @@ import kotlinx.coroutines.launch
  * 铁律继承（与 HdrLumeSurfaceView 完全一致）：
  *  - EGL 选 10/10/10/2 + 注入 BT.2020 PQ（常量 0x3340），失败回退 8/8/8/8。
  *  - PixelFormat.RGBA_1010102（HDR 设备）提供 10-bit + 2-bit alpha 半透明合成。
- *  - setZOrderMediaOverlay(true) + isClickable=false：位于 SDR UI 之上（透明区透出本窗口
- *    SDR 内容，不再 punch-through 到桌面）、但不拦截触摸；HDR 描边仍压在 SDR 之上增亮。
+ *  - setZOrderOnTop(true) + isClickable=false：浮层盖在 SDR UI 之上（透明区由不透明 windowBackground
+ *    #0A0A0F 兜底，桌面不会透出）；但不拦截触摸；HDR 描边仍压在 SDR 之上增亮。
  *  - preserveEGLContextOnPause = true；构造即不申请余量，由 setActive(true) 按需 setDesiredHdrHeadroom。
  *
- * ★ pre8：pre18 把窗口透明误归因于 ROM（小米/HyperOS 等），真因是 setZOrderOnTop 让透明区
- *   punch-through 到桌面。本轮改 setZOrderMediaOverlay，透明区透出本窗口 SDR 内容而非桌面；
- *   HDR 描边仍压在 SDR 之上。ROM 守卫 TurboXdrCompat 已删除（误诊断），宿主侧不再做 ROM 降级判定。
+ * ★ big-fix2：pre8 把 PQ 贴片层改 setZOrderMediaOverlay 治窗口透明误判，但真机 ROM 上 mediaOverlay
+ *   把 10-bit PQ surface 压到不透明 SDR 卡片之下 → 卡片内部贴片（字形/折线/网格）消失，且透明区
+ *   punch-through 到桌面。本轮回退 setZOrderOnTop：透明区由不透明 windowBackground 兜底、桌面不再透出；
+ *   仅允许一个 onTop 10-bit surface —— 夜光条（HdrLumeSurfaceView）保持 mediaOverlay。
  */
 class HdrPatchSurfaceView @JvmOverloads constructor(
     context: Context,
@@ -78,7 +79,7 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
         preserveEGLContextOnPause = true
 
         // 浮层盖在 SDR UI 之上但不拦截触摸
-        setZOrderMediaOverlay(true)
+        setZOrderOnTop(true)
         isClickable = false
         isFocusable = false
         isFocusableInTouchMode = false

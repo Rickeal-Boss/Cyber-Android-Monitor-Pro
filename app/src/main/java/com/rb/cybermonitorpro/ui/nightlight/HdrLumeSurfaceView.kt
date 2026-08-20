@@ -18,7 +18,7 @@ import android.view.Display
  *  1. EGL 选 10/10/10/2 config + 注入 BT.2020 PQ colorspace，常量必须用 **0x3340**
  *     （旧值 0x3531 是错的，EGL 静默忽略，surface 永不标 PQ → 永远 8-bit SDR）。
  *  2. PixelFormat.RGBA_1010102（HDR 设备）提供 10-bit + 2-bit alpha 半透明合成。
- *  3. setZOrderOnTop(true) + isClickable=false：浮层盖在 SDR UI 之上但不拦截触摸。
+ *  3. setZOrderMediaOverlay(true) + isClickable=false：浮层位于 SDR UI 之上但不拦截触摸。
  *  4. preserveEGLContextOnPause = true：离开-返回不丢 EGL/PQ 状态。
  *  5. 构造即不申请 HDR 余量；由 setActive(true) 按需 setDesiredHdrHeadroom(slider)。
  *
@@ -71,8 +71,8 @@ class HdrLumeSurfaceView @JvmOverloads constructor(
         renderMode = RENDERMODE_WHEN_DIRTY
         preserveEGLContextOnPause = true
 
-        // ★ pre13-P0-B：Lume 层降为 mediaOverlay（位于 SDR UI 之上、但在 Patch 的 onTop 之下），
-        //   避免与 Patch 层两个 setZOrderOnTop(true) 的 10-bit PQ surface 争抢 HDR overlay 平面
+        // ★ pre13-P0-B / big-fix2：Lume 层保持 mediaOverlay（位于 SDR UI 之上、但在 Patch 的 onTop 之下），
+        //   避免与 Patch 的 onTop 10-bit PQ surface 叠加为两个 onTop 争抢 HDR overlay 平面
         //   （上限通常为 1）→ SurfaceFlinger native crash。Lume 仅边缘闪光，无需盖在最顶层。
         setZOrderMediaOverlay(true)
         isClickable = false

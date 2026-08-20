@@ -416,7 +416,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         Box(Modifier.padding(padding).fillMaxSize()) {
             // ★ 固定软件背景光晕 — 根层一次性渲染, 不随卡片/页面/滚动重绘 (性能优化)
             AppGlowBackground()
-            // ★ CyberNightlight TurboXDR：局部 HDR 增亮浮层（setZOrderOnTop 盖在 SDR UI 之上，
+            // ★ CyberNightlight TurboXDR：局部 HDR 增亮浮层（setZOrderMediaOverlay 位于 SDR UI 之上，
             //   触摸穿透；覆盖层打开时 hidden=true 隐藏；当前 Tab 变化时触发一次性边缘闪光）
             CyberNightlightHost(hidden = overlayVisible, currentPage = pagerState.currentPage, pagerState = pagerState)
             // ★ 行业首创：局部 UI 元素级真 HDR 增亮浮层（卡片描边 / Tab 指示条 / 大数字 / 折线+网格）
@@ -535,7 +535,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             scaleX = s
                             scaleY = s
                         }
-                        .background(CyberCardStart.copy(alpha = ((hdrP - 0.6f) / 0.4f).coerceIn(0f, 1f)))
+                        .background(CyberCardStart.copy(alpha = ((hdrP - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f))
                     ) {
                         // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载)
                         Box(Modifier.fillMaxSize()
@@ -585,7 +585,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 scaleX = s
                                 scaleY = s
                             }
-                            .background(CyberCardStart.copy(alpha = ((sensorP - 0.6f) / 0.4f).coerceIn(0f, 1f)))
+                            .background(CyberCardStart.copy(alpha = ((sensorP - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f))
                         ) {
                             // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组)
                             Box(Modifier.fillMaxSize()

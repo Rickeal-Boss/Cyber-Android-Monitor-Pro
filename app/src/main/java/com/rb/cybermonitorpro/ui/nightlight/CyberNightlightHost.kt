@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.collectLatest
  *  - toggle on（CyberNightlightSwitch.enabled 由 false → true）：setActive(true) 内部自带一次 fireFlash。
  *  - 切页面（currentPage 变化）：fireFlash（图表/数字/卫星/图标/文字所在的页面切换即"对应页面时同样触发"）。
  *
- * 通过 AndroidView 挂载 GLSurfaceView；其 setZOrderOnTop(true) 使浮层位于 SDR UI 之上，
+ * 通过 AndroidView 挂载 GLSurfaceView；其 setZOrderMediaOverlay(true) 使浮层位于 SDR UI 之上，
  * 但触摸穿透（isClickable=false）。可见性完全由 setActive 控制（关时画一帧纯透明）。
  */
 @Composable
