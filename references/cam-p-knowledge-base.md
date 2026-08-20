@@ -15,8 +15,13 @@
 - **本机 CI 必须由主线程持有后台任务**：子 agent 结束后其后台 bash 会被回收，推送不落地。主理人直接 `run_in_background` 跑 push+poll 才可靠。
 
 ## 2. 覆盖层动画机制（MainActivity.kt）
-- 主时钟：`sensorProgress` / `hdrProgress` 为 `Animatable<Float>`，单一真相源；`PredictiveBackHandler` snapTo 跟手、取消回弹 1f。
-- HDR/Sensor 覆盖层三段式：① scrim（`Box`+`Color.Black`+`graphicsLayer{alpha}`）；② 容器（`graphicsLayer{scale 0.42→1.0 + transformOrigin}`+`background`）；③ 内容（`graphicsLayer{alpha 阈值 + 上移}`）。根 `Box` `pointerInput` 消费点击隔绝误触。
+- 主时钟（容器）：`sensorProgress` / `hdrProgress` 为 `Animatable<Float>`，驱动 scale + 容器 bg + 内容；`PredictiveBackHandler` snapTo 跟手、取消回弹 1f。
+- scrim 独立时钟：`sensorScrim` / `hdrScrim`（`Animatable<Float>`，各自 0=无 1=满），**与容器进度解耦**，单独驱动 scrim alpha `(s²)*0.22`。
+- **转场排序（pre10 / round6 定稿）**：scrim 与容器解耦后顺序编排 ——
+  - 打开：先 `animateTo` 容器展开（progress→1）→ **然后** 才 `animateTo` scrim 到位（主界面被完全隔绝）。
+  - 关闭：先 `animateTo` scrim 解除（scrim→0）→ **最后** 才 `animateTo` 容器收起（progress→0）。
+  - 预测返回（关闭拖拽）：容器跟手 `* t`；scrim 领先解除 `* t * t`；完成两者归 0，取消两者回弹 1。
+- HDR/Sensor 覆盖层三段式：① scrim（`Box`+`Color.Black`+`graphicsLayer{alpha}`）；② 容器（`graphicsLayer{scale 0.3→1.0 + transformOrigin}`+`background`）；③ 内容（`graphicsLayer{alpha 阈值 + 上移}`）。根 `Box` `pointerInput` 消费点击隔绝误触。
 - **pre7 定稿**：锚点 `TransformOrigin(0.5f,0.5f)`（屏幕中心）；scrim alpha `(p²)*0.22`、容器 bg alpha `(p²).coerceIn(0,1)`（二次曲线，展开早期透明、主界面可见，消除"先全黑再展开"）。
 - **pre8 修正（覆盖层全黑 + 缩放不够小）**：容器 bg alpha 改为 `((p-0.6f)/0.4f).coerceIn(0,1)`（**仅收尾 40% 淡入**，开放初期容器保持全透明，不再全黑）；scale 起点 `0.42→0.3`（`0.3f+0.7f*p`）——起点更小、叠加无黑底，过渡更顺。HDR 与传感器两容器同步改。
 - `fallbackOrigin`（右上角按钮区）仍用于设置/悬浮窗揭示；`sensorRevealOrigin` 自 pre7 起仅写不读（死代码，待清理）。
@@ -47,9 +52,10 @@
 - **审查清单必加一项**：新增/修改 Compose 修饰符后，逐项核对每个新调用的修饰符是否已在作用域可见（import 或 scope 扩展），否则 CI 才暴露 `Unresolved reference`/`internal` 错误（本地无 JDK 无法预编译）。
 
 ## 7. Round 历史
-- pre1 success / pre3 failure / pre4 success / pre5 failure / pre6 success / pre7 success（run #32333367929，`e53aa745`）/ pre8 success（run #32343534924，`8a454d0`，round4）/ pre9（big-fix2，CI run 待记）。
+- pre1 success / pre3 failure / pre4 success / pre5 failure / pre6 success / pre7 success（run #32333367929，`e53aa745`）/ pre8 success（run #32343534924，`8a454d0`，round4）/ pre9（big-fix2，`757a4f1`，CI 经 2 次编译失败修复后成功：run #32354937648 失败 fillMaxSize 缺 import → #32355525518 失败 weight 显式 import 冲突 → 修后成功）/ pre10（big-fix2，转场排序 scrim 解耦）。
 - **pre8 = round4 回归修复**：① 撤 TurboXdrCompat 守卫（修 pre7 导致的 TurboXDR/夜光条全失效）；② 移除传感器 sharedElement（修"传感器32"卡浮顶盖住其它卡）；③ 覆盖层 bg 收尾淡入 + scale 起点 0.3（修动画全黑/过渡突变）。锚点修复（pre7 中心锚点）保留未动。
 - **pre9 = round5（big-fix2）回归修复（推翻 pre8 的 PQ z-order 误诊）**：① `HdrPatchSurfaceView` revert 回 `setZOrderOnTop(true)`（修 pre8 引入的 TurboXDR 内部 HDR 贴片消失 + 背景透明穿透桌面）；`HdrLumeSurfaceView` 保持 mediaOverlay（全局仅一个 onTop 10-bit 表面，避开 pre13 SF crash）；② HDR/Sensor 覆盖层容器 bg 由全不透明改为 ×0.92（半透明，比设置/浮窗 0.85 更不透）；③ 设置覆盖层 `fillMaxSize()`+`Spacer(weight(1f))` 铺满屏幕（与悬浮窗对齐）。验证前提：onTop 安全依赖不透明 `windowBackground=#0A0A0F` 兜底，仍需真机复测桌面不穿透（CI 仅编译不跑设备）。
+- **pre10 = round6（big-fix2）转场排序重构**：将 HDR/Sensor 覆盖层的 scrim 从单一主时钟（`*Progress`）解耦为独立时钟 `sensorScrim`/`hdrScrim`。打开顺序改为「先容器展开 → 后 scrim 到位（主界面被完全隔绝）」；关闭顺序改为「先 scrim 解除 → 后容器收起」。预测返回拖拽期 scrim 用 `* t * t` 领先解除、完成归零、取消回弹。曲线语义（scrim `s²*0.22`、容器 bg `((p-0.6)/0.4)*0.92`、scale `0.3+0.7p`）全部保留，隔离等级不变。
 
 ## 8. 协作/工具
 - 频率限制：hy3/reasoning 模型易 429；成员沉默/限流时主理人直接兜底。
