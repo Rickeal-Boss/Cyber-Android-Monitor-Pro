@@ -112,8 +112,8 @@ private fun SensorItemCard(sensor: SensorItemInfo, onClick: (Offset) -> Unit, mo
         .then(modifier)
         .fillMaxWidth()
         .onGloballyPositioned { cardCenter = it.boundsInRoot().center }
-        .cardRipple(onClick = { onClick(cardCenter) })
         .cardGradientBorder(20.dp, hdrHighlight = true)
+        .cardRipple(onClick = { onClick(cardCenter) })
 
     val cardContent: @Composable ColumnScope.() -> Unit = {
         Column(Modifier.padding(16.dp)) {

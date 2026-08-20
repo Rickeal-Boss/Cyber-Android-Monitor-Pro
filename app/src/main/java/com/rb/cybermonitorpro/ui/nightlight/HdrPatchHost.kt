@@ -42,7 +42,7 @@ fun HdrPatchHost(
     val scope = rememberCoroutineScope()
     val viewRef = remember { mutableStateOf<HdrPatchSurfaceView?>(null) }
     // 主动作：闸门变化 → setActive（开启即进入事件驱动渲染；关闭移除 SurfaceView）
-    val effective = enabled && !hidden && !suppressed
+    val effective = enabled && !hidden && !suppressed && TurboXdrCompat.supported
 
     // ★ pre18：仅当 effective 时才挂载 HdrPatchSurfaceView，关闭时完全移除 SurfaceView。
     //   根因：全屏透明 PQ SurfaceView（setZOrderOnTop + 带 alpha 的 PixelFormat.RGBA_1010102）

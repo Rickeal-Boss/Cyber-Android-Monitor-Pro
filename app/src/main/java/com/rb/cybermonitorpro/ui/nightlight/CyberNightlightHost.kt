@@ -55,7 +55,7 @@ fun CyberNightlightHost(
     }
 
     // 主动作：开关 on / 覆盖层切换 → setActive（内部触发一次性边缘闪光）
-    val effective = enabled && !hidden && !suppressed
+    val effective = enabled && !hidden && !suppressed && TurboXdrCompat.supported
 
     // ★ pre18：仅当 effective 时才挂载 HdrLumeSurfaceView，关闭时完全移除。
     //   与 HdrPatchHost 同理：全屏透明 PQ SurfaceView 会让窗口合成层变透明、系统桌面透出，

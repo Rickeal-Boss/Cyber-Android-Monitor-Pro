@@ -521,28 +521,21 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 Box(Modifier.fillMaxSize()
                     .pointerInput(Unit) { detectTapGestures { } }
                 ) {
-                    // ① scrim: 全屏压暗层 (alpha 由 hdrProgress 驱动, 半透明)
+                    // ① scrim: 全屏压暗层 (alpha 由 hdrProgress 驱动, 二次曲线半透明, 展开初期更透使主界面可见)
                     Box(Modifier.fillMaxSize()
                         .background(Color.Black)
-                        .graphicsLayer { alpha = hdrProgress.value * 0.22f }
+                        .graphicsLayer { alpha = (hdrProgress.value * hdrProgress.value) * 0.22f }
                     )
-                    // ② 卡片容器: 右上角锚点缩放展开至全屏 (动画过程半透明可见主界面)
+                    // ② 卡片容器: 屏幕中心锚点缩放展开至全屏 (动画过程半透明可见主界面)
                     val hdrP = hdrProgress.value
-                    val hdrDensity = LocalDensity.current
-                    val hdrScreenW = with(hdrDensity) { configuration.screenWidthDp.dp.toPx() }
-                    val hdrScreenH = with(hdrDensity) { configuration.screenHeightDp.dp.toPx() }
                     Box(Modifier.fillMaxSize()
                         .graphicsLayer {
-                            val origin = fallbackOrigin
-                            transformOrigin = TransformOrigin(
-                                (origin.x / hdrScreenW).coerceIn(0f, 1f),
-                                (origin.y / hdrScreenH).coerceIn(0f, 1f)
-                            )
+                            transformOrigin = TransformOrigin(0.5f, 0.5f)
                             val s = 0.42f + 0.58f * hdrP
                             scaleX = s
                             scaleY = s
                         }
-                        .background(CyberCardStart.copy(alpha = hdrP))
+                        .background(CyberCardStart.copy(alpha = (hdrP * hdrP).coerceIn(0f, 1f)))
                     ) {
                         // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载)
                         Box(Modifier.fillMaxSize()
@@ -578,27 +571,21 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     Box(Modifier.fillMaxSize()
                         .pointerInput(Unit) { detectTapGestures { } }
                     ) {
-                        // ① scrim: 全屏压暗层 (alpha 由 sensorProgress 驱动, 半透明)
+                        // ① scrim: 全屏压暗层 (alpha 由 sensorProgress 驱动, 二次曲线半透明, 展开初期更透使主界面可见)
                         Box(Modifier.fillMaxSize()
                             .background(Color.Black)
-                            .graphicsLayer { alpha = sensorProgress.value * 0.22f }
+                            .graphicsLayer { alpha = (sensorProgress.value * sensorProgress.value) * 0.22f }
                         )
-                        // ② 卡片容器: 从卡片中心/触发点缩放展开至全屏 (动画过程半透明可见主界面)
+                        // ② 卡片容器: 屏幕中心缩放展开至全屏 (动画过程半透明可见主界面)
                         val sensorP = sensorProgress.value
                         Box(Modifier.fillMaxSize()
                             .graphicsLayer {
-                                val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
-                                val screenH = with(density) { configuration.screenHeightDp.dp.toPx() }
-                                val origin = if (sensorRevealOrigin != Offset.Zero) sensorRevealOrigin else fallbackOrigin
-                                transformOrigin = TransformOrigin(
-                                    (origin.x / screenW).coerceIn(0f, 1f),
-                                    (origin.y / screenH).coerceIn(0f, 1f)
-                                )
+                                transformOrigin = TransformOrigin(0.5f, 0.5f)
                                 val s = 0.42f + 0.58f * sensorP
                                 scaleX = s
                                 scaleY = s
                             }
-                            .background(CyberCardStart.copy(alpha = sensorP))
+                            .background(CyberCardStart.copy(alpha = (sensorP * sensorP).coerceIn(0f, 1f)))
                         ) {
                             // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组)
                             Box(Modifier.fillMaxSize()
