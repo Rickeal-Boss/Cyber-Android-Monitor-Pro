@@ -539,7 +539,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
             // ── HDR 实验室（CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考）──
             //   与传感器详情同款转场: 屏幕中心锚点缩放 0.42→1.0 + 起始位移 + 内容渐变;
-            //   容器半透明 (CyberCardStart, × 0.92 alpha，比设置/浮窗 0.85 更不透; 背景仅 p>0.6 收尾淡入, 消除动画期全黑) + scrim 0.22; SurfaceView 延迟到进入动画完成后挂载
+            //   容器背景(CyberCardStart ×0.92)由 hdrScrim 驱动 (s>0.6 收尾淡入), 与 hdrProgress(scale) 解耦 —
+            //   打开=容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 主界面被完全隔绝),
+            //   关闭=scrim 先解除(背景淡出)→容器后收起; 0.22 scrim 与 bg 同源 (均跟 *Scrim)
             //   (hdrSurfacesVisible 门控, 防 punch-through 突跳);
             //   渲染条件读 hdrAlive State; 预测返回手势 snapTo 跟手、取消回弹 1f。
             if (hdrAlive || showHdrLab) {
@@ -552,7 +554,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         .background(Color.Black)
                         .graphicsLayer { alpha = (hdrScrim.value * hdrScrim.value) * 0.22f }
                     )
-                    // ② 卡片容器: 屏幕中心锚点缩放展开至全屏 (scale 起点 0.3, 背景仅 p>0.6 收尾淡入, 过渡更顺)
+                    // ② 卡片容器: scale 0.3→1.0 跟 hdrProgress; 背景(CyberCardStart ×0.92) 跟 hdrScrim —
+                    //   scale 与 bg 解耦: 打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
                     val hdrP = hdrProgress.value
                     Box(Modifier.fillMaxSize()
                         .graphicsLayer {
@@ -561,7 +564,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             scaleX = s
                             scaleY = s
                         }
-                        .background(CyberCardStart.copy(alpha = ((hdrP - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f))
+                        .background(CyberCardStart.copy(alpha = ((hdrScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f))
                     ) {
                         // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载)
                         Box(Modifier.fillMaxSize()
@@ -586,7 +589,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             // ── 传感器详情 (CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考) ──
             //   容器: 屏幕中心锚点 TransformOrigin(0.5f,0.5f) + scale 0.3→1.0 + 起始位移至屏幕中上部 (背景仅 p>0.6 收尾淡入)
             //   (0.25W, 0.15H) — 与 frames"小卡片→全屏"形态一致;
-            //   容器半透明 (CyberCardStart, × 0.92 alpha，比设置/浮窗 0.85 更不透) + scrim 0.22 (不再透出底层, 隔绝误触);
+            //   容器背景(CyberCardStart ×0.92)由 sensorScrim 驱动 (s>0.6 收尾淡入), 与 sensorProgress(scale) 解耦 —
+            //   打开=容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 主界面被完全隔绝),
+            //   关闭=scrim 先解除(背景淡出)→容器后收起; 0.22 scrim 与 bg 同源 (均跟 *Scrim)
             //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由卡片缩放先行、内容跟进;
             //   渲染条件读 sensorAlive State, 绝不在组合期读 sensorProgress.value。
             if (sensorAlive || showSensorDetail) {
@@ -602,7 +607,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             .background(Color.Black)
                             .graphicsLayer { alpha = (sensorScrim.value * sensorScrim.value) * 0.22f }
                         )
-                        // ② 卡片容器: 屏幕中心缩放展开至全屏 (动画过程半透明可见主界面)
+                        // ② 卡片容器: scale 0.3→1.0 跟 sensorProgress; 背景(CyberCardStart ×0.92) 跟 sensorScrim —
+                        //   scale 与 bg 解耦: 打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
                         val sensorP = sensorProgress.value
                         Box(Modifier.fillMaxSize()
                             .graphicsLayer {
@@ -611,7 +617,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 scaleX = s
                                 scaleY = s
                             }
-                            .background(CyberCardStart.copy(alpha = ((sensorP - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f))
+                            .background(CyberCardStart.copy(alpha = ((sensorScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f))
                         ) {
                             // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组)
                             Box(Modifier.fillMaxSize()
