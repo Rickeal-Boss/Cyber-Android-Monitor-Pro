@@ -108,7 +108,7 @@ fun Modifier.cardGradientBorder(
 }
 
 // 内半环静态阴影色：近黑的深紫黑，低透明度，只做层次不做存在
-private val BorderInnerShadow = Color(0xFF06030E).copy(alpha = 0.75f)
+private val BorderInnerShadow = Color(0xFF06030E).copy(alpha = 0.35f)
 
 /**
  * 电池温度 → 描边语义色（仅限概览页与电池页的电池温度卡片使用）：

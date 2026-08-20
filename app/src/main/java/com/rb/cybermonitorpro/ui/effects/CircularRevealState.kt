@@ -16,9 +16,9 @@ import androidx.compose.ui.geometry.Offset
  *
  * 时长对齐 CAMP 动画三问题修复方案：
  *   进入 700ms（FastOutSlowIn，Material 标准圆形展开曲线）
- *   退出 560ms（FastOutSlowIn，快速开始缓慢结束）
+ *   退出 700ms（与进入一致）
  *   原 spring(StiffnessMediumLow=400) ≈ 300ms → 翻倍至 700ms
- *   原 spring(StiffnessMedium=1500) ≈ 216ms → 翻倍至 560ms
+ *   原 spring(StiffnessMedium=1500) ≈ 216ms → 翻倍至 700ms
  */
 @Stable
 class CircularRevealState(
@@ -28,7 +28,7 @@ class CircularRevealState(
         easing = FastOutSlowInEasing,
     ),
     private val collapseSpec: AnimationSpec<Float> = tween(
-        durationMillis = 560,
+        durationMillis = 700,
         easing = FastOutSlowInEasing,
     ),
 ) {

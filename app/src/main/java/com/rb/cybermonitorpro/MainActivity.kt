@@ -30,7 +30,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
@@ -154,9 +153,9 @@ class MainActivity : ComponentActivity() {
 
 private data class TopTabItem(val title: String, val iconRes: Int)
 
-// F5 → CAMP 修复: 传感器/HDR 卡片式进出 — 固定时长缓动(对齐目标视频 v4: 进 750ms / 出 500ms, 减速无回弹)
-private val CARD_ENTRY_SPEC = tween<Float>(durationMillis = 750, easing = FastOutSlowInEasing)
-private val CARD_EXIT_SPEC  = tween<Float>(durationMillis = 500, easing = FastOutSlowInEasing)
+// F5 → CAMP 修复: 传感器/HDR 卡片式进出 — 固定时长缓动(对齐目标视频 v4: 进 550ms / 出 450ms, 减速无回弹)
+private val CARD_ENTRY_SPEC = tween<Float>(durationMillis = 550, easing = FastOutSlowInEasing)
+private val CARD_EXIT_SPEC  = tween<Float>(durationMillis = 450, easing = FastOutSlowInEasing)
 
 /** 赛博风格线条矢量图标 — 与 Tab 含义一一对应 */
 private val topTabIcons = listOf(
@@ -278,7 +277,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     }
 
     // ── F5 → CAMP 修复: HDR 实验室覆盖层 — scrim + 卡片中心缩放(可打断过渡, 主时钟 hdrProgress) ──
-    //   进入: animateTo(1f, CARD_ENTRY_SPEC) 750ms 中心锚定缩放展开;
+    //   进入: animateTo(1f, CARD_ENTRY_SPEC) 550ms 中心锚定缩放展开;
     //   SurfaceView 延迟到进入动画完成后挂载(防 punch-through 突跳);
     //   预测返回: snapTo 跟手 / 取消回弹 1f / 完成 animateTo(0f) 后移出组合。
     val hdrProgress = remember { Animatable(0f) }
@@ -525,23 +524,25 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     // ① scrim: 全屏压暗层 (alpha 由 hdrProgress 驱动, 半透明)
                     Box(Modifier.fillMaxSize()
                         .background(Color.Black)
-                        .graphicsLayer { alpha = hdrProgress.value * 0.35f }
+                        .graphicsLayer { alpha = hdrProgress.value * 0.22f }
                     )
                     // ② 卡片容器: 右上角锚点缩放 + 位移
                     Box(Modifier.fillMaxSize()
                         .graphicsLayer {
                             val p = hdrProgress.value
-                            transformOrigin = TransformOrigin(1f, 0f)
+                            val density = LocalDensity.current
+                            val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
+                            val screenH = with(density) { configuration.screenHeightDp.dp.toPx() }
+                            val origin = fallbackOrigin
+                            transformOrigin = TransformOrigin(
+                                (origin.x / screenW).coerceIn(0f, 1f),
+                                (origin.y / screenH).coerceIn(0f, 1f)
+                            )
                             val s = 0.42f + 0.58f * p
                             scaleX = s
                             scaleY = s
-                            translationX = (1f - p) * size.width * -0.33f
-                            translationY = (1f - p) * size.height * 0.15f
                         }
-                        .padding(horizontal = 18.dp, vertical = 40.dp)
-                        .shadow(24.dp, RoundedCornerShape(28.dp), clip = false)
-                        .clip(RoundedCornerShape(28.dp))
-                        .background(CyberCardStart)
+                        .background(CyberCardStart.copy(alpha = p))
                     ) {
                         // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载)
                         Box(Modifier.fillMaxSize()
@@ -580,23 +581,24 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         // ① scrim: 全屏压暗层 (alpha 由 sensorProgress 驱动, 半透明)
                         Box(Modifier.fillMaxSize()
                             .background(Color.Black)
-                            .graphicsLayer { alpha = sensorProgress.value * 0.35f }
+                            .graphicsLayer { alpha = sensorProgress.value * 0.22f }
                         )
                         // ② 卡片容器: 右上角锚点缩放 + 位移 (进入=从屏幕中上部小卡片展开至全屏)
                         Box(Modifier.fillMaxSize()
                             .graphicsLayer {
                                 val p = sensorProgress.value
-                                transformOrigin = TransformOrigin(1f, 0f)
+                                val screenW = with(density) { configuration.screenWidthDp.dp.toPx() }
+                                val screenH = with(density) { configuration.screenHeightDp.dp.toPx() }
+                                val origin = if (sensorRevealOrigin != Offset.Zero) sensorRevealOrigin else fallbackOrigin
+                                transformOrigin = TransformOrigin(
+                                    (origin.x / screenW).coerceIn(0f, 1f),
+                                    (origin.y / screenH).coerceIn(0f, 1f)
+                                )
                                 val s = 0.42f + 0.58f * p
                                 scaleX = s
                                 scaleY = s
-                                translationX = (1f - p) * size.width * -0.33f
-                                translationY = (1f - p) * size.height * 0.15f
                             }
-                            .padding(horizontal = 18.dp, vertical = 40.dp)
-                            .shadow(24.dp, RoundedCornerShape(28.dp), clip = false)
-                            .clip(RoundedCornerShape(28.dp))
-                            .background(CyberCardStart)
+                            .background(CyberCardStart.copy(alpha = p))
                         ) {
                             // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组)
                             Box(Modifier.fillMaxSize()
