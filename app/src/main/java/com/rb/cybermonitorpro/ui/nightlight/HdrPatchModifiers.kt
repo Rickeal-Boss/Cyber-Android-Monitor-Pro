@@ -390,7 +390,7 @@ private class ChartPatchHolder {
     var h = 0f
     val ready: Boolean get() = w > 0f && h > 0f
     // ★ R2 修复：整图包围盒 RectF 复用（.set() 原地更新），HdrPatch 构造时防御性拷贝。
-    val rect = RectF()
+    val rect = android.graphics.RectF()
 }
 
 private fun sanitizeChart(v: Float): Float = if (v.isNaN() || v.isInfinite()) 0f else v

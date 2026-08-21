@@ -42,7 +42,7 @@ object HdrOverlayState {
  * @param bias     该类型贴片的设计峰值亮度倍率（相对 SDR 白，如 CARD=4× / TAB=6× / TEXT=5× / LINE=5× / GRID=1.5× / DOT=5×）。
  *                 仅用于诊断/微调；与滑块线性插值得到 effMult，保证 1.0×=SDR 白、8.0×=峰值。
  */
-data class HdrPatch(
+class HdrPatch(
     val id: String,
     val type: HdrPatchType,
     bounds: RectF,
@@ -75,7 +75,7 @@ data class HdrPatch(
 ) {
     // ★ R2 修复：防御性拷贝。调用方复用临时 RectF（.set() 原地更新）时，
     //   注册表中存储的贴片 bounds 不受后续 mutation 影响。
-    //   渲染器/注册表只读取 bounds，从不修改；全量 11 处 HdrPatch(...) 构造调用均不依赖
+    //   渲染器/注册表只读取 bounds，从不修改；全量 10 处 HdrPatch(...) 构造调用均不依赖
     //   传入的 RectF 与 patch.bounds 为同一引用（已核验无 .copy(bounds=) 调用）。
     val bounds: RectF = RectF(bounds)
 
