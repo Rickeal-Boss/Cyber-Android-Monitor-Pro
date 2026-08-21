@@ -30,7 +30,8 @@ object NightlightState {
     private var attachedCount = 0
 
     // ★ pre20-b：垂直滚动状态广播（任意 Screen 的 scrollState.isScrollInProgress 实时写入）。
-    //   渲染器据此：滚动中预算放大（P2）、停止瞬间 120ms 窗口抑制 requestRender（P1）——
+    //   渲染器据此：滚动中预算放大（P2）；「垂直滚动停止 = 不刷新」由渲染器自驱动 +
+    //   上传预算自适应自然达成（pre21 已移除 pre20 的停止抑制窗口）——
     //   垂直滚动 = 纯跟随不换贴片；只有水平翻页（scrollGated）才做整套离场/入场。
     @Volatile var verticalScrolling: Boolean = false
         private set

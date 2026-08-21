@@ -89,7 +89,7 @@ class HdrPatchSurfaceView @JvmOverloads constructor(
     fun attachRegistry(scope: CoroutineScope) {
         registryJob?.cancel()
         registryJob = scope.launch {
-            // ★ pre21：移除 pre20 的 120ms 停止抑制——它会让替换任务在窗口内积压、
+            // ★ pre21：移除 pre20 的停止抑制窗口——它会让替换任务在窗口内积压、
             //   窗口结束后突然渲染（闪断），且与渲染器自驱动冲突。现在"垂直滚动停止后不刷新"
             //   由渲染器自驱动 + 预算自适应自然达成：滚动中队列消化快、停止时队列必空 → 零渲染。
             HdrPatchRegistry.flow.collect { list ->

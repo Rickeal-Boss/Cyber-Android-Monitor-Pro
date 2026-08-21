@@ -118,10 +118,9 @@ fun Modifier.hdrCardBorderPatch(key: String, cornerPx: Float, strokePx: Float): 
         onDispose { HdrPatchRegistry.remove(key) }
     }
     this.onGloballyPositioned { coords ->
-        if (!CyberNightlightSwitch.enabled) {
-            HdrPatchRegistry.remove(key)
-            return@onGloballyPositioned
-        }
+        // ★ R4 修复：关闭路径仅早退（不 remove）——注销统一交给 DisposableEffect.onDispose；
+        //   避免关闭瞬间 remove 与开关翻转竞态导致贴片残留/闪烁。
+        if (!CyberNightlightSwitch.enabled) return@onGloballyPositioned
         // ★ 修复(偏低): 改用 localToRoot（内容根坐标），与 PQ surface 像素原点（内容 Box 左上）一致；
         //   localToWindow 为窗口绝对坐标（含状态栏），会使整体下移 ~状态栏高度。
         val pos = coords.localToRoot(Offset.Zero)
@@ -154,10 +153,9 @@ fun Modifier.hdrTabIndicatorPatch(key: String): Modifier = composed {
         onDispose { HdrPatchRegistry.remove(key) }
     }
     this.onGloballyPositioned { coords ->
-        if (!CyberNightlightSwitch.enabled) {
-            HdrPatchRegistry.remove(key)
-            return@onGloballyPositioned
-        }
+        // ★ R4 修复：关闭路径仅早退（不 remove）——注销统一交给 DisposableEffect.onDispose；
+        //   避免关闭瞬间 remove 与开关翻转竞态导致贴片残留/闪烁。
+        if (!CyberNightlightSwitch.enabled) return@onGloballyPositioned
         // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
         val pos = coords.localToRoot(Offset.Zero)
         scratchRect.set(
@@ -196,10 +194,9 @@ fun Modifier.hdrTabBarBorderPatch(
         onDispose { HdrPatchRegistry.remove(key) }
     }
     this.onGloballyPositioned { coords ->
-        if (!CyberNightlightSwitch.enabled) {
-            HdrPatchRegistry.remove(key)
-            return@onGloballyPositioned
-        }
+        // ★ R4 修复：关闭路径仅早退（不 remove）——注销统一交给 DisposableEffect.onDispose；
+        //   避免关闭瞬间 remove 与开关翻转竞态导致贴片残留/闪烁。
+        if (!CyberNightlightSwitch.enabled) return@onGloballyPositioned
         // ★ 修复(偏低): localToRoot 对齐内容根像素原点；圆角/描边与 neonBorderGlow 一致。
         val pos = coords.localToRoot(Offset.Zero)
         scratchRect.set(
@@ -230,6 +227,15 @@ fun Modifier.hdrTabBarBorderPatch(
  */
 private class PatchRectHolder {
     var value: android.graphics.RectF? = null
+}
+
+/**
+ * ★ R1 修复：HdrMetricText 测量宽度持有者（非 State）。
+ *   垂直滚动时 onGloballyPositioned 每帧回调，仅当宽度实际变化才写 State，
+ *   避免每帧写同一值触发无谓重组（位图重建 DisposableEffect）。
+ */
+private class IntHolder {
+    var value: Int = 0
 }
 
 /**
@@ -274,6 +280,9 @@ fun HdrMetricText(
     // 关键修复：记录 Text composable 的实际布局宽度，buildTextBitmap 用同宽度约束测量，
     // 保证 HDR 位图与 SDR Text 换行/行数完全一致，避免错位/重影。
     var measuredWidthPx by remember { mutableStateOf(0) }
+    // ★ R1 修复：宽度持有者（非 State）。onGloballyPositioned 垂直滚动期间每帧回调，
+    //   仅当宽度实际变化才写 measuredWidthPx，避免每帧写同一值触发位图重建重组。
+    val widthHolder = remember { IntHolder() }
     DisposableEffect(text, fontSize, fontWeight, monospace, letterSpacing, measuredWidthPx, maxLines, softWrap, overflow) {
         val constraints = if (measuredWidthPx > 0) Constraints(maxWidth = measuredWidthPx) else Constraints()
         val bmp = buildTextBitmap(measurer, density, text, fontSize, fontWeight, monospace, letterSpacing, maxLines, softWrap, overflow, constraints)
@@ -325,7 +334,12 @@ fun HdrMetricText(
             .onGloballyPositioned { coords ->
                 // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
                 val p = coords.localToRoot(Offset.Zero)
-                measuredWidthPx = coords.size.width
+                // ★ R1 修复：仅宽度实际变化才写 State，避免垂直滚动每帧触发位图重建重组。
+                val w = coords.size.width
+                if (widthHolder.value != w) {
+                    widthHolder.value = w
+                    measuredWidthPx = w
+                }
                 // ★ pre18：写普通字段而非 State，垂直滚动时避免每帧重组（贴片"重组"）。
                 // ★ R2 修复：RectF 复用（.set() 原地更新），HdrPatch 构造时防御性拷贝，
                 //   消除滚动期间每帧 new RectF。
