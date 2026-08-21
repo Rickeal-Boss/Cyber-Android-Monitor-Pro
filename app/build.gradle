@@ -51,7 +51,11 @@ android {
 
 defaultConfig {
     applicationId "com.rb.cybermonitorpro"
-    minSdk 21
+    // ★ 偏差(2026-08-21): minSdk 21→23。路径A原假设"不碰 minSdk"被 compose 1.10.6 推翻——
+    //   BOM 2026.03.01 的 androidx.compose.animation:animation-core-android:1.10.6 在
+    //   AndroidManifest 声明 minSdk=23，manifest merger 拒绝 21<23。Compose 1.10 全线要求
+    //   minSdk≥23，故升到 23 即满足全部 compose 1.10.x 构件。代价: 放弃 API 21/22(Android 5/5.1/6.0)。
+    minSdk 23
     targetSdk 36   // Android 16 (API 36)；2026-08-31 Play 目标 API 截止。健康权限: 本应用未声明/使用 BODY_SENSORS 或 android.permission.health.*，无需迁移。
     versionCode 500
     versionName "5.0.0"
