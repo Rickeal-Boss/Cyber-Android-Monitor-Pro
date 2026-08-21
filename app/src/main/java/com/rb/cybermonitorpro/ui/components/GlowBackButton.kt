@@ -15,7 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.graphicsLayer
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -40,6 +40,7 @@ import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -75,6 +76,16 @@ private const val MAX_DRAG_SCALE = 0.12f
 
 /** 松手后延迟触发 onClick (ms)，让用户看到弹簧回弹起始帧 */
 private const val ONCLICK_DELAY_MS = 30L
+
+/** 颜色线性插值（逐通道）。androidx.compose.ui.util.lerp 在此 BOM 无 Color 重载，故自建（与 CyberJoystickSwitch.lerpColor 同思路）。 */
+private fun lerpColor(start: Color, stop: Color, fraction: Float): Color {
+    return Color(
+        red = start.red + (stop.red - start.red) * fraction,
+        green = start.green + (stop.green - start.green) * fraction,
+        blue = start.blue + (stop.blue - start.blue) * fraction,
+        alpha = start.alpha + (stop.alpha - start.alpha) * fraction,
+    )
+}
 
 /**
  * 液态高光交互状态 — 按压进度 + 触点位置双 Animatable。
@@ -313,8 +324,8 @@ fun GlowBackButton(
                 alpha = breathAlphaState.value
 
                 // tanh 有界位移（输入小近似线性跟手，输入大渐近饱和）
-                translationX = maxTranslatePx * tanh(tanhInitialDerivative * offset.x / maxTranslatePx)
-                translationY = maxTranslatePx * tanh(tanhInitialDerivative * offset.y / maxTranslatePx)
+                translationX = maxTranslatePx * tanh(TANH_INITIAL_DERIVATIVE * offset.x / maxTranslatePx)
+                translationY = maxTranslatePx * tanh(TANH_INITIAL_DERIVATIVE * offset.y / maxTranslatePx)
 
                 // 非对称方向缩放：拖拽轴拉长，垂直轴不变 → 液体被"扯向一侧"
                 val dragDist = sqrt(offset.x * offset.x + offset.y * offset.y)
@@ -407,8 +418,8 @@ fun GlowBackButton(
             )
 
             // 霓虹描边脉冲：SteelBlue → PurpleBright，取消态偏移到 Magenta
-            val pressColor = lerp(NeonSteelBlue, NeonPurpleBright, pressProgressValue)
-            val borderColor = if (isCancelling) lerp(pressColor, NeonMagenta, cancelProgress) else pressColor
+            val pressColor = lerpColor(NeonSteelBlue, NeonPurpleBright, pressProgressValue)
+            val borderColor = if (isCancelling) lerpColor(pressColor, NeonMagenta, cancelProgress) else pressColor
             val borderWidth = lerp(0.8f.dp.toPx(), 1.4f.dp.toPx(), pressProgressValue)
             val borderAlpha = lerp(0.40f, 0.90f, pressProgressValue)
             drawCircle(
