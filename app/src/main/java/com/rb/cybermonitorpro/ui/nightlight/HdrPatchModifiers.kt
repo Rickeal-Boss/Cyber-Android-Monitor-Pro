@@ -94,11 +94,24 @@ fun encodePq(color: Color, mult: Float = 1f): FloatArray {
     )
 }
 
+// ── R2 修复：主题颜色线性光预编码（颜色为编译期常量，encodePq 结果不可变）──
+// onGloballyPositioned 每帧调用 encodePq(NeonCyan) 等会 new FloatArray(3)，
+// 约 40 贴片 × 60fps × 2 颜色 ≈ 每秒 4800 个短命 FloatArray。预计算后零分配。
+// FloatArray 内容只读不写（渲染器仅 pqEnc(color[i], bias) 读取），多贴片共享安全。
+// 注：必须声明在 encodePq 函数定义之后（顶层属性初始化按声明顺序执行）。
+private val ENCODED_NEON_CYAN = encodePq(NeonCyan)
+private val ENCODED_NEON_PURPLE = encodePq(NeonPurple)
+private val ENCODED_NEON_PURPLE_BRIGHT = encodePq(NeonPurpleBright)
+private val ENCODED_DIVIDER_CYBER = encodePq(DividerCyber)
+
 /**
  * 卡片描边贴片上报。挂在 cardGradientBorder 内部（已 @Composable，可用 remember 生成稳定 key）。
  * 仅当 TurboXDR 开关开启时上报；关闭时该修饰符不做事（SDR 卡片描边保持原样）。
  */
 fun Modifier.hdrCardBorderPatch(key: String, cornerPx: Float, strokePx: Float): Modifier = composed {
+    // ★ R2 修复：复用 scratch RectF（.set() 原地更新），HdrPatch 构造时防御性拷贝，
+    //   消除滚动期间 onGloballyPositioned 每帧 new RectF。
+    val scratchRect = remember { android.graphics.RectF() }
     // ★ 修复(残留重叠): 卡片滑出 LazyColumn 时 onGloballyPositioned 不再触发，
     //   必须靠 DisposableEffect 在组合退出时注销，否则幽灵描边持续残留/重叠。
     DisposableEffect(key) {
@@ -112,16 +125,16 @@ fun Modifier.hdrCardBorderPatch(key: String, cornerPx: Float, strokePx: Float): 
         // ★ 修复(偏低): 改用 localToRoot（内容根坐标），与 PQ surface 像素原点（内容 Box 左上）一致；
         //   localToWindow 为窗口绝对坐标（含状态栏），会使整体下移 ~状态栏高度。
         val pos = coords.localToRoot(Offset.Zero)
-        val b = android.graphics.RectF(
+        scratchRect.set(
             pos.x, pos.y, pos.x + coords.size.width.toFloat(), pos.y + coords.size.height.toFloat()
         )
         HdrPatchRegistry.upsert(
             HdrPatch(
                 id = key,
                 type = HdrPatchType.CARD_BORDER,
-                bounds = b,
-                color0 = encodePq(NeonPurpleBright),
-                color1 = encodePq(NeonCyan),
+                bounds = scratchRect,
+                color0 = ENCODED_NEON_PURPLE_BRIGHT,
+                color1 = ENCODED_NEON_CYAN,
                 bias = HDR_CARD_MULT,
                 cornerRadiusPx = cornerPx,
                 strokeWidthPx = strokePx
@@ -134,6 +147,8 @@ fun Modifier.hdrCardBorderPatch(key: String, cornerPx: Float, strokePx: Float): 
  * Tab 选中指示条贴片上报。挂在 TabRowDefaults.Indicator 的 Modifier 上。
  */
 fun Modifier.hdrTabIndicatorPatch(key: String): Modifier = composed {
+    // ★ R2 修复：复用 scratch RectF（.set() 原地更新），HdrPatch 构造时防御性拷贝。
+    val scratchRect = remember { android.graphics.RectF() }
     // ★ 修复(残留重叠): 指示条随 Tab 行常驻，但组合退出（离开主界面）时仍需注销。
     DisposableEffect(key) {
         onDispose { HdrPatchRegistry.remove(key) }
@@ -145,7 +160,7 @@ fun Modifier.hdrTabIndicatorPatch(key: String): Modifier = composed {
         }
         // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
         val pos = coords.localToRoot(Offset.Zero)
-        val b = android.graphics.RectF(
+        scratchRect.set(
             pos.x, pos.y, pos.x + coords.size.width.toFloat(), pos.y + coords.size.height.toFloat()
         )
         // topZone=true：指示条位于顶部 Tab 区，两段式渲染时绕过"顶撞裁剪"。
@@ -153,8 +168,8 @@ fun Modifier.hdrTabIndicatorPatch(key: String): Modifier = composed {
             HdrPatch(
                 id = key,
                 type = HdrPatchType.TAB_INDICATOR,
-                bounds = b,
-                color0 = encodePq(NeonCyan),
+                bounds = scratchRect,
+                color0 = ENCODED_NEON_CYAN,
                 bias = HDR_TAB_MULT,
                 topZone = true
             )
@@ -175,6 +190,8 @@ fun Modifier.hdrTabBarBorderPatch(
     strokeDp: Dp = 1.5.dp
 ): Modifier = composed {
     val density = LocalDensity.current
+    // ★ R2 修复：复用 scratch RectF（.set() 原地更新），HdrPatch 构造时防御性拷贝。
+    val scratchRect = remember { android.graphics.RectF() }
     DisposableEffect(key) {
         onDispose { HdrPatchRegistry.remove(key) }
     }
@@ -185,16 +202,16 @@ fun Modifier.hdrTabBarBorderPatch(
         }
         // ★ 修复(偏低): localToRoot 对齐内容根像素原点；圆角/描边与 neonBorderGlow 一致。
         val pos = coords.localToRoot(Offset.Zero)
-        val b = android.graphics.RectF(
+        scratchRect.set(
             pos.x, pos.y, pos.x + coords.size.width.toFloat(), pos.y + coords.size.height.toFloat()
         )
         HdrPatchRegistry.upsert(
             HdrPatch(
                 id = key,
                 type = HdrPatchType.CARD_BORDER,
-                bounds = b,
-                color0 = encodePq(NeonPurpleBright),
-                color1 = encodePq(NeonCyan),
+                bounds = scratchRect,
+                color0 = ENCODED_NEON_PURPLE_BRIGHT,
+                color1 = ENCODED_NEON_CYAN,
                 bias = HDR_CARD_MULT,
                 cornerRadiusPx = with(density) { cornerDp.toPx() },
                 strokeWidthPx = with(density) { strokeDp.toPx() },
@@ -248,6 +265,9 @@ fun HdrMetricText(
     val density = LocalDensity.current
     val enabled = CyberNightlightSwitch.enabled && gate
     val measurer = rememberTextMeasurer()
+    // ★ R2 修复：动态颜色 remember 缓存——同一生命周期内 color 极少变化，
+    //   避免每次 report() 都 encodePq(color) new FloatArray(3)。
+    val encodedColor = remember(color) { encodePq(color) }
 
     // 字形位图：仅在文本或样式变化时重建（数字每秒刷新→旧位图在 onDispose 回收，避免泄漏）
     val bitmapState = remember { mutableStateOf<android.graphics.Bitmap?>(null) }
@@ -283,7 +303,7 @@ fun HdrMetricText(
                 id = key,
                 type = HdrPatchType.TEXT_GLYPH,
                 bounds = pos,
-                color0 = encodePq(color),
+                color0 = encodedColor,
                 bias = HDR_TEXT_MULT,
                 bitmap = bmp,
                 topZone = topZone
@@ -307,9 +327,10 @@ fun HdrMetricText(
                 val p = coords.localToRoot(Offset.Zero)
                 measuredWidthPx = coords.size.width
                 // ★ pre18：写普通字段而非 State，垂直滚动时避免每帧重组（贴片"重组"）。
-                posHolder.value = android.graphics.RectF(
-                    p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
-                )
+                // ★ R2 修复：RectF 复用（.set() 原地更新），HdrPatch 构造时防御性拷贝，
+                //   消除滚动期间每帧 new RectF。
+                val r = posHolder.value ?: android.graphics.RectF().also { posHolder.value = it }
+                r.set(p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat())
                 report()
             }
     )
@@ -337,6 +358,8 @@ private class ChartPatchHolder {
     var w = 0f
     var h = 0f
     val ready: Boolean get() = w > 0f && h > 0f
+    // ★ R2 修复：整图包围盒 RectF 复用（.set() 原地更新），HdrPatch 构造时防御性拷贝。
+    val rect = RectF()
 }
 
 private fun sanitizeChart(v: Float): Float = if (v.isNaN() || v.isInfinite()) 0f else v
@@ -362,6 +385,8 @@ fun Modifier.hdrChartPatches(
     val density = LocalDensity.current
     val enabled = CyberNightlightSwitch.enabled
     val holder = remember { ChartPatchHolder() }
+    // ★ R2 修复：动态颜色 remember 缓存——避免每次 report()（数据/位置变化）都 encodePq(lineColor) new FloatArray(3)。
+    val encodedLineColor = remember(lineColor) { encodePq(lineColor) }
 
     fun report() {
         if (!enabled || !holder.ready) {
@@ -369,7 +394,7 @@ fun Modifier.hdrChartPatches(
             HdrPatchRegistry.remove(chartKey + ".grid")
             return
         }
-        reportChartPatches(holder, chartKey, data, lineColor, gridLines, showGrid, density)
+        reportChartPatches(holder, chartKey, data, encodedLineColor, gridLines, showGrid, density)
     }
 
     // 实时数据变化重新上报
@@ -400,7 +425,7 @@ private fun reportChartPatches(
     holder: ChartPatchHolder,
     chartKey: String,
     data: List<Float>,
-    lineColor: Color,
+    encodedLineColor: FloatArray,
     gridLines: Int,
     showGrid: Boolean,
     density: Density
@@ -414,7 +439,9 @@ private fun reportChartPatches(
     val oy = holder.winY
 
     // 整图窗口包围盒（供渲染器屏外裁剪；CHART_LINE/CHART_GRID 均以此判裁剪）
-    val bounds = android.graphics.RectF(ox, oy, ox + w, oy + h)
+    // ★ R2 修复：复用 ChartPatchHolder.rect（.set() 原地更新），HdrPatch 构造时防御性拷贝。
+    holder.rect.set(ox, oy, ox + w, oy + h)
+    val bounds = holder.rect
 
     // ── 折线本体 ──
     if (data.size >= 2) {
@@ -432,7 +459,7 @@ private fun reportChartPatches(
                 id = chartKey + ".line",
                 type = HdrPatchType.CHART_LINE,
                 bounds = bounds,
-                color0 = encodePq(lineColor),
+                color0 = encodedLineColor,
                 bias = HDR_LINE_MULT,
                 points = pts,
                 strokeWidthPx = 3.5f,
@@ -459,7 +486,7 @@ private fun reportChartPatches(
                 id = chartKey + ".grid",
                 type = HdrPatchType.CHART_GRID,
                 bounds = bounds,
-                color0 = encodePq(DividerCyber),
+                color0 = ENCODED_DIVIDER_CYBER,
                 bias = HDR_GRID_MULT,
                 points = gpts
             )
@@ -494,6 +521,8 @@ fun Modifier.hdrLinearProgressPatch(
 ): Modifier = composed {
     val enabled = CyberNightlightSwitch.enabled
     val holder = remember { ProgressPatchHolder() }
+    // ★ R2 修复：动态颜色 remember 缓存——避免每次 report()（进度/位置变化）都 encodePq(color) new FloatArray(3)。
+    val encodedColor = remember(color) { encodePq(color) }
 
     DisposableEffect(key) {
         onDispose { HdrPatchRegistry.remove(key) }
@@ -520,7 +549,7 @@ fun Modifier.hdrLinearProgressPatch(
                 id = key,
                 type = HdrPatchType.TAB_INDICATOR,
                 bounds = b,
-                color0 = encodePq(color),
+                color0 = encodedColor,
                 bias = mult,
                 cornerRadiusPx = corner,
                 strokeWidthPx = corner
@@ -599,9 +628,10 @@ fun Modifier.hdrTabIconPatch(key: String, selected: Boolean, iconRes: Int): Modi
         // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
         val p = coords.localToRoot(Offset.Zero)
         // ★ pre18：写普通字段而非 State，避免滚动/布局期间触发重组。
-        posHolder.value = android.graphics.RectF(
-            p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
-        )
+        // ★ R2 修复：RectF 复用（.set() 原地更新），HdrPatch 构造时防御性拷贝，
+        //   消除滚动期间每帧 new RectF。
+        val r = posHolder.value ?: android.graphics.RectF().also { posHolder.value = it }
+        r.set(p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat())
         report()
     }
 }
@@ -627,6 +657,9 @@ fun Modifier.hdrSatSkyPatch(satellites: List<GpsSatelliteInfo>): Modifier = comp
         val canvasSize = if (holder.w < holder.h) holder.w else holder.h
         val radius = (canvasSize / 2f) * 0.92f
         val seen = mutableSetOf<String>()
+        // ★ R2 修复：循环内复用 scratch RectF（.set() 原地更新），HdrPatch 构造时防御性拷贝，
+        //   消除每颗卫星点 new RectF（最多 ~12 点/帧）。
+        val scratchRect = android.graphics.RectF()
         for (i in satellites.indices) {
             val sat = satellites[i]
             if (sat.elevation.isNaN() || sat.azimuth.isNaN()) continue
@@ -641,11 +674,12 @@ fun Modifier.hdrSatSkyPatch(satellites: List<GpsSatelliteInfo>): Modifier = comp
             val gy = holder.y + sy
             val id = "satsky:$i"
             seen.add(id)
+            scratchRect.set(gx - dotR, gy - dotR, gx + dotR, gy + dotR)
             HdrPatchRegistry.upsert(
                 HdrPatch(
                     id = id,
                     type = HdrPatchType.CARD_BORDER,
-                    bounds = android.graphics.RectF(gx - dotR, gy - dotR, gx + dotR, gy + dotR),
+                    bounds = scratchRect,
                     color0 = encodePq(constellationColor(sat.constellationType)),
                     bias = HDR_DOT_MULT,
                     cornerRadiusPx = dotR,
@@ -748,9 +782,10 @@ fun Modifier.hdrVectorIconPatch(
         // ★ 修复(偏低): localToRoot 对齐内容根像素原点。
         val p = coords.localToRoot(Offset.Zero)
         // ★ pre18：写普通字段而非 State，避免滚动/布局期间触发重组。
-        posHolder.value = android.graphics.RectF(
-            p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat()
-        )
+        // ★ R2 修复：RectF 复用（.set() 原地更新），HdrPatch 构造时防御性拷贝，
+        //   消除滚动期间每帧 new RectF。
+        val r = posHolder.value ?: android.graphics.RectF().also { posHolder.value = it }
+        r.set(p.x, p.y, p.x + coords.size.width.toFloat(), p.y + coords.size.height.toFloat())
         report()
     }
 }

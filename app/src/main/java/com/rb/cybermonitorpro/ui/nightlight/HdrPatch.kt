@@ -45,7 +45,7 @@ object HdrOverlayState {
 data class HdrPatch(
     val id: String,
     val type: HdrPatchType,
-    val bounds: RectF,
+    bounds: RectF,
     val color0: FloatArray,
     val color1: FloatArray = color0,
     /** 设计峰值亮度倍率（相对 SDR 白），与滑块线性插值得到 effMult。默认 1.0×。 */
@@ -73,6 +73,12 @@ data class HdrPatch(
      */
     val topZone: Boolean = false
 ) {
+    // ★ R2 修复：防御性拷贝。调用方复用临时 RectF（.set() 原地更新）时，
+    //   注册表中存储的贴片 bounds 不受后续 mutation 影响。
+    //   渲染器/注册表只读取 bounds，从不修改；全量 11 处 HdrPatch(...) 构造调用均不依赖
+    //   传入的 RectF 与 patch.bounds 为同一引用（已核验无 .copy(bounds=) 调用）。
+    val bounds: RectF = RectF(bounds)
+
     // 注册表按 id 键控、整体替换，故 equals/hashCode 仅依赖引用/id，避免 FloatArray 内容参与比对。
     override fun equals(other: Any?) = this === other
     override fun hashCode() = id.hashCode()

@@ -102,6 +102,13 @@ class PatchRenderer(
 
     private val emptyGeom = LineGeom(floatArrayOf(), RectF(), 0f)
 
+    // ★ R2 修复：rectVerts 写入复用数组（8 元素）并返回，消除每贴片 new FloatArray(8)。
+    private val tmpRectVerts = FloatArray(8)
+    // ★ R2 修复：drawFrameInternal 复用 liveIdSet，消除每帧 patches.map{it.id}.toSet() 分配。
+    private val liveIdSet = HashSet<String>()
+    // ★ R2 修复：lineGeom 顶点缓冲按 patch.id 复用，仅在容量变化（verts.size != n*4）时重分配。
+    private val lineVertsBuf = HashMap<String, FloatArray>()
+
     fun setEnabled(v: Boolean) { _enabled = v }
     fun isActive(): Boolean = _enabled
     fun setPatches(list: List<HdrPatch>) { patches = list }
@@ -157,6 +164,7 @@ class PatchRenderer(
         glyphCache.clear()
         lineCache.clear()
         quadBufCache.clear()
+        lineVertsBuf.clear()
         // ★ pre19-A：context 重建后旧 pending 任务引用的纹理 id / 位图均失效，一并清空
         pendingUploads.clear()
         pendingKeys.clear()
@@ -269,12 +277,14 @@ class PatchRenderer(
         // 清理已消失的位图纹理（图标/文字离开屏幕或文本变化时），避免 GL 纹理泄漏
         // ★ pre19-C：删除分帧——每帧最多删 MAX_TEX_DELETES_PER_FRAME 个，
         //   避免收尾帧「上传 N + 删除 M + 绘制 ~40 贴片」三重叠加在同一帧。
-        val liveIds = patches.map { it.id }.toSet()
+        // ★ R2 修复：复用 liveIdSet（clear+add），消除每帧 patches.map{it.id}.toSet() 分配。
+        liveIdSet.clear()
+        for (p in patches) liveIdSet.add(p.id)
         var deletedThisFrame = 0
         val bit = bitmapTexCache.entries.iterator()
         while (bit.hasNext() && deletedThisFrame < MAX_TEX_DELETES_PER_FRAME) {
             val e = bit.next()
-            if (e.key !in liveIds) {
+            if (e.key !in liveIdSet) {
                 GLES20.glDeleteTextures(1, intArrayOf(e.value.tex), 0)
                 runCatching { e.value.copy.recycle() }
                 bit.remove()
@@ -442,8 +452,17 @@ class PatchRenderer(
 
     // ── 几何 ──
 
-    private fun rectVerts(b: RectF): FloatArray =
-        floatArrayOf(b.left, b.top, b.right, b.top, b.left, b.bottom, b.right, b.bottom)
+    private fun rectVerts(b: RectF): FloatArray {
+        tmpRectVerts[0] = b.left
+        tmpRectVerts[1] = b.top
+        tmpRectVerts[2] = b.right
+        tmpRectVerts[3] = b.top
+        tmpRectVerts[4] = b.left
+        tmpRectVerts[5] = b.bottom
+        tmpRectVerts[6] = b.right
+        tmpRectVerts[7] = b.bottom
+        return tmpRectVerts
+    }
 
     private fun lineGeom(p: HdrPatch): LineGeom {
         val pts = p.points ?: return emptyGeom
@@ -453,7 +472,13 @@ class PatchRenderer(
         val n = pts.size / 2
         if (n < 2) return emptyGeom
         val hw = (p.strokeWidthPx * 0.5f).coerceAtLeast(1.5f)
-        val verts = FloatArray(n * 4)
+        // ★ R2 修复：顶点缓冲按 patch.id 复用，仅在容量变化（size != n*4）时重分配；
+        //   注意用 != 而非 <（size 只可能等于或小于 n*4，> 会因重分配条件恒真而退化为每帧分配）。
+        var verts = lineVertsBuf[p.id]
+        if (verts == null || verts.size != n * 4) {
+            verts = FloatArray(n * 4)
+            lineVertsBuf[p.id] = verts
+        }
         var lx = 0f
         var ly = 0f
         for (i in 0 until n) {
