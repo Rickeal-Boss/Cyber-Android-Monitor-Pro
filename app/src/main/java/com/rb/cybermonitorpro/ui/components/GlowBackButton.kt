@@ -1,8 +1,9 @@
 package com.rb.cybermonitorpro.ui.components
 
+import android.content.Context
+import android.os.Build
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -11,23 +12,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.graphicsLayer
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.path
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -35,110 +31,299 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 import com.rb.cybermonitorpro.HapticUtils
 import com.rb.cybermonitorpro.R
+import com.rb.cybermonitorpro.ui.effects.createLiquidHighlightShader
+import com.rb.cybermonitorpro.ui.effects.liquidHighlightAgslImpl
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
+import kotlin.math.tanh
 
 /**
- * 暗玻璃质感返回按钮 — 对齐参考图 箭头.jpg
+ * 暗玻璃霓虹返回按钮 — 液态玻璃升级版（灵感来自 AndroidLiquidGlass / Kyant0）。
  *
- * 视觉特征:
- * - 深色圆形底座 (#18182A → #0A0A0F 径向渐变, 模拟 iOS 风格暗玻璃)
- * - 极细浅色描边圈 (呼吸脉冲, 0.5dp ~ 1dp 动态宽度)
- * - 白色粗体 Chevron 图标 (<), 非 Unicode 文字
- * - 点击: 弹簧缩放 0.88x + 涟漪扩散 + 描边增亮
- * - 左上角微弱高光弧线 (玻璃反光感)
+ * 视觉与交互特征（对齐赛博朋克 HUD 暗紫霓虹）：
+ * - 深色径向渐变底座 + 左上玻璃反光弧（drawLiquidNeonBase, drawBehind）
+ * - 按压 Animatable + spring(0.5, 300) 弹簧反馈（替代旧 animateFloatAsState）
+ * - 拖拽 tanh 有界位移 + 非对称方向缩放（graphicsLayer lambda 内读 State，零重组）
+ * - 从【触点】发出的 3 层错峰霓虹涟漪（替代旧的单层圆心涟漪）
+ * - 按压霓虹描边脉冲（SteelBlue → PurpleBright → Magenta 取消态）
+ * - 图标微缩 + 拖拽方向微位移 + 取消态淡出缩小（不旋转）
+ * - 静态呼吸：graphicsLayer.alpha 无限重复（State 在 lambda 内读，不触发 Canvas 重绘）
+ * - API 33+ AGSL 触点径向高光（独立文件隔离），低版本 Canvas 径向渐变降级（均 BlendMode.Plus）
+ *
+ * 仅本函数被改动；LightCircleBackButton / GlassCircleButton / drawFrostedGlassV3 保持原样。
  */
+
+/** 最大位移上限 (tanh 饱和, 约按钮直径 30%) */
+private const val MAX_TRANSLATE_DP = 12f
+
+/** tanh 初始灵敏度 (适配 40dp 小按钮, 比参考项目胶囊按钮的 0.05 更跟手) */
+private const val TANH_INITIAL_DERIVATIVE = 0.08f
+
+/** 拖拽方向最大额外缩放 */
+private const val MAX_DRAG_SCALE = 0.12f
+
+/** 松手后延迟触发 onClick (ms)，让用户看到弹簧回弹起始帧 */
+private const val ONCLICK_DELAY_MS = 30L
+
+/**
+ * 液态高光交互状态 — 按压进度 + 触点位置双 Animatable。
+ *
+ * 沿用项目 CircularRevealModifier / StaggeredPageTransition 的模式：
+ * Animatable 值在 graphicsLayer / draw lambda 内读取 → 零重组、GPU 友好。
+ */
+class LiquidHighlightState(private val scope: CoroutineScope) {
+    val pressProgress = Animatable(0f, 0.001f)
+    val touchPosition = Animatable(Offset.Zero, Offset.VectorConverter, Offset.VisibilityThreshold)
+
+    private val pressSpring = spring<Float>(dampingRatio = 0.5f, stiffness = 300f, visibilityThreshold = 0.001f)
+    private val posSpring = spring<Offset>(dampingRatio = 0.5f, stiffness = 300f, visibilityThreshold = Offset.VisibilityThreshold)
+
+    private var startPos = Offset.Zero
+    val offset: Offset get() = touchPosition.value - startPos
+
+    fun onPressDown(pos: Offset) {
+        startPos = pos
+        scope.launch {
+            launch { pressProgress.animateTo(1f, pressSpring) }
+            launch { touchPosition.snapTo(pos) }
+        }
+    }
+
+    fun onDrag(pos: Offset) {
+        scope.launch { touchPosition.snapTo(pos) }
+    }
+
+    fun onRelease() {
+        scope.launch {
+            launch { pressProgress.animateTo(0f, pressSpring) }
+            launch { touchPosition.animateTo(startPos, posSpring) }
+        }
+    }
+}
+
+/**
+ * 统一手势处理（私有）。按下 → 拖拽跟踪 → 松手判定（拖距阈值取消）。
+ *
+ * @param onDown 在按下瞬间回调（用于从触点生成多层涟漪）
+ * @param onConfirm 拖距 < 阈值松手时触发（延迟 ONCLICK_DELAY_MS 后，避免吞掉回弹起始帧）
+ * @param onCancel 拖距 ≥ 阈值松手时回调（已触发 lightTap 触觉）
+ */
+private fun Modifier.liquidHighlightGesture(
+    state: LiquidHighlightState,
+    scope: CoroutineScope,
+    cancelThresholdPx: Float,
+    hapticContext: Context?,
+    onDown: (Offset) -> Unit,
+    onConfirm: () -> Unit,
+    onCancel: () -> Unit = {},
+): Modifier = this.pointerInput(state, cancelThresholdPx) {
+    forEachGesture {
+        awaitPointerEventScope {
+            val down = awaitFirstDown()
+            state.onPressDown(down.position)
+            onDown(down.position)
+            hapticContext?.let { ctx ->
+                try { HapticUtils.standardTap(ctx) } catch (_: Exception) {}
+            }
+
+            val pointerId = down.id
+            var released = false
+            do {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == pointerId }
+                if (change != null) {
+                    state.onDrag(change.position)
+                    if (!change.pressed) released = true
+                }
+            } while (!released)
+
+            val totalDist = with(state.offset) { sqrt(x * x + y * y) }
+            state.onRelease()
+
+            if (totalDist < cancelThresholdPx) {
+                // 用外部 scope 而非 AwaitPointerEventScope 自身协程，
+                // 确保 delay 不会因手势块结束而被取消（对齐 LightCircleBackButton 模式）
+                scope.launch { delay(ONCLICK_DELAY_MS); onConfirm() }
+            } else {
+                hapticContext?.let { ctx ->
+                    try { HapticUtils.lightTap(ctx) } catch (_: Exception) {}
+                }
+                onCancel()
+            }
+        }
+    }
+}
+
+/**
+ * 暗霓虹液态底座（drawBehind）。整合原 .background(径向渐变) + 已删除的 drawWithGlassReflection()：
+ * L1 深色径向渐变底座（按压提亮）、L2 左上玻璃反光弧。
+ * 三层液态边缘折射 + 霓虹描边脉冲在内容 Canvas 中绘制（可随拖拽反方向偏移）。
+ */
+private fun Modifier.drawLiquidNeonBase(
+    btnSize: Dp,
+    pressProgress: Animatable<Float, *>,
+): Modifier = this.drawBehind {
+    val s = btnSize.toPx()
+    val cx = s / 2f
+    val cy = s / 2f
+    val r = minOf(cx, cy)
+    val p = pressProgress.value
+
+    // L1: 深色径向渐变底座（按压时提亮）
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(
+                CyberElevated.copy(alpha = 0.95f + p * 0.15f),
+                CyberBackground.copy(alpha = 0.98f)
+            ),
+            center = Offset(s * 0.35f, s * 0.35f)
+        ),
+        radius = r, center = Offset(cx, cy)
+    )
+
+    // L2: 左上角玻璃反光弧
+    drawArc(
+        color = Color.White.copy(alpha = 0.06f + p * 0.04f),
+        startAngle = 200f, sweepAngle = 110f, useCenter = false,
+        style = Stroke(width = s * 0.10f),
+        topLeft = Offset(s * 0.14f, s * 0.14f),
+        size = Size(s * 0.52f, s * 0.52f)
+    )
+}
+
 @Composable
 fun GlowBackButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     btnSize: Dp = 40.dp,
+    enableDrag: Boolean = true,
+    enableAgslHighlight: Boolean = true,
+    contentDescription: String? = null,
 ) {
-    // ── 动画状态 ──
-    var isPressed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
+    val density = LocalDensity.current
 
-    // 微妙呼吸: 描边透明度缓慢起伏 (idle 状态下的"活着"提示)
-    // ★ R5 (2026-08-07): 移除 rememberInfiniteTransition 持续动画, 改为静态常量,
-    //   避免 GPU 每帧重绘。视觉静态态下 alpha 固定为 0.40f, 与呼吸中值等价。
-    //   注: GlowBackButton 当前在全项目内未被调用, 此改动仅为清理历史坑。
-    val breathAlpha = 0.40f
-    val breathScale = 1.0f
+    val highlightState = remember(scope) { LiquidHighlightState(scope) }
 
-    // 按压缩小 (弹性反馈)
-    val pressScale by animateFloatAsState(
-        targetValue = if (isPressed) 0.88f else 1.0f,
-        animationSpec = spring(
-            dampingRatio = 0.5f,    // Spring.DampingRatioMediumBouncy
-            stiffness = 1500f       // Spring.StiffnessMediumHigh
+    // 静态呼吸 alpha — 保持 State<Float> 引用，在 graphicsLayer lambda 内读 .value，
+    // 不触发重组与 onDraw（对齐 StaggeredPageTransition 模式）。
+    val breathAlphaState = rememberInfiniteTransition(label = "glowBreath").animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2400, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
         ),
-        label = "pressScale"
-    )
-
-    // 按压时描边增亮
-    val pressBorderAlpha by animateFloatAsState(
-        targetValue = if (isPressed) 1.0f else breathAlpha,
-        animationSpec = tween(120, easing = EaseOutCubic),
-        label = "pressBorder"
-    )
-
-    // 按压时背景提亮
-    val pressBgLighten by animateFloatAsState(
-        targetValue = if (isPressed) 0.15f else 0f,
-        animationSpec = tween(100),
-        label = "pressBg"
+        label = "glowBreathAlpha"
     )
 
     // 涟漪队列 — 使用 snapshot 安全写入，避免 Canvas draw 中直接写状态导致 IllegalStateException
     var ripples by remember { mutableStateOf(listOf<RippleData>()) }
     // ★ snapshotFlow: 单长期协程替代 LaunchedEffect(ripples) 会随每次点击不断重启的问题
+    //   最长层延迟 120ms + 动画 380ms + 20ms 缓冲 = 520ms 后清理
     LaunchedEffect(Unit) {
         snapshotFlow { ripples }
             .filter { it.isNotEmpty() }
             .collect {
-                delay(400)
-                ripples = ripples.filter { r -> System.currentTimeMillis() - r.startTime < 400 }
+                delay(520)
+                ripples = ripples.filter { r -> System.currentTimeMillis() - r.startTime < 520 }
             }
     }
 
-    // ── Chevron 矢量图标 (白色粗体 <) ──
-    val chevronIcon = remember {
-        ImageVector.Builder(
-            name = "ChevronLeft",
-            defaultWidth = 24.dp,
-            defaultHeight = 24.dp,
-            viewportWidth = 24f,
-            viewportHeight = 24f
-        ).apply {
-            path(
-                fill = androidx.compose.ui.graphics.SolidColor(Color.White),
-                stroke = null,
-                strokeLineWidth = 0f,
-                strokeLineCap = StrokeCap.Round,
-                strokeLineJoin = androidx.compose.ui.graphics.StrokeJoin.Round,
-                pathFillType = androidx.compose.ui.graphics.PathFillType.NonZero
-            ) {
-                moveTo(15.41f, 7.41f)
-                lineTo(14f, 6f)
-                lineTo(8f, 12f)
-                lineTo(14f, 18f)
-                lineTo(15.41f, 16.59f)
-                lineTo(10.83f, 12f)
-                close()
+    // 从触点生成 3 层错峰霓虹涟漪（层延迟 0 / 60 / 120ms）
+    val spawnRipples: (Offset) -> Unit = { pos ->
+        val now = System.currentTimeMillis()
+        ripples = ripples + listOf(
+            RippleData(now, pos.x, pos.y, 0),
+            RippleData(now, pos.x, pos.y, 1),
+            RippleData(now, pos.x, pos.y, 2)
+        )
+    }
+
+    // AGSL 句柄（Any?，仅 API 33+ 且启用时非空）。显式 SDK_INT check 是 lint NewApi 要求。
+    val shaderHandle: Any? = remember(enableAgslHighlight) {
+        if (enableAgslHighlight && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            createLiquidHighlightShader()
+        } else null
+    }
+
+    val btnSizePx = with(density) { btnSize.toPx() }
+    val cancelThresholdPx = with(density) { CANCEL_THRESHOLD_DP.dp.toPx() }
+    val maxTranslatePx = with(density) { MAX_TRANSLATE_DP.dp.toPx() }
+
+    // 高光修饰符：API 33+ 走 AGSL，否则 Canvas 径向渐变降级；两者均 BlendMode.Plus 加法发光
+    val highlightModifier = if (
+        enableAgslHighlight &&
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        shaderHandle != null
+    ) {
+        Modifier.liquidHighlightAgslImpl(
+            shaderHandle = shaderHandle,
+            touchPosProvider = { highlightState.touchPosition.value },
+            radiusPx = btnSizePx * 1.2f,
+            progressProvider = { highlightState.pressProgress.value },
+            lightColor = NeonPurpleBright
+        )
+    } else {
+        Modifier.drawWithContent {
+            // 先画底层内容，再画高光（HIGH-1 修正：底座 ~95% 不透明，高光须位于内容之上才可见）
+            drawContent()
+            val p = highlightState.pressProgress.value
+            if (p > 0.01f) {
+                val tp = highlightState.touchPosition.value
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            NeonPurpleBright.copy(alpha = 0.30f * p),
+                            NeonPurpleBright.copy(alpha = 0.10f * p),
+                            Color.Transparent
+                        ),
+                        center = tp,
+                        radius = btnSizePx * 1.2f
+                    ),
+                    radius = btnSizePx * 1.2f,
+                    center = tp,
+                    blendMode = BlendMode.Plus
+                )
             }
-        }.build()
+        }
     }
 
     Box(
         modifier = modifier
             .size(btnSize)
-            .scale(pressScale)
+            // ★ 形变层：scale/translate/alpha 在 RenderNode 级别完成，不触发 onDraw
+            .graphicsLayer {
+                val pressProgressValue = highlightState.pressProgress.value
+                val offset = highlightState.offset
+
+                // 静态呼吸
+                alpha = breathAlphaState.value
+
+                // tanh 有界位移（输入小近似线性跟手，输入大渐近饱和）
+                translationX = maxTranslatePx * tanh(tanhInitialDerivative * offset.x / maxTranslatePx)
+                translationY = maxTranslatePx * tanh(tanhInitialDerivative * offset.y / maxTranslatePx)
+
+                // 非对称方向缩放：拖拽轴拉长，垂直轴不变 → 液体被"扯向一侧"
+                val dragDist = sqrt(offset.x * offset.x + offset.y * offset.y)
+                val normalizedDist = (dragDist / cancelThresholdPx).coerceIn(0f, 1f)
+                val baseScale = lerp(1f, 0.90f, pressProgressValue)
+                val dragAngle = atan2(offset.y, offset.x)
+                scaleX = baseScale + MAX_DRAG_SCALE * abs(cos(dragAngle)) * normalizedDist
+                scaleY = baseScale + MAX_DRAG_SCALE * abs(sin(dragAngle)) * normalizedDist
+            }
             .shadow(
                 elevation = 4.dp,
                 shape = CircleShape,
@@ -146,104 +331,164 @@ fun GlowBackButton(
                 spotColor = Color.Black.copy(alpha = 0.3f)
             )
             .clip(CircleShape)
-            // 深色径向渐变底座 (模拟暗玻璃质感)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        CyberElevated.copy(alpha = 0.95f + pressBgLighten),
-                        CyberBackground.copy(alpha = 0.98f)
-                    ),
-                    center = Offset(0.35f, 0.35f)
-                )
-            )
-            .drawWithGlassReflection(btnSize)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        ripples = ripples + RippleData(System.currentTimeMillis())
-                        tryAwaitRelease()
-                        isPressed = false
-                        scope.launch {
-                            delay(40)
-                            try { HapticUtils.standardTap(ctx) } catch (_: Exception) {}
-                            onClick()
-                        }
+            // 暗霓虹底座（drawBehind，位于内容之下）
+            .drawLiquidNeonBase(btnSize = btnSize, pressProgress = highlightState.pressProgress)
+            // 高光（drawWithContent：内容之上 + 加法发光）
+            .then(highlightModifier)
+            // 手势（不绘制）
+            .then(
+                if (enableDrag) {
+                    Modifier.liquidHighlightGesture(
+                        state = highlightState,
+                        scope = scope,
+                        cancelThresholdPx = cancelThresholdPx,
+                        hapticContext = ctx,
+                        onDown = spawnRipples,
+                        onConfirm = onClick,
+                        onCancel = {}
+                    )
+                } else {
+                    // enableDrag = false 退化：仅保留按压缩放 + 触点涟漪 + 触觉，无拖拽取消
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures(onPress = { offset ->
+                            spawnRipples(offset)
+                            highlightState.onPressDown(offset)
+                            tryAwaitRelease()
+                            highlightState.onRelease()
+                            scope.launch {
+                                delay(ONCLICK_DELAY_MS)
+                                try { HapticUtils.standardTap(ctx) } catch (_: Exception) {}
+                                onClick()
+                            }
+                        })
                     }
-                )
-            },
+                }
+            ),
         contentAlignment = Alignment.Center
     ) {
-        // ── Canvas 层: 描边 + 涟漪 ──
+        // ── Canvas 层: 液态边缘折射 + 霓虹描边脉冲 + 触点多层涟漪 ──
         Canvas(Modifier.fillMaxSize()) {
             val cx = size.width / 2f
             val cy = size.height / 2f
             val baseR = minOf(cx, cy)
 
-            // ── 主描边圈 (浅紫灰, 呼吸效果) ──
-            val borderR = baseR * breathScale
+            val pressProgressValue = highlightState.pressProgress.value
+            val offset = highlightState.offset
+            val dragDist = sqrt(offset.x * offset.x + offset.y * offset.y)
+            val normalizedDist = (dragDist / cancelThresholdPx).coerceIn(0f, 1f)
+
+            // 取消态：接近阈值(>0.85)时开始渐变到品红 + 图标淡出
+            val isCancelling = normalizedDist > 0.85f
+            val cancelProgress = if (isCancelling) ((normalizedDist - 0.85f) / 0.15f).coerceIn(0f, 1f) else 0f
+
+            // 液态边缘折射（三层）：拖拽时沿拖拽反方向偏移 0.5dp（液体被扯动时边缘厚度变化）
+            val edgeShift = 0.5f.dp.toPx() * normalizedDist
+            val dirX = if (offset.x >= 0f) 1f else -1f
+            val dirY = if (offset.y >= 0f) 1f else -1f
+            val shiftX = -dirX * edgeShift
+            val shiftY = -dirY * edgeShift
             drawCircle(
-                color = NeonSteelBlue.copy(alpha = pressBorderAlpha * 0.6f),
-                radius = borderR - 0.6f.dp.toPx(),
-                center = Offset(cx, cy),
-                style = Stroke(width = 0.8f.dp.toPx())
+                color = NeonPurpleBright.copy(alpha = 0.30f + 0.10f * pressProgressValue),
+                radius = baseR - 1f.dp.toPx(),
+                center = Offset(cx + shiftX, cy + shiftY),
+                style = Stroke(width = 1f.dp.toPx())
             )
-            // 外层极淡光晕
             drawCircle(
-                color = NeonPurple.copy(alpha = pressBorderAlpha * 0.15f),
-                radius = borderR + 1f.dp.toPx(),
-                center = Offset(cx, cy),
-                style = Stroke(width = 0.5f.dp.toPx())
+                color = NeonCyan.copy(alpha = 0.15f + 0.10f * pressProgressValue),
+                radius = baseR - 2f.dp.toPx(),
+                center = Offset(cx + shiftX, cy + shiftY),
+                style = Stroke(width = 0.6f.dp.toPx())
+            )
+            drawCircle(
+                color = NeonPurple.copy(alpha = 0.08f + 0.10f * pressProgressValue),
+                radius = baseR + 1.5f.dp.toPx(),
+                center = Offset(cx + shiftX, cy + shiftY),
+                style = Stroke(width = 2f.dp.toPx())
             )
 
-            // ── 点击涟漪扩散 (从中心向外扩散后消失) ──
+            // 霓虹描边脉冲：SteelBlue → PurpleBright，取消态偏移到 Magenta
+            val pressColor = lerp(NeonSteelBlue, NeonPurpleBright, pressProgressValue)
+            val borderColor = if (isCancelling) lerp(pressColor, NeonMagenta, cancelProgress) else pressColor
+            val borderWidth = lerp(0.8f.dp.toPx(), 1.4f.dp.toPx(), pressProgressValue)
+            val borderAlpha = lerp(0.40f, 0.90f, pressProgressValue)
+            drawCircle(
+                color = borderColor.copy(alpha = borderAlpha),
+                radius = baseR - borderWidth / 2f,
+                center = Offset(cx, cy),
+                style = Stroke(width = borderWidth)
+            )
+
+            // 触点多层涟漪（3 层错峰：延迟 0 / 60 / 120ms）
             val now = System.currentTimeMillis()
             ripples.forEach { ripple ->
-                val elapsed = now - ripple.startTime
-                val progress = (elapsed / 350f).coerceIn(0f, 1f)
-                if (progress < 1f) {
-                    // 涟漪圆环: 从中心扩散到边缘外
-                    val rippleR = baseR * 0.3f + baseR * 1.8f * progress
-                    val rippleAlpha = (1f - progress).coerceAtLeast(0f) * 0.35f
-                    drawCircle(
-                        color = NeonPurpleBright.copy(alpha = rippleAlpha),
-                        radius = rippleR.coerceAtMost(baseR * 2f),
-                        center = Offset(cx, cy),
-                        style = Stroke(width = 1.8f.dp.toPx() * (1f - progress))
-                    )
+                val delayMs = when (ripple.layer) {
+                    0 -> 0L
+                    1 -> 60L
+                    else -> 120L
                 }
+                val elapsed = now - ripple.startTime - delayMs
+                if (elapsed < 0) return@forEach
+                val progress = (elapsed / 380f).coerceIn(0f, 1f)
+                if (progress >= 1f) return@forEach
+
+                val (startR, maxR, layerAlpha, layerColor, layerWidth) = when (ripple.layer) {
+                    0 -> RippleLayer(4.dp.toPx(), baseR * 1.2f, 0.40f, NeonPurpleBright, 2.dp.toPx())
+                    1 -> RippleLayer(2.dp.toPx(), baseR * 1.5f, 0.25f, NeonCyan, 1.2f.dp.toPx())
+                    else -> RippleLayer(0f, baseR * 2.0f, 0.12f, NeonPurple, 3.dp.toPx())
+                }
+                val rippleR = startR + (maxR - startR) * progress
+                val rippleAlpha = (1f - progress).coerceAtLeast(0f) * layerAlpha
+                drawCircle(
+                    color = layerColor.copy(alpha = rippleAlpha),
+                    radius = rippleR.coerceAtMost(maxR),
+                    center = Offset(ripple.touchX, ripple.touchY),
+                    style = Stroke(width = layerWidth * (1f - progress))
+                )
             }
         }
 
-        // ── Chevron 图标 ──
+        // ── 图标微交互（统一 CyberIcons.ArrowBack，棱面箭头比实心 Chevron 更具赛博感）──
+        val pressProgressValue = highlightState.pressProgress.value
+        val offset = highlightState.offset
+        val dragDist = sqrt(offset.x * offset.x + offset.y * offset.y)
+        val normalizedDist = (dragDist / cancelThresholdPx).coerceIn(0f, 1f)
+        val isCancelling = normalizedDist > 0.85f
+        val cancelProgress = if (isCancelling) ((normalizedDist - 0.85f) / 0.15f).coerceIn(0f, 1f) else 0f
         Icon(
-            painter = rememberVectorPainter(chevronIcon),
-            contentDescription = stringResource(R.string.common_back),
-            tint = Color.White.copy(alpha = if (isPressed) 0.5f else 0.92f),
-            modifier = Modifier.size(btnSize * 0.45f)
+            imageVector = CyberIcons.ArrowBack,
+            contentDescription = contentDescription ?: stringResource(R.string.common_back),
+            tint = Color.White.copy(alpha = if (isCancelling) lerp(0.92f, 0.35f, cancelProgress) else 0.92f),
+            modifier = Modifier
+                .size(btnSize * 0.45f)
+                .graphicsLayer {
+                    val iconScale = lerp(1f, 0.85f, pressProgressValue) *
+                            (if (isCancelling) lerp(1f, 0.75f, cancelProgress) else 1f)
+                    scaleX = iconScale
+                    scaleY = iconScale
+                    // 图标随拖拽方向微位移（增强相对运动感），不旋转
+                    translationX = offset.x * 0.15f * normalizedDist
+                    translationY = offset.y * 0.15f * normalizedDist
+                }
         )
     }
 }
 
-// ── 玻璃反光: 左上角微弱白色弧线 ──
-private fun Modifier.drawWithGlassReflection(btnSize: Dp): Modifier =
-    this.drawWithContent {
-        drawContent()
-        val s = btnSize.toPx()
-        // 高光弧 (左上角, 模拟玻璃曲面反光)
-        drawArc(
-            color = Color.White.copy(alpha = 0.06f),
-            startAngle = 200f,
-            sweepAngle = 110f,
-            useCenter = false,
-            style = Stroke(width = s * 0.10f),
-            topLeft = Offset(s * 0.14f, s * 0.14f),
-            size = Size(s * 0.52f, s * 0.52f)
-        )
-    }
+// ── 涟漪数据（触点坐标 + 层索引；private data class，全项目仅此文件定义，修改字段安全）──
+private data class RippleData(
+    val startTime: Long,
+    val touchX: Float,   // 触点 X 像素坐标（相对按钮左上角，与 Canvas 坐标系一致）
+    val touchY: Float,
+    val layer: Int,      // 0=主涟漪, 1=延迟环, 2=外晕
+)
 
-// ── 涟漪数据 ──
-private data class RippleData(val startTime: Long)
+// 局部五元组（仅 Canvas 涟漪层参数打包用：起始半径 / 终止半径 / α / 颜色 / 线宽）
+private data class RippleLayer(
+    val startR: Float,
+    val maxR: Float,
+    val alpha: Float,
+    val color: Color,
+    val width: Float,
+)
 
 // ═════════════════════════════════════════════════════
 //  浅色圆形返回按钮 — WorkBuddy Android / iOS 26 风格
