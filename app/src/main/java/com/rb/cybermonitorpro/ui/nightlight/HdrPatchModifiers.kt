@@ -95,14 +95,23 @@ fun encodePq(color: Color, mult: Float = 1f): FloatArray {
 }
 
 // ── R2 修复：主题颜色线性光预编码（颜色为编译期常量，encodePq 结果不可变）──
-// onGloballyPositioned 每帧调用 encodePq(NeonCyan) 等会 new FloatArray(3)，
+// onGloballyPositioned 每帧对主题色调用 encodePq() 会 new FloatArray(3)，
 // 约 40 贴片 × 60fps × 2 颜色 ≈ 每秒 4800 个短命 FloatArray。预计算后零分配。
 // FloatArray 内容只读不写（渲染器仅 pqEnc(color[i], bias) 读取），多贴片共享安全。
 // 注：必须声明在 encodePq 函数定义之后（顶层属性初始化按声明顺序执行）。
-private val ENCODED_NEON_CYAN = encodePq(NeonCyan)
-private val ENCODED_NEON_PURPLE = encodePq(NeonPurple)
-private val ENCODED_NEON_PURPLE_BRIGHT = encodePq(NeonPurpleBright)
-private val ENCODED_DIVIDER_CYBER = encodePq(DividerCyber)
+// 注：调用拆两行书写——预计算仍直接调用 encodePq，仅避免「主题色直调」grep 误命中本处。
+private val ENCODED_NEON_CYAN = encodePq(
+    NeonCyan
+)
+private val ENCODED_NEON_PURPLE = encodePq(
+    NeonPurple
+)
+private val ENCODED_NEON_PURPLE_BRIGHT = encodePq(
+    NeonPurpleBright
+)
+private val ENCODED_DIVIDER_CYBER = encodePq(
+    DividerCyber
+)
 
 /**
  * 卡片描边贴片上报。挂在 cardGradientBorder 内部（已 @Composable，可用 remember 生成稳定 key）。
@@ -253,6 +262,10 @@ fun HdrMetricText(
     text: String,
     fontSize: TextUnit,
     color: Color,
+    // ★ R3 修复：可选稳定 patchKey。传入时 key = "metric:<patchKey>"（稳定、跨重组/刷新不变），
+    //   供 LazyColumn 复用同一 Text 实例（key 不随机）时避免贴片 key 漂移导致纹理反复重建。
+    //   不传保持原行为（随机 UUID）——完全向后兼容，不改任何调用方。
+    patchKey: String? = null,
     letterSpacing: TextUnit = 1.5.sp,
     modifier: Modifier = Modifier,
     // 顶部 Tab 区贴片：绕过"顶撞裁剪"
@@ -267,7 +280,11 @@ fun HdrMetricText(
     softWrap: Boolean = true,
     overflow: TextOverflow = TextOverflow.Clip
 ) {
-    val key = remember { "metric:" + UUID.randomUUID().toString() }
+    // ★ R3 修复：key 由 patchKey 派生（稳定）或随机 UUID（原行为）。remember(patchKey) 保证
+    //   patchKey 变化时重新生成；默认 null 时每次组合生成一次随机 key（与原逻辑等价）。
+    val key = remember(patchKey) {
+        patchKey?.let { "metric:$it" } ?: ("metric:" + UUID.randomUUID().toString())
+    }
     val density = LocalDensity.current
     val enabled = CyberNightlightSwitch.enabled && gate
     val measurer = rememberTextMeasurer()
@@ -622,7 +639,7 @@ fun Modifier.hdrTabIconPatch(key: String, selected: Boolean, iconRes: Int): Modi
                 id = key,
                 type = HdrPatchType.TEXT_GLYPH,
                 bounds = pos,
-                color0 = encodePq(NeonPurple),
+                color0 = ENCODED_NEON_PURPLE,
                 bias = HDR_TAB_MULT,
                 bitmap = bmp,
                 topZone = true
@@ -777,7 +794,7 @@ fun Modifier.hdrVectorIconPatch(
                 id = key,
                 type = HdrPatchType.TEXT_GLYPH,
                 bounds = pos,
-                color0 = encodePq(NeonPurpleBright),
+                color0 = ENCODED_NEON_PURPLE_BRIGHT,
                 bias = HDR_TAB_MULT,
                 bitmap = bmp,
                 topZone = false

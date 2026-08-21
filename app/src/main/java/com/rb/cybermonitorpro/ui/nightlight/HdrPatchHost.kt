@@ -62,6 +62,10 @@ fun HdrPatchHost(
                 HdrPatchSurfaceView(ctx).also {
                     viewRef.value = it
                     it.attachRegistry(scope)
+                    // ★ R6 修复：factory 内立即 setActive(true)——消除「挂载 → LaunchedEffect(effective)
+                    //   生效」之间的时序窗口（该窗口内 setPatches 已到但 _enabled=false，首帧被门控吞掉，
+                    //   导致 HDR 贴片点亮晚一拍/漏一帧）。LaunchedEffect(effective) 保留不动作为闸门回退。
+                    it.setActive(true)
                 }
             }
         )
