@@ -1419,6 +1419,9 @@
     <string name="sensor_list_count">%1$d sensors · Tap for details</string>
     <string name="sensor_list_title">Sensor Information</string>
     <string name="sensor_search_hint">Search sensors…</string>
+    <string name="sensor_perm_activity_hint">Step sensors need Activity permission (Android 10+)</string>
+    <string name="sensor_perm_activity_grant">Grant</string>
+    <string name="sensor_list_footnote">OIS / EIS stabilization is a camera capability — see Device › Camera</string>
     <string name="sensor_mode_continuous">Continuous (CONTINUOUS)</string>
     <string name="sensor_mode_on_change">On-change (ON_CHANGE)</string>
     <string name="sensor_mode_one_shot">One-shot (ONE_SHOT)</string>

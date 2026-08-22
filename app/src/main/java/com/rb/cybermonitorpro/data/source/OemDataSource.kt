@@ -4,6 +4,7 @@ import android.content.Context
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CaptureRequest
 import android.hardware.display.DisplayManager
 import android.os.Build
 import android.util.Log
@@ -32,24 +33,6 @@ class OemDataSource(private val context: Context? = null) {
             try {
                 spClass = Class.forName("android.os.SystemProperties")
                 spGet = spClass?.getMethod("get", String::class.java, String::class.java)
-            } catch (_: Throwable) {}
-        }
-
-        // Camera2 API 28+ 常量反射缓存 — 避免低版本设备 dex 验证崩溃
-        private var cachedOisKey: Any? = null
-        private var cachedOisModeOn: Int = -1
-        private var oisKeyResolved = false
-
-        private fun resolveCamera2Constants() {
-            if (oisKeyResolved) return
-            oisKeyResolved = true
-            try {
-                val field = CameraCharacteristics::class.java.getField("LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION")
-                cachedOisKey = field.get(null)
-            } catch (_: Throwable) {}
-            try {
-                val field = CameraCharacteristics::class.java.getField("LENS_OPTICAL_STABILIZATION_MODE_ON")
-                cachedOisModeOn = field.getInt(null)
             } catch (_: Throwable) {}
         }
     }
@@ -603,17 +586,16 @@ class OemDataSource(private val context: Context? = null) {
                         if (isFront && info.cameraFrontAperture.isEmpty()) info.cameraFrontAperture = fStr
                     }
 
-                    // OIS 光学防抖 — 使用反射访问 API 28+ 常量
-                    resolveCamera2Constants()
-                    if (cachedOisKey != null) {
-                        @Suppress("UNCHECKED_CAST")
-                        val oisKey = cachedOisKey as CameraCharacteristics.Key<IntArray>
-                        val oisModes = chars.get(oisKey)
-                        if (oisModes != null && cachedOisModeOn >= 0) {
-                            if (oisModes.contains(cachedOisModeOn)) {
-                                info.cameraOpticalStabilization = true
-                            }
-                        }
+                    // OIS 光学防抖
+                    // ★ 修复 (2026-08-22, 同 DeviceDetailDataSource): 原反射恒失败 —
+                    //   "LENS_OPTICAL_STABILIZATION_MODE_ON" 常量位于 CameraMetadata 父类
+                    //   而非 CameraCharacteristics, 反射恒抛 NoSuchFieldException 被吞 →
+                    //   cachedOisModeOn 恒 -1 → OIS 从未点亮。两常量均 API 21+ (minSdk 21),
+                    //   直接引用即可。公开 SDK Key 常量名为 LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION
+                    //   (无 _MODES 后缀, javap 核验)。
+                    val oisModes = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)
+                    if (oisModes != null && oisModes.contains(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON)) {
+                        info.cameraOpticalStabilization = true
                     }
 
                     // 闪光灯

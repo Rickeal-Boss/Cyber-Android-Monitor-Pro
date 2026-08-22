@@ -98,7 +98,7 @@ class SensorDataSource(private val context: Context) {
                     isDynamic = safeIsDynamic(sensor),
                     isWakeUp = sensor.isWakeUpSensor,
                     reportingMode = sensor.reportingMode,
-                    // API 21+: 字符串类型标识, 用于 OEM 私有传感器的名称回退
+                    // API 20+: 字符串类型标识, 用于 OEM 私有传感器的名称回退
                     stringType = try { sensor.stringType ?: "" } catch (_: Throwable) { "" }
                 )
             )

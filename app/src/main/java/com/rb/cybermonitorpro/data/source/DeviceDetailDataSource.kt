@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CaptureRequest
 import android.hardware.display.DisplayManager
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
@@ -313,24 +314,6 @@ class DeviceDetailDataSource(private val context: Context) {
             "0x804" to CpuArchInfo("Kryo 670 Gold", "ARMv8.2-A", 64, 64, 512, 0),
             "0x805" to CpuArchInfo("Kryo 670 Silver", "ARMv8.2-A", 16, 16, 128, 0),
         )
-
-        // Camera2 API 28+ 常量反射 — 避免低版本设备 dex 验证崩溃
-        private var cachedOisKey: Any? = null
-        private var cachedOisModeOn: Int = -1
-        private var camera2Resolved = false
-
-        private fun resolveCamera2Constants() {
-            if (camera2Resolved) return
-            camera2Resolved = true
-            try {
-                val f = CameraCharacteristics::class.java.getField("LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION")
-                cachedOisKey = f.get(null)
-            } catch (_: Throwable) {}
-            try {
-                val f = CameraCharacteristics::class.java.getField("LENS_OPTICAL_STABILIZATION_MODE_ON")
-                cachedOisModeOn = f.getInt(null)
-            } catch (_: Throwable) {}
-        }
     }
 
     data class CpuArchInfo(
@@ -1641,15 +1624,26 @@ class DeviceDetailDataSource(private val context: Context) {
                 }
             }
 
-            resolveCamera2Constants()
-            if (cachedOisKey != null) {
-                @Suppress("UNCHECKED_CAST")
-                val oisModes = chars.get(cachedOisKey as CameraCharacteristics.Key<IntArray>)
-                sensor.oisSupported = oisModes?.any { it == cachedOisModeOn } == true
-            }
+            // ★ 修复 (2026-08-22): 原反射恒失败 — "LENS_OPTICAL_STABILIZATION_MODE_ON" 常量位于
+            //   CameraMetadata (CaptureRequest/CameraCharacteristics 共同父类) 而非 CameraCharacteristics,
+            //   反射恒抛 NoSuchFieldException 被吞 → cachedOisModeOn 恒 -1 → OIS 从未点亮。
+            //   两常量均 API 21+ (minSdk 21), 直接引用即可, 无需反射。
+            //   注: 公开 SDK 中 Key 常量名为 LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION (无 _MODES
+            //   后缀; AOSP 源码内部名带 _MODES, 以 android.jar 实际字段为准, javap 核验 2026-08-22)。
+            val oisModes = chars.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)
+            sensor.oisSupported = oisModes?.any { it == CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON } == true
 
             val eisModes = chars.get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
             sensor.eisSupported = eisModes?.any { it == CameraCharacteristics.CONTROL_VIDEO_STABILIZATION_MODE_ON } == true
+
+            // API 33+: 预览防抖 (Preview Stabilization) 也计入 EIS 能力
+            // (公开 SDK 无 CONTROL_AVAILABLE_PREVIEW_STABILIZATION_MODES Key; 设备支持预览防抖时
+            //  以 CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES 列出 PREVIEW_STABILIZATION 枚举值表示)
+            if (Build.VERSION.SDK_INT >= 33) {
+                if (eisModes?.any { it == CameraCharacteristics.CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION } == true) {
+                    sensor.eisSupported = true
+                }
+            }
 
             sensor.flashSupported = chars.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
 

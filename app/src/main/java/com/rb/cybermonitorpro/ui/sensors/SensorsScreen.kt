@@ -1,6 +1,11 @@
 package com.rb.cybermonitorpro.ui.sensors
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
@@ -8,6 +13,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +22,8 @@ import androidx.compose.foundation.layout.widthIn
 import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.SensorItemInfo
 import com.rb.cybermonitorpro.data.model.SensorTypeMeta
@@ -71,14 +80,16 @@ fun SensorsScreen(
 
     SensorListContent(
         sensors = sensors,
-        onSensorClick = { sensor, origin -> onNavigateToSensor(sensor, origin) }
+        onSensorClick = { sensor, origin -> onNavigateToSensor(sensor, origin) },
+        onRefreshSensors = { viewModel.refreshSensors() }
     )
 }
 
 @Composable
 private fun SensorListContent(
     sensors: List<SensorItemInfo>,
-    onSensorClick: (SensorItemInfo, Offset) -> Unit
+    onSensorClick: (SensorItemInfo, Offset) -> Unit,
+    onRefreshSensors: () -> Unit
 ) {
     val ctx = LocalContext.current
     // pre20 红线: 列表滚动必须用 rememberHdrScrollState (上报垂直滚动状态给 HDR 贴片渲染)
@@ -111,6 +122,23 @@ private fun SensorListContent(
         }
     }
 
+    // ── ACTIVITY_RECOGNITION (API 29+): 步数传感器运行时权限 ──
+    // 未授权时 STEP_COUNTER/STEP_DETECTOR 直接不出现在 getSensorList, 授权后需重采列表
+    var permGranted by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < 29 ||
+                ContextCompat.checkSelfPermission(
+                    ctx, Manifest.permission.ACTIVITY_RECOGNITION
+                ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val permLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        permGranted = granted
+        if (granted) onRefreshSensors()
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
@@ -135,6 +163,32 @@ private fun SensorListContent(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
+        // ── 权限提示行: API 29+ 未授权 ACTIVITY_RECOGNITION 时显示, 授权后消失 ──
+        if (Build.VERSION.SDK_INT >= 29 && !permGranted) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    stringResource(R.string.sensor_perm_activity_hint),
+                    fontSize = 12.sp,
+                    color = WarningNeon,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = { permLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
+                ) {
+                    Text(
+                        stringResource(R.string.sensor_perm_activity_grant),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+
         // ── 滚动列表 (完整列表) ──
         Column(
             modifier = Modifier
@@ -156,6 +210,13 @@ private fun SensorListContent(
                     modifier = Modifier.staggeredSwipe(idx)
                 )
             }
+
+            // OIS/EIS 预期管理: 用户在传感器页找不到 OIS(它属相机子系统, 不在 Sensor API)
+            Text(
+                stringResource(R.string.sensor_list_footnote),
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
         }
     }
 }

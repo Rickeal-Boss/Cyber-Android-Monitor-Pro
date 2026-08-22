@@ -1417,6 +1417,9 @@
     <string name="sensor_list_count">%1$d 個感測器 · 點選檢視詳細資料</string>
     <string name="sensor_list_title">感測器資訊</string>
     <string name="sensor_search_hint">搜尋感測器…</string>
+    <string name="sensor_perm_activity_hint">Android 10+ 需「身體活動」權限才能讀取步數感測器</string>
+    <string name="sensor_perm_activity_grant">授權</string>
+    <string name="sensor_list_footnote">OIS/EIS 防抖屬相機能力，請至「裝置 → 相機」查看</string>
     <string name="sensor_mode_continuous">連續 (CONTINUOUS)</string>
     <string name="sensor_mode_on_change">變化時 (ON_CHANGE)</string>
     <string name="sensor_mode_one_shot">單次 (ONE_SHOT)</string>

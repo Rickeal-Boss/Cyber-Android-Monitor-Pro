@@ -17,7 +17,7 @@ data class SensorItemInfo(
     val isDynamic: Boolean = false,
     val isWakeUp: Boolean = false,
     val reportingMode: Int = -1,
-    /** API 21+ Sensor.getStringType(), 如 "android.sensor.accelerometer" 或 OEM 私有 "com.vendor.sensor.xxx" */
+    /** API 20+ Sensor.getStringType(), 如 "android.sensor.accelerometer" 或 OEM 私有 "com.vendor.sensor.xxx" */
     val stringType: String = ""
     // ── 注意: 传感器显示名称统一通过 SensorTypeMeta.getDisplayName(type, context) 获取,
     //         不存储到 data class 中, 以保持单一数据源、支持运行时 i18n 切换.

@@ -20,6 +20,9 @@
     <!-- 电话状态（SIM信息，本地读取） -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
 
+    <!-- 身体活动（API 29+ 步数传感器运行时权限, 未授权时步数计数器/步测器不出现在传感器列表） -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+
     <!-- 蓝牙（本地设备） -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />

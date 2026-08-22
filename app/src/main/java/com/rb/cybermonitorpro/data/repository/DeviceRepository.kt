@@ -197,6 +197,19 @@ class DeviceRepository(context: Context) {
         }
     }
 
+    /**
+     * ★ 新增 (2026-08-22): 仅重采「传感器列表」一块。
+     * 用于 ACTIVITY_RECOGNITION 运行时权限授予后立刻回填步数传感器
+     * (API 29+ 未授权时 STEP_COUNTER/STEP_DETECTOR 直接不出现在 getSensorList),
+     * 避免为它重跑 loadStaticData() 的全量静态采集。
+     */
+    fun refreshSensors() {
+        scope.launch(Dispatchers.IO) {
+            runCatching { sensorsLiveData.postValue(sensorDataSource.getAllSensors()) }
+                .onFailure { e -> Log.w(TAG, "传感器列表刷新失败", e) }
+        }
+    }
+
     // ═══════ 核心采集块 (写入 SharedFlow + LiveData + History) ═══════
 
     private suspend fun collectCpuBlock() {
