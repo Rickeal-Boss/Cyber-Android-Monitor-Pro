@@ -313,6 +313,27 @@
     <string name="sensor_type_gyroscope_uncalibrated">陀螺儀(未校準)</string>
     <string name="sensor_type_geomagnetic_rotation_vector">地磁旋轉向量感測器</string>
     <string name="sensor_type_accelerometer_uncalibrated">加速度感測器(未校準)</string>
+    <string name="sensor_type_temperature">溫度感測器</string>
+    <string name="sensor_type_significant_motion">顯著運動偵測</string>
+    <string name="sensor_type_heart_rate">心率感測器</string>
+    <string name="sensor_type_pose_6dof">6DOF 姿態感測器</string>
+    <string name="sensor_type_stationary_detect">靜止偵測</string>
+    <string name="sensor_type_motion_detect">運動偵測</string>
+    <string name="sensor_type_heart_beat">心跳感測器</string>
+    <string name="sensor_type_offbody_detect">離身偵測感測器</string>
+    <string name="sensor_type_hinge_angle">鉸鏈角度感測器</string>
+    <string name="sensor_type_head_tracker">頭部追蹤感測器</string>
+    <string name="sensor_type_accel_limited_axes">加速度感測器(受限軸)</string>
+    <string name="sensor_type_gyro_limited_axes">陀螺儀(受限軸)</string>
+    <string name="sensor_type_accel_limited_axes_uncal">加速度感測器(受限軸,未校準)</string>
+    <string name="sensor_type_gyro_limited_axes_uncal">陀螺儀(受限軸,未校準)</string>
+    <string name="sensor_type_heading">航向角感測器</string>
+    <string name="sensor_axis_event">事件</string>
+    <string name="sensor_axis_state">狀態</string>
+    <string name="sensor_axis_confidence">置信度</string>
+    <string name="sensor_axis_angle">角度</string>
+    <string name="sensor_axis_heading">航向</string>
+    <string name="sensor_axis_heart_rate">心率</string>
 
     <!-- 感測器軸標籤 -->
     <string name="sensor_axis_illuminance">照度</string>
@@ -1395,6 +1416,7 @@
     <string name="sensor_info_version">版本</string>
     <string name="sensor_list_count">%1$d 個感測器 · 點選檢視詳細資料</string>
     <string name="sensor_list_title">感測器資訊</string>
+    <string name="sensor_search_hint">搜尋感測器…</string>
     <string name="sensor_mode_continuous">連續 (CONTINUOUS)</string>
     <string name="sensor_mode_on_change">變化時 (ON_CHANGE)</string>
     <string name="sensor_mode_one_shot">單次 (ONE_SHOT)</string>

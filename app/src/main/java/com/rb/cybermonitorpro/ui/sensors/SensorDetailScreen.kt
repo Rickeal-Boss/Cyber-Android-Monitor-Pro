@@ -87,7 +87,15 @@ fun SensorDetailContent(
                         SensorTypeMeta.PROXIMITY,
                         SensorTypeMeta.PRESSURE,
                         SensorTypeMeta.HUMIDITY,
-                        SensorTypeMeta.AMBIENT_TEMPERATURE -> 0
+                        SensorTypeMeta.AMBIENT_TEMPERATURE,
+                        SensorTypeMeta.TEMPERATURE,
+                        SensorTypeMeta.HEART_RATE,
+                        SensorTypeMeta.HINGE_ANGLE,
+                        SensorTypeMeta.HEADING,
+                        SensorTypeMeta.STATIONARY_DETECT,
+                        SensorTypeMeta.MOTION_DETECT,
+                        SensorTypeMeta.HEART_BEAT,
+                        SensorTypeMeta.LOW_LATENCY_OFFBODY_DETECT -> 0
                         else -> -1
                     }
                     if (idx >= 0 && idx < ld.valueCount && !ld.values[idx].isNaN()) {
@@ -131,7 +139,7 @@ fun SensorDetailContent(
                 Column {
                     // ── 传感器名称 ──
                     Text(
-                        SensorTypeMeta.getDisplayName(sensor.type, LocalContext.current),
+                        SensorTypeMeta.getDisplayName(sensor.type, LocalContext.current, sensor.stringType),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -237,15 +245,34 @@ private fun SensorValueCard(
                         SensorTypeMeta.LIGHT -> "\u2600"
                         SensorTypeMeta.PROXIMITY -> "\u2194"
                         SensorTypeMeta.GYROSCOPE,
-                        SensorTypeMeta.GYROSCOPE_UNCALIBRATED -> "\u21BB"
+                        SensorTypeMeta.GYROSCOPE_UNCALIBRATED,
+                        SensorTypeMeta.GYROSCOPE_LIMITED_AXES,
+                        SensorTypeMeta.GYROSCOPE_LIMITED_AXES_UNCALIBRATED -> "\u21BB"
                         SensorTypeMeta.ACCELEROMETER,
                         SensorTypeMeta.LINEAR_ACCELERATION,
-                        SensorTypeMeta.ACCELEROMETER_UNCALIBRATED -> "\u2195"
+                        SensorTypeMeta.ACCELEROMETER_UNCALIBRATED,
+                        SensorTypeMeta.ACCELEROMETER_LIMITED_AXES,
+                        SensorTypeMeta.ACCELEROMETER_LIMITED_AXES_UNCALIBRATED -> "\u2195"
                         SensorTypeMeta.GRAVITY -> "\u2B07"
                         SensorTypeMeta.ORIENTATION -> "\u2316"
                         SensorTypeMeta.ROTATION_VECTOR,
                         SensorTypeMeta.GAME_ROTATION_VECTOR,
-                        SensorTypeMeta.GEOMAGNETIC_ROTATION_VECTOR -> "\u27F3"
+                        SensorTypeMeta.GEOMAGNETIC_ROTATION_VECTOR,
+                        SensorTypeMeta.POSE_6DOF,
+                        SensorTypeMeta.HEAD_TRACKER -> "\u27F3"
+                        SensorTypeMeta.PRESSURE -> "\u25BC"
+                        SensorTypeMeta.HUMIDITY -> "\u2248"
+                        SensorTypeMeta.AMBIENT_TEMPERATURE,
+                        SensorTypeMeta.TEMPERATURE -> "\u00B0"
+                        SensorTypeMeta.STEP_COUNTER,
+                        SensorTypeMeta.STEP_DETECTOR -> "\u21C5"
+                        SensorTypeMeta.HEART_RATE,
+                        SensorTypeMeta.HEART_BEAT -> "\u2665"
+                        SensorTypeMeta.HINGE_ANGLE -> "\u2220"
+                        SensorTypeMeta.HEADING -> "\u2191"
+                        SensorTypeMeta.SIGNIFICANT_MOTION,
+                        SensorTypeMeta.MOTION_DETECT -> "\u26A1"
+                        SensorTypeMeta.STATIONARY_DETECT -> "\u25A0"
                         else -> "\u25C9"
                     },
                     fontSize = 22.sp
@@ -264,9 +291,17 @@ private fun SensorValueCard(
                         SensorTypeMeta.PROXIMITY -> "%.1f".format(value)
                         SensorTypeMeta.PRESSURE -> "%.1f".format(value)
                         SensorTypeMeta.HUMIDITY -> "%.1f".format(value)
-                        SensorTypeMeta.AMBIENT_TEMPERATURE -> "%.1f".format(value)
+                        SensorTypeMeta.AMBIENT_TEMPERATURE,
+                        SensorTypeMeta.TEMPERATURE -> "%.1f".format(value)
+                        SensorTypeMeta.HEART_RATE,
                         SensorTypeMeta.STEP_COUNTER,
-                        SensorTypeMeta.STEP_DETECTOR -> "%.0f".format(value)
+                        SensorTypeMeta.STEP_DETECTOR,
+                        SensorTypeMeta.SIGNIFICANT_MOTION,
+                        SensorTypeMeta.STATIONARY_DETECT,
+                        SensorTypeMeta.MOTION_DETECT,
+                        SensorTypeMeta.LOW_LATENCY_OFFBODY_DETECT -> "%.0f".format(value)
+                        SensorTypeMeta.HINGE_ANGLE,
+                        SensorTypeMeta.HEADING -> "%.1f".format(value)
                         else -> "%.2f".format(value)
                     }
                 } else "---"
@@ -389,10 +424,14 @@ private fun SensorValueCard(
                             when (meta) {
                                 SensorTypeMeta.ORIENTATION,
                                 SensorTypeMeta.GYROSCOPE,
-                                SensorTypeMeta.GYROSCOPE_UNCALIBRATED -> "%.4f".format(value)
+                                SensorTypeMeta.GYROSCOPE_UNCALIBRATED,
+                                SensorTypeMeta.GYROSCOPE_LIMITED_AXES,
+                                SensorTypeMeta.GYROSCOPE_LIMITED_AXES_UNCALIBRATED -> "%.4f".format(value)
                                 SensorTypeMeta.ROTATION_VECTOR,
                                 SensorTypeMeta.GAME_ROTATION_VECTOR,
-                                SensorTypeMeta.GEOMAGNETIC_ROTATION_VECTOR -> "%.6f".format(value)
+                                SensorTypeMeta.GEOMAGNETIC_ROTATION_VECTOR,
+                                SensorTypeMeta.POSE_6DOF,
+                                SensorTypeMeta.HEAD_TRACKER -> "%.6f".format(value)
                                 else -> "%.2f".format(value)
                             }
                         } else "---"
@@ -801,7 +840,7 @@ private fun SensorInfoCard(sensor: SensorItemInfo, meta: SensorTypeMeta?) {
             Spacer(Modifier.height(12.dp))
 
             infoRow(stringResource(R.string.sensor_info_id), sensor.sensorId.toString())
-            infoRow(stringResource(R.string.sensor_info_name), SensorTypeMeta.getDisplayName(sensor.type, LocalContext.current))
+            infoRow(stringResource(R.string.sensor_info_name), SensorTypeMeta.getDisplayName(sensor.type, LocalContext.current, sensor.stringType))
             infoRow(stringResource(R.string.sensor_info_hardware), sensor.name)
             infoRow(stringResource(R.string.sensor_info_type_id), "${sensor.type}  (${reportingModeName(sensor.reportingMode)})")
             infoRow(stringResource(R.string.sensor_info_vendor), sensor.vendor.ifEmpty { sensor.name.split(" ").firstOrNull() ?: stringResource(R.string.common_unknown) })

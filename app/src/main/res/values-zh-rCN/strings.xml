@@ -308,6 +308,27 @@
     <string name="sensor_type_gyroscope_uncalibrated">陀螺仪(未校准)</string>
     <string name="sensor_type_geomagnetic_rotation_vector">地磁旋转矢量传感器</string>
     <string name="sensor_type_accelerometer_uncalibrated">加速度传感器(未校准)</string>
+    <string name="sensor_type_temperature">温度传感器</string>
+    <string name="sensor_type_significant_motion">显著运动检测</string>
+    <string name="sensor_type_heart_rate">心率传感器</string>
+    <string name="sensor_type_pose_6dof">6DOF 姿态传感器</string>
+    <string name="sensor_type_stationary_detect">静止检测</string>
+    <string name="sensor_type_motion_detect">运动检测</string>
+    <string name="sensor_type_heart_beat">心跳传感器</string>
+    <string name="sensor_type_offbody_detect">离身检测传感器</string>
+    <string name="sensor_type_hinge_angle">铰链角度传感器</string>
+    <string name="sensor_type_head_tracker">头部追踪传感器</string>
+    <string name="sensor_type_accel_limited_axes">加速度传感器(受限轴)</string>
+    <string name="sensor_type_gyro_limited_axes">陀螺仪(受限轴)</string>
+    <string name="sensor_type_accel_limited_axes_uncal">加速度传感器(受限轴,未校准)</string>
+    <string name="sensor_type_gyro_limited_axes_uncal">陀螺仪(受限轴,未校准)</string>
+    <string name="sensor_type_heading">航向角传感器</string>
+    <string name="sensor_axis_event">事件</string>
+    <string name="sensor_axis_state">状态</string>
+    <string name="sensor_axis_confidence">置信度</string>
+    <string name="sensor_axis_angle">角度</string>
+    <string name="sensor_axis_heading">航向</string>
+    <string name="sensor_axis_heart_rate">心率</string>
 
     <!-- 传感器轴标签 -->
     <string name="sensor_axis_illuminance">照度</string>
@@ -1390,6 +1411,7 @@
     <string name="sensor_info_version">版本</string>
     <string name="sensor_list_count">%1$d 个传感器 · 点击查看详情</string>
     <string name="sensor_list_title">传感器信息</string>
+    <string name="sensor_search_hint">搜索传感器…</string>
     <string name="sensor_mode_continuous">连续 (CONTINUOUS)</string>
     <string name="sensor_mode_on_change">变化时 (ON_CHANGE)</string>
     <string name="sensor_mode_one_shot">单次 (ONE_SHOT)</string>

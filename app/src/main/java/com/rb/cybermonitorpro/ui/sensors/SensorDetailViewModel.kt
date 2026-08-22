@@ -55,8 +55,10 @@ class SensorDetailViewModel(
     private val _altitudeUi = MutableLiveData<AltitudeUiState>()
     val altitudeUi: LiveData<AltitudeUiState> get() = _altitudeUi
     private var pressureEma: Double? = null
-    private var lastAltitudeM: Double? = null
-    private var lastAltitudeAtMs: Long = 0L
+    // 升降速率基准: 仅在每秒计算速率时更新, 不随每个样本刷新
+    private var rateBaseAltM: Double? = null
+    private var rateBaseAtMs: Long = 0L
+    private var rateEma: Double? = null   // 速率 EMA 平滑 (α=0.3), 抑制气压噪声抖动
 
     // ── 步数状态（STEP_COUNTER / STEP_DETECTOR）──
     private val _stepUi = MutableLiveData<StepUiState>()
@@ -103,7 +105,7 @@ class SensorDetailViewModel(
      */
     fun onSample(data: SensorLiveData) {
         when (data.sensorType) {
-            Sensor.TYPE_PRESSURE -> onPressureSample(data.x.toDouble())
+            Sensor.TYPE_PRESSURE -> onPressureSample(data.x.toDouble(), data.timestampMs)
             Sensor.TYPE_STEP_COUNTER -> {
                 val ledger = stepStore.onHardwareReading(data.x.toLong())
                 pushStepUi(ledger.totalSteps, ledger.todaySteps, ledger.stepsSinceBoot, fromDetector = false)
@@ -131,19 +133,32 @@ class SensorDetailViewModel(
         return when (meta) {
             SensorTypeMeta.ORIENTATION,
             SensorTypeMeta.GYROSCOPE,
-            SensorTypeMeta.GYROSCOPE_UNCALIBRATED -> "%.4f".format(v)
+            SensorTypeMeta.GYROSCOPE_UNCALIBRATED,
+            SensorTypeMeta.GYROSCOPE_LIMITED_AXES,
+            SensorTypeMeta.GYROSCOPE_LIMITED_AXES_UNCALIBRATED -> "%.4f".format(v)
             SensorTypeMeta.ROTATION_VECTOR,
             SensorTypeMeta.GAME_ROTATION_VECTOR,
             SensorTypeMeta.GEOMAGNETIC_ROTATION_VECTOR -> "%.6f".format(v)
             SensorTypeMeta.STEP_COUNTER,
-            SensorTypeMeta.STEP_DETECTOR -> "%.0f".format(v)
+            SensorTypeMeta.STEP_DETECTOR,
+            SensorTypeMeta.SIGNIFICANT_MOTION,
+            SensorTypeMeta.HEART_RATE,
+            SensorTypeMeta.STATIONARY_DETECT,
+            SensorTypeMeta.MOTION_DETECT,
+            SensorTypeMeta.LOW_LATENCY_OFFBODY_DETECT -> "%.0f".format(v)
+            SensorTypeMeta.PRESSURE,
+            SensorTypeMeta.HUMIDITY,
+            SensorTypeMeta.AMBIENT_TEMPERATURE,
+            SensorTypeMeta.TEMPERATURE,
+            SensorTypeMeta.HINGE_ANGLE,
+            SensorTypeMeta.HEADING -> "%.1f".format(v)
             else -> "%.2f".format(v)
         }
     }
 
     // ═══════ 气压海拔分支 ═══════
 
-    private fun onPressureSample(pHpa: Double) {
+    private fun onPressureSample(pHpa: Double, eventTsMs: Long) {
         if (pHpa.isNaN() || pHpa <= 0.0) return
         val ema = AltitudeComputer.ema(pHpa, pressureEma)
         pressureEma = ema
@@ -156,15 +171,28 @@ class SensorDetailViewModel(
             ?: AltitudeComputer.SEA_LEVEL_HPA
         val absolute = AltitudeComputer.pressureToAltitudeMeters(ema, gpsP0)
 
-        val now = System.currentTimeMillis()
+        // 使用传感器事件时间戳 (elapsedRealtime 基准, 单调递增), 避免墙钟 NTP 跳变影响速率
+        val now = if (eventTsMs > 0L) eventTsMs else System.currentTimeMillis()
         var rate: Double? = null
-        val prevAlt = lastAltitudeM
-        if (prevAlt != null && now > lastAltitudeAtMs) {
-            val dtMin = (now - lastAltitudeAtMs) / 60000.0
-            if (dtMin >= 1.0 / 60.0) rate = (relative - prevAlt) / dtMin
+        // ★ 修复: 原实现 lastAltitudeAtMs 每样本刷新, 导致 1s 阈值永远不满足,
+        //   速率恒为 null (UI 显示 "---"). 改为独立基准点, 每秒计算一次.
+        val baseAlt = rateBaseAltM
+        if (baseAlt == null) {
+            rateBaseAltM = relative
+            rateBaseAtMs = now
+        } else if (now - rateBaseAtMs >= 1000L) {
+            val dtMin = (now - rateBaseAtMs) / 60000.0
+            if (dtMin > 0.0) {
+                val rawRate = (relative - baseAlt) / dtMin
+                // EMA 平滑 (α=0.3): 1s 间隔原始速率仍有 ±0.1 hPa 噪声 → ±8 m/min 抖动
+                rateEma = rateEma?.let { 0.3 * rawRate + 0.7 * it } ?: rawRate
+                rate = rateEma
+            }
+            rateBaseAltM = relative
+            rateBaseAtMs = now
+        } else {
+            rate = rateEma   // 间隔内复用上一次平滑值, UI 不闪 "---"
         }
-        lastAltitudeM = relative
-        lastAltitudeAtMs = now
 
         _altitudeUi.postValue(
             AltitudeUiState(
@@ -194,9 +222,20 @@ class SensorDetailViewModel(
         val ema = pressureEma ?: run {
             return false
         }
-        val gpsAlt = repo.gpsLiveData.value?.altitude ?: Double.NaN
-        if (gpsAlt.isNaN()) {
+        val gps = repo.gpsLiveData.value
+        val gpsAlt = gps?.altitude ?: Double.NaN
+        if (gps == null || gpsAlt.isNaN() || !gps.fixAcquired) {
             // 按需开启 GPS（离开页面时回停），下次定点成功后再校准
+            if (!gpsEnabledForCalibration) {
+                gpsEnabledForCalibration = true
+                runCatching { repo.enableGps() }
+            }
+            return false
+        }
+        // ★ GPS 海拔精度守卫: 水平精度 > 20m 时垂直误差通常 > 30m,
+        //   反算 P0 偏差可达 0.4 hPa → 海拔偏差 > 3m, 拒绝标定并提示重试.
+        //   accuracy=NaN (部分 NETWORK_PROVIDER 定位) 同样拒绝.
+        if (gps.accuracy.isNaN() || gps.accuracy > GPS_CALIB_MAX_ACCURACY_M) {
             if (!gpsEnabledForCalibration) {
                 gpsEnabledForCalibration = true
                 runCatching { repo.enableGps() }
@@ -216,7 +255,11 @@ class SensorDetailViewModel(
         val refP0 = settings.baroReferenceP0Hpa.takeIf { it > 0f }?.toDouble()
             ?: AltitudeComputer.SEA_LEVEL_HPA
         val relative = AltitudeComputer.pressureToAltitudeMeters(ema, refP0)
-        lastAltitudeM = relative
+        // 校准改变了海拔零点, 重置速率基准避免下一帧产生假爬升/下降
+        // 使用 elapsedRealtime 与 SensorEvent.timestamp 同一时钟域
+        rateBaseAltM = relative
+        rateBaseAtMs = android.os.SystemClock.elapsedRealtime()
+        rateEma = null
         val gpsP0 = settings.baroGpsCalibratedP0Hpa.takeIf { it > 0f }?.toDouble()
             ?: AltitudeComputer.SEA_LEVEL_HPA
         _altitudeUi.postValue(
@@ -224,7 +267,7 @@ class SensorDetailViewModel(
                 emaPressureHpa = ema,
                 relativeAltitudeM = relative,
                 absoluteAltitudeM = AltitudeComputer.pressureToAltitudeMeters(ema, gpsP0),
-                rateMPerMin = _altitudeUi.value?.rateMPerMin,
+                rateMPerMin = null,
                 referenceSet = settings.baroReferenceP0Hpa > 0f,
                 gpsCalibrated = settings.baroGpsCalibratedP0Hpa > 0f,
             )
@@ -257,5 +300,10 @@ class SensorDetailViewModel(
     override fun onCleared() {
         super.onCleared()
         repo.disableSensor()
+    }
+
+    companion object {
+        /** GPS 校准允许的最大水平精度 (m); 超过此值认为 GPS 海拔不可靠 */
+        private const val GPS_CALIB_MAX_ACCURACY_M = 20f
     }
 }

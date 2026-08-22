@@ -97,7 +97,9 @@ class SensorDataSource(private val context: Context) {
                     version = sensor.version,
                     isDynamic = safeIsDynamic(sensor),
                     isWakeUp = sensor.isWakeUpSensor,
-                    reportingMode = sensor.reportingMode
+                    reportingMode = sensor.reportingMode,
+                    // API 21+: 字符串类型标识, 用于 OEM 私有传感器的名称回退
+                    stringType = try { sensor.stringType ?: "" } catch (_: Throwable) { "" }
                 )
             )
         }
@@ -112,8 +114,14 @@ class SensorDataSource(private val context: Context) {
         val manager = sm ?: return
         stopListening() // 确保上一监听已停止
 
+        // ★ getDefaultSensor(type) 按 AOSP 实现只返回特定 wake-up 属性的传感器:
+        //   对 TYPE_STEP_DETECTOR / TYPE_PRESSURE 等类型, 它仅查找 non-wake-up 传感器,
+        //   若设备仅暴露 wake-up 版本则返回 null (尽管 getSensorList(TYPE_ALL) 中存在).
+        //   降级链: 默认(non-wake-up) → wake-up 版本 → getSensorList 中任意一个.
         val sensor = try {
             manager.getDefaultSensor(sensorType)
+                ?: manager.getDefaultSensor(sensorType, true)
+                ?: manager.getSensorList(sensorType).firstOrNull()
         } catch (e: Throwable) {
             Log.w(TAG, "获取默认传感器失败 type=$sensorType", e)
             null
@@ -168,7 +176,10 @@ class SensorDataSource(private val context: Context) {
      */
     fun hasSensor(sensorType: Int): Boolean {
         return try {
-            sm?.getDefaultSensor(sensorType) != null
+            val manager = sm ?: return false
+            manager.getDefaultSensor(sensorType) != null
+                || manager.getDefaultSensor(sensorType, true) != null
+                || manager.getSensorList(sensorType).isNotEmpty()
         } catch (e: Throwable) { false }
     }
 

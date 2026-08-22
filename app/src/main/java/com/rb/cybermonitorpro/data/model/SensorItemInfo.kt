@@ -16,7 +16,9 @@ data class SensorItemInfo(
     val version: Int = -1,
     val isDynamic: Boolean = false,
     val isWakeUp: Boolean = false,
-    val reportingMode: Int = -1
+    val reportingMode: Int = -1,
+    /** API 21+ Sensor.getStringType(), 如 "android.sensor.accelerometer" 或 OEM 私有 "com.vendor.sensor.xxx" */
+    val stringType: String = ""
     // ── 注意: 传感器显示名称统一通过 SensorTypeMeta.getDisplayName(type, context) 获取,
     //         不存储到 data class 中, 以保持单一数据源、支持运行时 i18n 切换.
 )
@@ -83,7 +85,23 @@ enum class SensorTypeMeta(
     GAME_ROTATION_VECTOR(15, R.string.sensor_type_game_rotation_vector, ""),
     GYROSCOPE_UNCALIBRATED(16, R.string.sensor_type_gyroscope_uncalibrated, "rad/s"),
     GEOMAGNETIC_ROTATION_VECTOR(20, R.string.sensor_type_geomagnetic_rotation_vector, ""),
-    ACCELEROMETER_UNCALIBRATED(35, R.string.sensor_type_accelerometer_uncalibrated, "m/s²");
+    ACCELEROMETER_UNCALIBRATED(35, R.string.sensor_type_accelerometer_uncalibrated, "m/s²"),
+    // ★ B1: 追加 15 种缺失的标准类型 (Phase1 决断: 只追加、不重排, 原有 19 条位置不动)
+    TEMPERATURE(7, R.string.sensor_type_temperature, "°C", listOf(R.string.sensor_axis_temperature), 1),
+    SIGNIFICANT_MOTION(17, R.string.sensor_type_significant_motion, "", listOf(R.string.sensor_axis_event), 1),
+    HEART_RATE(21, R.string.sensor_type_heart_rate, "bpm", listOf(R.string.sensor_axis_heart_rate), 1),
+    POSE_6DOF(28, R.string.sensor_type_pose_6dof, ""),
+    STATIONARY_DETECT(29, R.string.sensor_type_stationary_detect, "", listOf(R.string.sensor_axis_state), 1),
+    MOTION_DETECT(30, R.string.sensor_type_motion_detect, "", listOf(R.string.sensor_axis_state), 1),
+    HEART_BEAT(31, R.string.sensor_type_heart_beat, "", listOf(R.string.sensor_axis_confidence), 1),
+    LOW_LATENCY_OFFBODY_DETECT(34, R.string.sensor_type_offbody_detect, "", listOf(R.string.sensor_axis_state), 1),
+    HINGE_ANGLE(36, R.string.sensor_type_hinge_angle, "°", listOf(R.string.sensor_axis_angle), 1),
+    HEAD_TRACKER(37, R.string.sensor_type_head_tracker, ""),
+    ACCELEROMETER_LIMITED_AXES(38, R.string.sensor_type_accel_limited_axes, "m/s²"),
+    GYROSCOPE_LIMITED_AXES(39, R.string.sensor_type_gyro_limited_axes, "rad/s"),
+    ACCELEROMETER_LIMITED_AXES_UNCALIBRATED(40, R.string.sensor_type_accel_limited_axes_uncal, "m/s²"),
+    GYROSCOPE_LIMITED_AXES_UNCALIBRATED(41, R.string.sensor_type_gyro_limited_axes_uncal, "rad/s"),
+    HEADING(42, R.string.sensor_type_heading, "°", listOf(R.string.sensor_axis_heading), 1);
 
     companion object {
         fun fromTypeId(type: Int): SensorTypeMeta? = entries.find { it.typeId == type }
@@ -95,6 +113,31 @@ enum class SensorTypeMeta(
             val meta = fromTypeId(type)
             return if (meta != null) context.getString(meta.displayNameResId)
             else context.getString(R.string.sensor_info_type_fallback, type)
+        }
+
+        /**
+         * 带 stringType 回退的显示名称解析.
+         * 对标准类型直接用资源名; 对 OEM 私有传感器 (type ≥ 65536),
+         * 从 Sensor.getStringType() 提取末段并人类可读化.
+         */
+        fun getDisplayName(type: Int, context: Context, stringType: String?): String {
+            val meta = fromTypeId(type)
+            if (meta != null) return context.getString(meta.displayNameResId)
+            if (!stringType.isNullOrEmpty()) {
+                val humanized = humanizeStringType(stringType)
+                if (humanized.isNotEmpty()) return humanized
+            }
+            return context.getString(R.string.sensor_info_type_fallback, type)
+        }
+
+        /** "com.vendor.sensor.motion_recognition" → "Motion Recognition" */
+        private fun humanizeStringType(stringType: String): String {
+            val lastPart = stringType.substringAfterLast('.')
+            if (lastPart.isEmpty()) return ""
+            return lastPart.split('_').joinToString(" ") { word ->
+                if (word.isNotEmpty()) word.substring(0, 1).uppercase() + word.substring(1)
+                else word
+            }
         }
 
         /**
