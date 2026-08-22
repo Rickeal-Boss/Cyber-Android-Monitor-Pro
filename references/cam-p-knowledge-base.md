@@ -3,7 +3,7 @@
 > 由主理人祁研深统一维护。任何分析/开发/审查前先检索本库；与当前代码冲突时以代码为准并回写。
 
 ## 0. 项目基本信息
-- 仓库：github.com/Rickeal-Boss/Cyber-Android-Monitor-Pro，开发分支 `big-fix`。
+- 仓库：github.com/Rickeal-Boss/Cyber-Android-Monitor-Pro；6.0.6 为 GitHub 默认分支，当前开发分支 `6.0.6.3`（基于 6.0.6 @ ef77a4d，2026-08-22 起传感器/海拔修复线）。
 - 技术栈：Kotlin + Jetpack Compose；局部 HDR / TurboXDR（PQ 贴片）在原生 `GLSurfaceView` 上合成。
 - Git author（强制保留）：`Rickeal-Boss (private) <rickealobossdayone@agentmail.com>`。
 
@@ -62,3 +62,18 @@
 ## 8. 协作/工具
 - 频率限制：hy3/reasoning 模型易 429；成员沉默/限流时主理人直接兜底。
 - 团队实例跨会话会丢失，需重建。
+- 子代理 shell stdout 捕获故障（2026-08-22）：Bash/PowerShell 命令执行成功（exit 0）但 stdout 不回显 → 用「输出重定向落盘 + Read 读回」兜底，结论仍来自文件原文。
+
+## 9. 传感器/海拔/搜索框 round（6.0.6.3，2026-08-22，commit 7d29e54 + tag v6.0.6.3-debug-pre1）
+- **B1 枚举策略**：SensorTypeMeta 补类型时**只追加不重排**——fromTypeId 用 `entries.find` 与声明顺序无关，全量重排纯 churn（19 行全动、diff 难审、易错位）。现 34 条覆盖 type 1–42；OEM 私有（type≥65536）靠 `Sensor.getStringType()` 末段 humanize 回退（"com.vendor.sensor.motion_recognition" → "Motion Recognition"），采集时 try-catch 防 OEM 异常。
+- **AOSP getDefaultSensor wake-up 白名单坑**：STEP_DETECTOR(18)/PRESSURE(6) 不在白名单 → 仅暴露 wake-up 版本的设备上 `getDefaultSensor` 返回 null 但 getSensorList 里有。标准解法：三级降级链 `getDefaultSensor(type) ?: getDefaultSensor(type, true) ?: getSensorList(type).firstOrNull()`（均 API 21+，minSdk 21 可直用）。
+- **速率类计算模式**（气压海拔 A1 教训）：速率基准点绝不能每样本刷新（阈值永不满足→速率恒 null→UI 恒 "---"）；改独立基准每秒一算 + EMA(α=0.3) 平滑 + 间隔内复用平滑值防闪烁；时间戳必须用事件单调时钟（`SensorEvent.timestamp/1e6`，elapsedRealtime 域）防 NTP 墙钟跳变；校准/设参考点后必须重置基准并清 EMA（防假爬升尖峰）。GPS 校准守卫：fixAcquired + accuracy≤20m（NaN 拒绝）。
+- **搜索框跳转高亮**（SensorsScreen 方案Y：不过滤列表，输入即定位+脉冲高亮）：
+  - 布局拆分：固定头（标题 Row + 搜索框 + 计数）+ 滚动列表 Column(weight(1f)+verticalScroll)。**拆分后外层 Column 必须补 verticalArrangement=spacedBy**；滚动内容底边距要放 `.verticalScroll()` **之后**的 `.padding(bottom=16.dp)`（=内容 padding，放外面则滚到底贴边）。
+  - 滚动目标公式：`target = cardTop(boundsInRoot) + scrollState.value - listRootTopPx - margin`（boundsInRoot 已含滚动偏移，加回 value 得内容坐标）。
+  - **同尺寸 drawBehind 辉光会被不透明卡片完全遮住**——halo 必须外扩（inflate 8dp：topLeft 负偏移 + size 加倍 + cornerRadius 同步加大），Compose 默认不裁剪越界绘制。
+  - query 必须 trim：纯空格查询会因 haystack 含空格恒命中第一张卡（跳顶+脉冲）。
+  - 脉冲高亮：外层 Box `graphicsLayer(scale)` + `drawBehind(glow)`，Card 修饰符链（cardGradientBorder 外 / cardRipple 内）原样不动。
+- **本机编译环境**（备选，用户允许超时即跳过）：`JAVA_HOME=C:/Users/W2/.jdks/temurin-21.0.12`、`GRADLE_USER_HOME=C:/Users/W2/.gradle`、`./gradlew :app:compileDebugKotlin --offline` 可 BUILD SUCCESSFUL（首次 ~2min / 增量 ~6s）；仅 DeviceDetailDataSource.kt 预存警告。
+- **三语 strings 插入锚点行号各不相同**（values≈L610 / zh-rCN≈L310 / zh-rTW≈L315 的 `sensor_type_accelerometer_uncalibrated` 之后），必须按文本锚点定位、勿硬编码行号。
+- 本轮 CI：tag `v6.0.6.3-debug-pre1` 触发 run 32577515048（结果见每日记忆 2026-08-22）。
