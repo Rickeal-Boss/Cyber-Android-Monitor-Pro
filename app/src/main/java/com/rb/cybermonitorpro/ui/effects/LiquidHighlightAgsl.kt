@@ -5,6 +5,7 @@ import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -90,5 +91,38 @@ internal fun Modifier.liquidHighlightAgslImpl(
         drawRect(brush = ShaderBrush(shader), blendMode = BlendMode.Plus)
     } catch (_: Throwable) {
         // AGSL 不可用时静默降级（不绘制高光，底座 + 涟漪 + 图标仍可见）
+    }
+}
+
+/**
+ * ★ 方案A：overlay-only 变体 —— 仅绘制高光、不包裹 content。
+ * 供 GlowBackButton 的独立高光层使用：高光层是最后一个子节点（z-order 最高），
+ * clip(CircleShape) 在其修饰符链上，避免旧 drawWithContent 结构下
+ * "外层 clip 切掉果冻尖端 / 不 clip 则高光溢出方角"的两难。
+ * 文件隔离规范不变：RuntimeShader 引用不出本文件。
+ */
+@RequiresApi(Build.VERSION_CODES.TIRAMISU)
+internal fun Modifier.liquidHighlightAgslOverlay(
+    shaderHandle: Any?,
+    touchPosProvider: () -> Offset,
+    radiusPx: Float,
+    progressProvider: () -> Float,
+    lightColor: Color,
+): Modifier = this.drawBehind {
+    val progress = progressProvider()
+    val touchPos = touchPosProvider()
+    if (progress < 0.01f || shaderHandle == null) return@drawBehind
+    try {
+        val shader = shaderHandle as? RuntimeShader ?: return@drawBehind
+        shader.apply {
+            setFloatUniform("uSize", size.width, size.height)
+            setFloatUniform("uColor", lightColor.red, lightColor.green, lightColor.blue)
+            setFloatUniform("uRadius", radiusPx)
+            setFloatUniform("uPosition", touchPos.x, touchPos.y)
+            setFloatUniform("uProgress", progress)
+        }
+        drawRect(brush = ShaderBrush(shader), blendMode = BlendMode.Plus)
+    } catch (_: Throwable) {
+        // AGSL 不可用时静默降级（对齐原实现）
     }
 }

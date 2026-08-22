@@ -14,7 +14,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
@@ -35,17 +34,14 @@ import androidx.compose.ui.util.lerp
 import com.rb.cybermonitorpro.HapticUtils
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.ui.effects.createLiquidHighlightShader
-import com.rb.cybermonitorpro.ui.effects.liquidHighlightAgslImpl
+import com.rb.cybermonitorpro.ui.effects.liquidHighlightAgslOverlay
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.math.atan2
-import kotlin.math.cos
-import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.math.tanh
 
@@ -55,7 +51,7 @@ import kotlin.math.tanh
  * 视觉与交互特征（对齐赛博朋克 HUD 暗紫霓虹）：
  * - 深色径向渐变底座 + 左上玻璃反光弧（drawLiquidNeonBase, drawBehind）
  * - 按压 Animatable + spring(0.5, 300) 弹簧反馈（替代旧 animateFloatAsState）
- * - 拖拽 tanh 有界位移 + 非对称方向缩放（graphicsLayer lambda 内读 State，零重组）
+ * - 拖拽 tanh 有界位移 + 旋转感知定向拉伸（果冻形变层 rotationZ 对齐拖拽角、沿拖拽轴非对称 scaleX，graphicsLayer lambda 内读 State，零重组）
  * - 从【触点】发出的 3 层错峰霓虹涟漪（替代旧的单层圆心涟漪）
  * - 按压霓虹描边脉冲（SteelBlue → PurpleBright → Magenta 取消态）
  * - 图标微缩 + 拖拽方向微位移 + 取消态淡出缩小（不旋转）
@@ -274,13 +270,14 @@ fun GlowBackButton(
     val cancelThresholdPx = with(density) { CANCEL_THRESHOLD_DP.dp.toPx() }
     val maxTranslatePx = with(density) { MAX_TRANSLATE_DP.dp.toPx() }
 
-    // 高光修饰符：API 33+ 走 AGSL，否则 Canvas 径向渐变降级；两者均 BlendMode.Plus 加法发光
-    val highlightModifier = if (
+    // 高光层修饰符：overlay-only —— API 33+ 走 AGSL，低版本 Canvas 径向渐变降级（均 BlendMode.Plus 加法发光）；
+    //   置于独立高光层（z-order 最高、clip 到圆），不再 drawWithContent 包裹内容。
+    val highlightOverlayModifier = if (
         enableAgslHighlight &&
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
         shaderHandle != null
     ) {
-        Modifier.liquidHighlightAgslImpl(
+        Modifier.liquidHighlightAgslOverlay(
             shaderHandle = shaderHandle,
             touchPosProvider = { highlightState.touchPosition.value },
             radiusPx = btnSizePx * 1.2f,
@@ -288,9 +285,8 @@ fun GlowBackButton(
             lightColor = NeonPurpleBright
         )
     } else {
-        Modifier.drawWithContent {
-            // 先画底层内容，再画高光（HIGH-1 修正：底座 ~95% 不透明，高光须位于内容之上才可见）
-            drawContent()
+        // ★ 方案A：降级路径同步改 overlay-only（drawBehind，不再 drawWithContent 包裹）
+        Modifier.drawBehind {
             val p = highlightState.pressProgress.value
             if (p > 0.01f) {
                 val tp = highlightState.touchPosition.value
@@ -315,37 +311,14 @@ fun GlowBackButton(
     Box(
         modifier = modifier
             .size(btnSize)
-            // ★ 形变层：scale/translate/alpha 在 RenderNode 级别完成，不触发 onDraw
+            // ★ 方案A 外层：仅位移 + 呼吸 alpha。不旋转、不缩放——
+            //   位移必须在未旋转坐标系中进行，否则方向被旋转偏转。
             .graphicsLayer {
-                val pressProgressValue = highlightState.pressProgress.value
-                val offset = highlightState.offset
-
-                // 静态呼吸
                 alpha = breathAlphaState.value
-
-                // tanh 有界位移（输入小近似线性跟手，输入大渐近饱和）
-                translationX = maxTranslatePx * tanh(TANH_INITIAL_DERIVATIVE * offset.x / maxTranslatePx)
-                translationY = maxTranslatePx * tanh(TANH_INITIAL_DERIVATIVE * offset.y / maxTranslatePx)
-
-                // 非对称方向缩放：拖拽轴拉长，垂直轴不变 → 液体被"扯向一侧"
-                val dragDist = sqrt(offset.x * offset.x + offset.y * offset.y)
-                val normalizedDist = (dragDist / cancelThresholdPx).coerceIn(0f, 1f)
-                val baseScale = lerp(1f, 0.90f, pressProgressValue)
-                val dragAngle = atan2(offset.y, offset.x)
-                scaleX = baseScale + MAX_DRAG_SCALE * abs(cos(dragAngle)) * normalizedDist
-                scaleY = baseScale + MAX_DRAG_SCALE * abs(sin(dragAngle)) * normalizedDist
+                val off = highlightState.offset
+                translationX = maxTranslatePx * tanh(TANH_INITIAL_DERIVATIVE * off.x / maxTranslatePx)
+                translationY = maxTranslatePx * tanh(TANH_INITIAL_DERIVATIVE * off.y / maxTranslatePx)
             }
-            .shadow(
-                elevation = 4.dp,
-                shape = CircleShape,
-                ambientColor = Color.Black.copy(alpha = 0.5f),
-                spotColor = Color.Black.copy(alpha = 0.3f)
-            )
-            .clip(CircleShape)
-            // 暗霓虹底座（drawBehind，位于内容之下）
-            .drawLiquidNeonBase(btnSize = btnSize, pressProgress = highlightState.pressProgress)
-            // 高光（drawWithContent：内容之上 + 加法发光）
-            .then(highlightModifier)
             // 手势（不绘制）
             .then(
                 if (enableDrag) {
@@ -359,7 +332,6 @@ fun GlowBackButton(
                         onCancel = {}
                     )
                 } else {
-                    // enableDrag = false 退化：仅保留按压缩放 + 触点涟漪 + 触觉，无拖拽取消
                     Modifier.pointerInput(Unit) {
                         detectTapGestures(onPress = { offset ->
                             spawnRipples(offset)
@@ -377,60 +349,84 @@ fun GlowBackButton(
             ),
         contentAlignment = Alignment.Center
     ) {
-        // ── Canvas 层: 液态边缘折射 + 霓虹描边脉冲 + 触点多层涟漪 ──
-        Canvas(Modifier.fillMaxSize()) {
-            val cx = size.width / 2f
-            val cy = size.height / 2f
-            val baseR = minOf(cx, cy)
+        // ── ① 果冻形变层：旋转至拖拽方向 + 非对称缩放 ──
+        // 圆形内容（径向渐变/环/描边）对旋转不敏感 → rotationZ 无视觉副作用；
+        // 旋转后局部 +X 恒指向拖拽方向，scaleX 即"沿拖拽轴拉伸"，scaleY 真·垂直轴不变。
+        // 夹角抖动安全：θ 剧烈变化只发生在 |offset|→0 附近，而那里 n→0 → scaleX≈scaleY
+        // （均匀缩放），旋转对圆形内容不可见，故无需角度死区。
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .graphicsLayer {
+                    val pressP = highlightState.pressProgress.value
+                    val off = highlightState.offset
+                    val dist = sqrt(off.x * off.x + off.y * off.y)
+                    val n = (dist / cancelThresholdPx).coerceIn(0f, 1f)
+                    val base = lerp(1f, 0.90f, pressP)
+                    // Compose rotationZ 正值=顺时针（y 向下），与 atan2(y,x) 同向，直接换算
+                    rotationZ = Math.toDegrees(atan2(off.y, off.x).toDouble()).toFloat()
+                    scaleX = base + MAX_DRAG_SCALE * n
+                    scaleY = base
+                }
+                .shadow(
+                    elevation = 4.dp,
+                    shape = CircleShape,
+                    ambientColor = Color.Black.copy(alpha = 0.5f),
+                    spotColor = Color.Black.copy(alpha = 0.3f)
+                )
+                .clip(CircleShape)
+                .drawLiquidNeonBase(btnSize = btnSize, pressProgress = highlightState.pressProgress)
+        ) {
+            // 液态边缘折射 + 霓虹描边脉冲（随形变层旋转拉伸）
+            Canvas(Modifier.fillMaxSize()) {
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+                val baseR = minOf(cx, cy)
 
-            val pressProgressValue = highlightState.pressProgress.value
-            val offset = highlightState.offset
-            val dragDist = sqrt(offset.x * offset.x + offset.y * offset.y)
-            val normalizedDist = (dragDist / cancelThresholdPx).coerceIn(0f, 1f)
+                val pressP = highlightState.pressProgress.value
+                val off = highlightState.offset
+                val dist = sqrt(off.x * off.x + off.y * off.y)
+                val n = (dist / cancelThresholdPx).coerceIn(0f, 1f)
 
-            // 取消态：接近阈值(>0.85)时开始渐变到品红 + 图标淡出
-            val isCancelling = normalizedDist > 0.85f
-            val cancelProgress = if (isCancelling) ((normalizedDist - 0.85f) / 0.15f).coerceIn(0f, 1f) else 0f
+                val isCancelling = n > 0.85f
+                val cancelProgress = if (isCancelling) ((n - 0.85f) / 0.15f).coerceIn(0f, 1f) else 0f
 
-            // 液态边缘折射（三层）：拖拽时沿拖拽反方向偏移 0.5dp（液体被扯动时边缘厚度变化）
-            val edgeShift = 0.5f.dp.toPx() * normalizedDist
-            val dirX = if (offset.x >= 0f) 1f else -1f
-            val dirY = if (offset.y >= 0f) 1f else -1f
-            val shiftX = -dirX * edgeShift
-            val shiftY = -dirY * edgeShift
-            drawCircle(
-                color = NeonPurpleBright.copy(alpha = 0.30f + 0.10f * pressProgressValue),
-                radius = baseR - 1f.dp.toPx(),
-                center = Offset(cx + shiftX, cy + shiftY),
-                style = Stroke(width = 1f.dp.toPx())
-            )
-            drawCircle(
-                color = NeonCyan.copy(alpha = 0.15f + 0.10f * pressProgressValue),
-                radius = baseR - 2f.dp.toPx(),
-                center = Offset(cx + shiftX, cy + shiftY),
-                style = Stroke(width = 0.6f.dp.toPx())
-            )
-            drawCircle(
-                color = NeonPurple.copy(alpha = 0.08f + 0.10f * pressProgressValue),
-                radius = baseR + 1.5f.dp.toPx(),
-                center = Offset(cx + shiftX, cy + shiftY),
-                style = Stroke(width = 2f.dp.toPx())
-            )
+                // ★ 方案A：旋转后局部坐标系中拖拽方向恒为 +X，反向偏移即 −X。
+                //   淘汰旧 dirX/dirY sign() 判断（其在 offset 分量恰为 0 时方向错误）。
+                //   旧第三层外晕环（radius=baseR+1.5dp）整体位于 clip 之外恒不可见，已删除。
+                val edgeShift = 0.5f.dp.toPx() * n
+                drawCircle(
+                    color = NeonPurpleBright.copy(alpha = 0.30f + 0.10f * pressP),
+                    radius = baseR - 1f.dp.toPx(),
+                    center = Offset(cx - edgeShift, cy),
+                    style = Stroke(width = 1f.dp.toPx())
+                )
+                drawCircle(
+                    color = NeonCyan.copy(alpha = 0.15f + 0.10f * pressP),
+                    radius = baseR - 2f.dp.toPx(),
+                    center = Offset(cx - edgeShift, cy),
+                    style = Stroke(width = 0.6f.dp.toPx())
+                )
 
-            // 霓虹描边脉冲：SteelBlue → PurpleBright，取消态偏移到 Magenta
-            val pressColor = lerpColor(NeonSteelBlue, NeonPurpleBright, pressProgressValue)
-            val borderColor = if (isCancelling) lerpColor(pressColor, NeonMagenta, cancelProgress) else pressColor
-            val borderWidth = lerp(0.8f.dp.toPx(), 1.4f.dp.toPx(), pressProgressValue)
-            val borderAlpha = lerp(0.40f, 0.90f, pressProgressValue)
-            drawCircle(
-                color = borderColor.copy(alpha = borderAlpha),
-                radius = baseR - borderWidth / 2f,
-                center = Offset(cx, cy),
-                style = Stroke(width = borderWidth)
-            )
+                // 霓虹描边脉冲：SteelBlue → PurpleBright，取消态偏移到 Magenta（逻辑不变）
+                val pressColor = lerpColor(NeonSteelBlue, NeonPurpleBright, pressP)
+                val borderColor = if (isCancelling) lerpColor(pressColor, NeonMagenta, cancelProgress) else pressColor
+                val borderWidth = lerp(0.8f.dp.toPx(), 1.4f.dp.toPx(), pressP)
+                val borderAlpha = lerp(0.40f, 0.90f, pressP)
+                drawCircle(
+                    color = borderColor.copy(alpha = borderAlpha),
+                    radius = baseR - borderWidth / 2f,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = borderWidth)
+                )
+            }
+        }
 
-            // 触点多层涟漪（3 层错峰：延迟 0 / 60 / 120ms）
+        // ── ② 涟漪层：圆环旋转不变，移出旋转层免去触点坐标逆旋 ──
+        Canvas(Modifier.matchParentSize().clip(CircleShape)) {
+            // 涟漪绘制代码与原实现完全一致（三层错峰 0/60/120ms，center=ripple.touchX/Y）
             val now = System.currentTimeMillis()
+            val baseR = minOf(size.width, size.height) / 2f
             ripples.forEach { ripple ->
                 val delayMs = when (ripple.layer) {
                     0 -> 0L
@@ -458,29 +454,39 @@ fun GlowBackButton(
             }
         }
 
-        // ── 图标微交互（统一 CyberIcons.ArrowBack，棱面箭头比实心 Chevron 更具赛博感）──
-        val pressProgressValue = highlightState.pressProgress.value
-        val offset = highlightState.offset
-        val dragDist = sqrt(offset.x * offset.x + offset.y * offset.y)
-        val normalizedDist = (dragDist / cancelThresholdPx).coerceIn(0f, 1f)
-        val isCancelling = normalizedDist > 0.85f
-        val cancelProgress = if (isCancelling) ((normalizedDist - 0.85f) / 0.15f).coerceIn(0f, 1f) else 0f
-        Icon(
-            imageVector = CyberIcons.ArrowBack,
-            contentDescription = contentDescription ?: stringResource(R.string.common_back),
-            tint = Color.White.copy(alpha = if (isCancelling) lerp(0.92f, 0.35f, cancelProgress) else 0.92f),
-            modifier = Modifier
-                .size(btnSize * 0.45f)
-                .graphicsLayer {
-                    val iconScale = lerp(1f, 0.85f, pressProgressValue) *
-                            (if (isCancelling) lerp(1f, 0.75f, cancelProgress) else 1f)
-                    scaleX = iconScale
-                    scaleY = iconScale
-                    // 图标随拖拽方向微位移（增强相对运动感），不旋转
-                    translationX = offset.x * 0.15f * normalizedDist
-                    translationY = offset.y * 0.15f * normalizedDist
-                }
-        )
+        // ── ③ 图标层：位于旋转层之外 → 任何拖拽方向下箭头都不旋转、不被各向异性拉伸 ──
+        // 独立 clip 防止图标微位移滑出按钮可视圆。
+        Box(Modifier.matchParentSize().clip(CircleShape), contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = CyberIcons.ArrowBack,
+                contentDescription = contentDescription ?: stringResource(R.string.common_back),
+                // ★ 方案A：tint 恒定，取消态淡化移入 graphicsLayer.alpha ——
+                //   消除组合期读 highlightState.offset 导致的每次拖拽移动重组（治"零重组"破功）
+                tint = Color.White.copy(alpha = 0.92f),
+                modifier = Modifier
+                    .size(btnSize * 0.45f)
+                    .graphicsLayer {
+                        val pressP = highlightState.pressProgress.value
+                        val off = highlightState.offset
+                        val dist = sqrt(off.x * off.x + off.y * off.y)
+                        val n = (dist / cancelThresholdPx).coerceIn(0f, 1f)
+                        val cancelling = n > 0.85f
+                        val cancelP = if (cancelling) ((n - 0.85f) / 0.15f).coerceIn(0f, 1f) else 0f
+                        val iconScale = lerp(1f, 0.85f, pressP) *
+                                if (cancelling) lerp(1f, 0.75f, cancelP) else 1f
+                        scaleX = iconScale
+                        scaleY = iconScale
+                        // 取消态淡出：0.92→0.35 等效为层 alpha 1→0.38（tint 已恒定 0.92）
+                        alpha = if (cancelling) lerp(1f, 0.38f, cancelP) else 1f
+                        // 图标微位移保留（方向跟随拖拽，位于旋转层外，无需旋转变换）
+                        translationX = off.x * 0.15f * n
+                        translationY = off.y * 0.15f * n
+                    }
+            )
+        }
+
+        // ── ④ 高光层：z-order 最高（对齐原 drawWithContent 后绘制语义），clip 到圆 ──
+        Box(Modifier.matchParentSize().clip(CircleShape).then(highlightOverlayModifier))
     }
 }
 
