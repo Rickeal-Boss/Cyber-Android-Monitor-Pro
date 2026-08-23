@@ -23,6 +23,8 @@ import java.util.UUID
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.effects.revealLight
+import com.rb.cybermonitorpro.ui.effects.cyberCornerBrackets
+import com.rb.cybermonitorpro.ui.effects.cyberTopBar
 import com.rb.cybermonitorpro.ui.nightlight.HdrMetricText
 import com.rb.cybermonitorpro.ui.nightlight.hdrLinearProgressPatch
 import com.rb.cybermonitorpro.ui.nightlight.hdrVectorIconPatch
@@ -46,7 +48,8 @@ fun InfoCard(
 ) {
     Card(
         modifier = modifier.fillMaxWidth()
-
+            .cyberCornerBrackets(20.dp)
+            .cyberTopBar(20.dp)
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 14.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlowStrong)
             .cardGradientBorder(20.dp, hdrHighlight = true)
@@ -94,7 +97,7 @@ fun MetricCard(
     Card(
         modifier = modifier
             .then(if (chart === NoChart) Modifier.fillMaxWidth() else Modifier)
-
+            .cyberCornerBrackets(20.dp)
             .revealLight(radius = 160.dp, intensity = 0.22f)
             .shadow(elevation = 12.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlow)
             .cardGradientBorder(20.dp, dynamicColor = borderColor, hdrHighlight = true)

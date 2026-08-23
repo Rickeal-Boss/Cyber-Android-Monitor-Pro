@@ -35,6 +35,8 @@ import com.rb.cybermonitorpro.data.model.SensorLiveData
 import com.rb.cybermonitorpro.data.model.SensorTypeMeta
 import com.rb.cybermonitorpro.ui.components.LightCircleBackButton
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
+import com.rb.cybermonitorpro.ui.effects.cyberCornerBrackets
+import com.rb.cybermonitorpro.ui.effects.cyberTopBar
 import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
 
@@ -224,7 +226,7 @@ fun SensorDetailContent(
 @Composable
 private fun HealthSummaryCard(step: StepUiState?, heart: HeartRateAggregate?) {
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth().cyberCornerBrackets(16.dp).cardGradientBorder(16.dp, hdrHighlight = true),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -279,7 +281,7 @@ private fun SensorValueCard(
     val unit = meta?.unit?.takeIf { it.isNotEmpty() } ?: ""
 
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth().cyberCornerBrackets(16.dp).cyberTopBar(16.dp).cardGradientBorder(16.dp, hdrHighlight = true),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -563,7 +565,7 @@ private fun PressureAltimeterCard(
     var gpsUnavailable by remember { mutableStateOf(false) }
 
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth().cyberCornerBrackets(16.dp).cyberTopBar(16.dp).cardGradientBorder(16.dp, hdrHighlight = true),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -686,7 +688,7 @@ private fun StepCounterCard(state: StepUiState?) {
     }
 
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth().cyberCornerBrackets(16.dp).cyberTopBar(16.dp).cardGradientBorder(16.dp, hdrHighlight = true),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -779,7 +781,7 @@ private fun SensorChartCard(
     }
 
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth().cyberCornerBrackets(16.dp).cardGradientBorder(16.dp, hdrHighlight = true),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -880,7 +882,7 @@ private fun SensorChartCard(
 @Composable
 private fun SensorInfoCard(sensor: SensorItemInfo, meta: SensorTypeMeta?) {
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth().cyberCornerBrackets(16.dp).cardGradientBorder(16.dp, hdrHighlight = true),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
