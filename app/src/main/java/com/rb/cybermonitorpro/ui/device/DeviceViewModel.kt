@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import com.rb.cybermonitorpro.data.model.DeviceDetailInfo
 import com.rb.cybermonitorpro.data.repository.DeviceRepository
 import com.rb.cybermonitorpro.data.source.StepCounterStore
+import com.rb.cybermonitorpro.ui.sensors.SensorDetailViewModel
 import com.rb.cybermonitorpro.ui.sensors.StepUiState
 
 class DeviceViewModel(
@@ -64,7 +65,9 @@ class DeviceViewModel(
     private fun estimateStepHealth(todaySteps: Long): Triple<Float?, Int?, Int?> {
         if (todaySteps <= 0L) return Triple(null, null, null)
         val f = todaySteps.toFloat()
-        return Triple(f * 0.762f / 1000f, (f * 0.04f).toInt(), (f / 100f).toInt())
+        return Triple(f * SensorDetailViewModel.AVG_STRIDE_M / 1000f,
+            (f * SensorDetailViewModel.KCAL_PER_STEP).toInt(),
+            (f / SensorDetailViewModel.STEPS_PER_MIN).toInt())
     }
 
     override fun onCleared() {

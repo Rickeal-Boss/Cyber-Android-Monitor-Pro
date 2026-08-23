@@ -367,11 +367,11 @@ class SensorDetailViewModel(
 
         /** 心率聚合滚动窗口 (ms): 5 分钟 */
         private const val HEART_RATE_WINDOW_MS = 5 * 60_000L
-        /** 平均步幅 (m/步) — 通用成人均值, 用于距离估算 */
-        private const val AVG_STRIDE_M = 0.762f
+        /** 平均步幅 (m/步) — 通用成人均值, 用于距离估算（DeviceViewModel 与 SensorDetailViewModel 共用） */
+        internal const val AVG_STRIDE_M = 0.762f
         /** 每步卡路里 (kcal/步) — 通用估算系数 */
-        private const val KCAL_PER_STEP = 0.04f
+        internal const val KCAL_PER_STEP = 0.04f
         /** 常速步行步频 (步/分钟) — 用于活跃时长估算 */
-        private const val STEPS_PER_MIN = 100f
+        internal const val STEPS_PER_MIN = 100f
     }
 }
