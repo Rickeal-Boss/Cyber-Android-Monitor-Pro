@@ -61,10 +61,6 @@
     <string name="settings_turboxdr_desc">Local HDR boost for card borders, text, icons and charts — only highlighted elements glow</string>
     <string name="settings_turboxdr_on">On</string>
     <string name="settings_turboxdr_off">Off</string>
-    <string name="settings_nightlight_bar">Night Light Bar</string>
-    <string name="settings_nightlight_bar_desc">Independent watch-lume edge flash bar; requires TurboXDR intensity to set brightness</string>
-    <string name="settings_nightlight_bar_on">On</string>
-    <string name="settings_nightlight_bar_off">Off</string>
     <string name="settings_app_name">Cyber Android Monitor Pro</string>
     <string name="settings_app_version">v6.0.606.0</string>
     <string name="settings_app_tech">Kotlin 2.2.10 · Compose · Bat Theme</string>

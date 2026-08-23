@@ -2,9 +2,8 @@
 <resources>
     <!-- No Action Bar — 使用平台原生 Material 主题（无需 appcompat 依赖） -->
     <style name="Theme.DeviceInfoViewer" parent="@android:style/Theme.Material.NoActionBar">
-        <!-- 镜瓷白 · 天青 Edition：浅色冷启动底色 = 浅色 CyberBackground(#F0F2EF)，
-             深色由 values-night/themes.xml 提供 #14161A，消除浅色模式冷启动闪黑。 -->
-        <item name="android:windowBackground">#F0F2EF</item>
+        <!-- 镜瓷白 · 天青 Edition 深色：冷启动底色 = 深色 CyberBackground(#14161A)。 -->
+        <item name="android:windowBackground">#14161A</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>

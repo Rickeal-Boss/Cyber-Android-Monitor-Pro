@@ -771,10 +771,6 @@
     <string name="settings_turboxdr_desc">區域 HDR 增亮：卡片描邊、文字、圖示、折線僅高亮元素發光，不抬高整屏亮度</string>
     <string name="settings_turboxdr_on">已開啟</string>
     <string name="settings_turboxdr_off">已關閉</string>
-    <string name="settings_nightlight_bar">夜光條</string>
-    <string name="settings_nightlight_bar_desc">獨立的全螢幕邊緣夜光條開關；亮度由 TurboXDR 強度滑桿統一控制</string>
-    <string name="settings_nightlight_bar_on">已開啟</string>
-    <string name="settings_nightlight_bar_off">已關閉</string>
     <string name="settings_app_name">Cyber Android Monitor Pro</string>
     <string name="settings_app_version">v6.0.606.0</string>
     <string name="settings_app_tech">Kotlin 2.2.10 · Compose · Bat Theme</string>
