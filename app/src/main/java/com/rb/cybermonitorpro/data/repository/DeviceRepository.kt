@@ -3,6 +3,10 @@ package com.rb.cybermonitorpro.data.repository
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import androidx.lifecycle.MutableLiveData
 import com.rb.cybermonitorpro.AppSettings
 import com.rb.cybermonitorpro.RefreshPolicy
@@ -163,6 +167,7 @@ class DeviceRepository(context: Context) {
         policyObserverJob?.cancel()
         auxCollector.disableGps()
         disableSensor()
+        disableStepCounter()
     }
 
     fun shutdown() {
@@ -295,6 +300,21 @@ class DeviceRepository(context: Context) {
 
     @Volatile private var sensorListening = false
 
+    // ═══════ 步数传感器独立监听（设备详情页卡片用）═══════
+    private val stepSensorManager: SensorManager? by lazy {
+        appContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+    }
+    @Volatile private var stepCounterListening = false
+    private var stepCounterCallback: ((Long) -> Unit)? = null
+    private val stepCounterListener = object : SensorEventListener {
+        override fun onSensorChanged(event: SensorEvent?) {
+            event ?: return
+            if (event.sensor.type != Sensor.TYPE_STEP_COUNTER) return
+            stepCounterCallback?.invoke(event.values[0].toLong().coerceAtLeast(0L))
+        }
+        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    }
+
     fun enableSensor(sensorType: Int) {
         if (sensorListening) disableSensor()
         sensorListening = true
@@ -326,6 +346,40 @@ class DeviceRepository(context: Context) {
             historyCache.clearSensorSeries()
             sensorHistoryData.postValue(emptyMap())
         } catch (e: Throwable) { Log.w(TAG, "传感器监听停止失败", e) }
+    }
+
+    /** 设备是否支持 STEP_COUNTER（API 29+ 未授权时返回 false） */
+    fun hasStepCounter(): Boolean = try {
+        val sm = stepSensorManager ?: return false
+        sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER) != null
+            || sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER, true) != null
+            || sm.getSensorList(Sensor.TYPE_STEP_COUNTER).isNotEmpty()
+    } catch (_: Throwable) { false }
+
+    /** 启动 STEP_COUNTER 监听，回调参数为硬件自开机累积的原始读数 */
+    fun enableStepCounter(onReading: (rawSinceBoot: Long) -> Unit) {
+        if (stepCounterListening) disableStepCounter()
+        val sm = stepSensorManager ?: return
+        val sensor = try {
+            sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+                ?: sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER, true)
+                ?: sm.getSensorList(Sensor.TYPE_STEP_COUNTER).firstOrNull()
+        } catch (e: Throwable) { null } ?: return
+        stepCounterCallback = onReading
+        stepCounterListening = true
+        try {
+            sm.registerListener(stepCounterListener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+        } catch (e: Throwable) {
+            stepCounterListening = false
+            stepCounterCallback = null
+        }
+    }
+
+    fun disableStepCounter() {
+        if (!stepCounterListening) return
+        stepCounterListening = false
+        stepCounterCallback = null
+        try { stepSensorManager?.unregisterListener(stepCounterListener) } catch (_: Throwable) {}
     }
 
     fun pushSensorHistory(sensorType: Int) {

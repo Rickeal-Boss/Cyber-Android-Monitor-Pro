@@ -20,7 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -61,6 +63,19 @@ fun DeviceScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) viewModel.refreshDetail()
+    }
+
+    val stepUi by viewModel.stepUi.observeAsState()
+
+    // ACTIVITY_RECOGNITION 运行时权限（API 29+ 步数传感器需要）
+    val activityPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) viewModel.startStepMonitoring() }
+
+    // 步数监听生命周期：进入启动，离开停止
+    DisposableEffect(Unit) {
+        viewModel.startStepMonitoring()
+        onDispose { viewModel.stopStepMonitoring() }
     }
 
     // 交错滑动卡片索引（逐卡片从上到下级联跟随变换）
@@ -388,6 +403,39 @@ fun DeviceScreen(
                 if (detail?.hasInfrared == true) RowItem(stringResource(R.string.device_infrared), stringResource(R.string.common_yes))
                 if (detail?.hasUwb == true) RowItem(stringResource(R.string.device_uwb), stringResource(R.string.common_yes))
                 if (detail?.hasWirelessCharging == true) RowItem(stringResource(R.string.device_wireless_charging), stringResource(R.string.common_yes))
+            }
+}
+
+        // ═══════ 运动健康（步数）═══════
+        val hasStepCounter = viewModel.hasStepCounter()
+        val needActivityPerm = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        if (hasStepCounter || needActivityPerm) {
+            Box(Modifier.fillMaxWidth().staggeredSwipe(devCardIdx++)) {
+    SectionCard(stringResource(R.string.device_section_health)) {
+                if (hasStepCounter) {
+                    // 今日步数（主数字，居中突出）
+                    Box(Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(stepUi?.todaySteps?.toString() ?: "---",
+                                fontSize = 36.sp, fontWeight = FontWeight.Bold, color = NeonCyan)
+                            Text(stringResource(R.string.step_today_title),
+                                fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                    RowItem(stringResource(R.string.device_step_total_label),
+                        (stepUi?.totalSteps ?: 0L).toString())
+                    RowItem(stringResource(R.string.device_step_boot_label),
+                        (stepUi?.stepsSinceBoot ?: 0L).toString())
+                } else {
+                    // API 29+ 未授权 → 点击授权
+                    RowItemClickable(
+                        label = stringResource(R.string.device_step_permission_label),
+                        value = stringResource(R.string.device_step_permission_action),
+                        onClick = { activityPermLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION) },
+                        valueColor = WarningNeon
+                    )
+                }
             }
 }
 

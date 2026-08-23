@@ -919,6 +919,13 @@
     <string name="step_today_title">今日步數</string>
     <string name="step_boot_since">本次開機 %1$d</string>
 
+    <!-- 設備詳情頁步數卡片 -->
+    <string name="device_section_health">運動健康</string>
+    <string name="device_step_total_label">累計步數</string>
+    <string name="device_step_boot_label">本次開機</string>
+    <string name="device_step_permission_label">步數計數器</string>
+    <string name="device_step_permission_action">點擊授權身體活動權限</string>
+
     <!-- 運動健康摘要 (感測器詳情頁 HealthSummaryCard) -->
     <string name="health_summary_title">運動健康</string>
     <string name="health_distance_label">距離</string>

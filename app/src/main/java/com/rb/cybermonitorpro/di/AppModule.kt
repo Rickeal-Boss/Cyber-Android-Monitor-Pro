@@ -40,7 +40,7 @@ val appModule = module {
     viewModel { GpsViewModel(get()) }
     viewModel { SensorsViewModel(get()) }
     viewModel { SensorDetailViewModel(get(), get(), get()) }
-    viewModel { DeviceViewModel(get()) }
+    viewModel { DeviceViewModel(get(), get()) }
     viewModel { OemViewModel(get()) }
     viewModel { SettingsViewModel(get()) }
 }
