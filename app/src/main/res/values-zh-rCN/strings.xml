@@ -771,7 +771,7 @@
     <string name="settings_nightlight_bar_on">已开启</string>
     <string name="settings_nightlight_bar_off">已关闭</string>
     <string name="settings_app_name">Cyber Android Monitor Pro</string>
-    <string name="settings_app_version">v5.0.0</string>
+    <string name="settings_app_version">v6.0.606.0</string>
     <string name="settings_app_tech">Kotlin 2.2.10 · Compose · Bat Theme</string>
     <string name="settings_app_author">by Rickeal-Boss</string>
     <string name="settings_language_title">语言</string>

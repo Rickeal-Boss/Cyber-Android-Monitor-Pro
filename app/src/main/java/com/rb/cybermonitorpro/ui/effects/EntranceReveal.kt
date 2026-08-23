@@ -32,13 +32,13 @@ import kotlinx.coroutines.delay
 // ═══════════════════════════════════════════════════════════════
 
 /** 单卡渐显时长 */
-private const val REVEAL_DURATION_MS = 420
+private const val REVEAL_DURATION_MS = 840
 
 /** 错峰步进 — 相邻 order 的启动间隔 (越大=卡与卡之间间隔越明显) */
-private const val REVEAL_STAGGER_MS = 70f
+private const val REVEAL_STAGGER_MS = 140f
 
 /** 首帧延后 — 让冷启动首帧(布局/Pager 初始化)先完成, 再启动整条错峰序列 (≈60fps 一帧) */
-private const val FIRST_FRAME_DEFER_MS = 16L
+private const val FIRST_FRAME_DEFER_MS = 32L
 
 /** 上移距离 — 从下方 18dp 抬升归位, 配合 alpha 形成"升起渐显" */
 private val REVEAL_OFFSET = 18.dp
