@@ -97,7 +97,7 @@ fun GpsScreen(viewModel: GpsViewModel = koinViewModel()) {
             modifier = Modifier.staggeredSwipe(cardIdx++),
             title = stringResource(R.string.gps_speed_title),
             value = "%.1f km/h".format(speedMps * 3.6f),
-            valueColor = NeonCyan,
+            valueColor = PorcelainGreenDeep,
             subtitle = "%.1f m/s".format(speedMps)
         )
 

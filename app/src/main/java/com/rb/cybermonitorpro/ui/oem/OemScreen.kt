@@ -34,8 +34,8 @@ import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.CyberCardStart
 import com.rb.cybermonitorpro.ui.theme.CyberCardEnd
-import com.rb.cybermonitorpro.ui.theme.NeonCyan
-import com.rb.cybermonitorpro.ui.theme.NeonMagenta
+import com.rb.cybermonitorpro.ui.theme.PorcelainGreenDeep
+import com.rb.cybermonitorpro.ui.theme.PorcelainPinkDeep
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
 import org.koin.androidx.compose.koinViewModel
@@ -87,8 +87,8 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
                 || o.xiaomiSecurityChip.isNotEmpty()
             if (hasXiaomiChips) {
                 SectionCard(stringResource(R.string.oem_section_custom_chip)) {
-                    RowItemWithColor(stringResource(R.string.oem_fast_charge), o.xiaomiSurgeChip.ifEmpty { "-" }, if (o.xiaomiSurgeChip.isNotEmpty()) NeonCyan else MaterialTheme.colorScheme.onSurface)
-                    RowItemWithColor(stringResource(R.string.oem_imaging), o.xiaomiPengpaiISP.ifEmpty { "-" }, if (o.xiaomiPengpaiISP.isNotEmpty()) NeonCyan else MaterialTheme.colorScheme.onSurface)
+                    RowItemWithColor(stringResource(R.string.oem_fast_charge), o.xiaomiSurgeChip.ifEmpty { "-" }, if (o.xiaomiSurgeChip.isNotEmpty()) PorcelainGreenDeep else MaterialTheme.colorScheme.onSurface)
+                    RowItemWithColor(stringResource(R.string.oem_imaging), o.xiaomiPengpaiISP.ifEmpty { "-" }, if (o.xiaomiPengpaiISP.isNotEmpty()) PorcelainGreenDeep else MaterialTheme.colorScheme.onSurface)
                     RowItem(stringResource(R.string.oem_security_chip), o.xiaomiSecurityChip.ifEmpty { "-" })
                 }
             }
@@ -113,9 +113,9 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
                     val gradeLabel = if (o.redmiFuryEngine) stringResource(R.string.oem_redmi_fury_engine)
                         else stringResource(o.powerMode.labelRes)
                     val gradeColor = when {
-                        o.redmiFuryEngine -> NeonMagenta
+                        o.redmiFuryEngine -> PorcelainPinkDeep
                         o.powerMode == OemPowerMode.PERFORMANCE -> NeonPurpleBright
-                        o.powerMode == OemPowerMode.POWER_SAVE || o.powerMode == OemPowerMode.ULTRA_POWER_SAVE -> NeonCyan
+                        o.powerMode == OemPowerMode.POWER_SAVE || o.powerMode == OemPowerMode.ULTRA_POWER_SAVE -> PorcelainGreenDeep
                         else -> MaterialTheme.colorScheme.onSurface
                     }
                     RowItemWithColor(stringResource(R.string.oem_perf_grade), gradeLabel, gradeColor)
@@ -156,9 +156,9 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
                 || o.oppoTrucoEngine.isNotEmpty()
             if (hasOppoChips) {
                 SectionCard(stringResource(R.string.oem_section_chip_engine)) {
-                    RowItemWithColor(stringResource(R.string.oem_imaging_npu), o.oppoMariSilicon.ifEmpty { "-" }, if (o.oppoMariSilicon.isNotEmpty()) NeonCyan else MaterialTheme.colorScheme.onSurface)
-                    RowItemWithColor(stringResource(R.string.oem_compute_engine), o.oppoDCE.ifEmpty { "-" }, if (o.oppoDCE.isNotEmpty()) NeonCyan else MaterialTheme.colorScheme.onSurface)
-                    RowItemWithColor(stringResource(R.string.oem_game_engine), o.oppoTrucoEngine.ifEmpty { "-" }, if (o.oppoTrucoEngine.isNotEmpty()) NeonCyan else MaterialTheme.colorScheme.onSurface)
+                    RowItemWithColor(stringResource(R.string.oem_imaging_npu), o.oppoMariSilicon.ifEmpty { "-" }, if (o.oppoMariSilicon.isNotEmpty()) PorcelainGreenDeep else MaterialTheme.colorScheme.onSurface)
+                    RowItemWithColor(stringResource(R.string.oem_compute_engine), o.oppoDCE.ifEmpty { "-" }, if (o.oppoDCE.isNotEmpty()) PorcelainGreenDeep else MaterialTheme.colorScheme.onSurface)
+                    RowItemWithColor(stringResource(R.string.oem_game_engine), o.oppoTrucoEngine.ifEmpty { "-" }, if (o.oppoTrucoEngine.isNotEmpty()) PorcelainGreenDeep else MaterialTheme.colorScheme.onSurface)
                 }
             }
 
@@ -189,7 +189,7 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
             // 自研芯片
             if (o.vivoV3Chip.isNotEmpty()) {
                 SectionCard(stringResource(R.string.oem_section_custom_chip)) {
-                    RowItemWithColor(stringResource(R.string.oem_imaging_chip), o.vivoV3Chip, NeonCyan)
+                    RowItemWithColor(stringResource(R.string.oem_imaging_chip), o.vivoV3Chip, PorcelainGreenDeep)
                 }
             }
 
@@ -247,7 +247,7 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
         if (hasChargingInfo) {
             SectionCard(stringResource(R.string.oem_section_charging_protocol)) {
                 RowItemWithColor(stringResource(R.string.device_protocol), o?.chargingProtocol?.ifEmpty { "-" } ?: "-",
-                    if (o?.chargingProtocol?.isNotEmpty() == true) NeonCyan else MaterialTheme.colorScheme.onSurface)
+                    if (o?.chargingProtocol?.isNotEmpty() == true) PorcelainGreenDeep else MaterialTheme.colorScheme.onSurface)
                 RowItemWithColor(stringResource(R.string.oem_max_power), o?.chargingMaxWatt?.ifEmpty { "-" } ?: "-",
                     if (o?.chargingMaxWatt?.isNotEmpty() == true) SuccessNeon else MaterialTheme.colorScheme.onSurface)
                 RowItem(stringResource(R.string.oem_battery_capacity), o?.chargingBatteryCapacity?.ifEmpty { "-" } ?: "-")
@@ -255,7 +255,7 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
                     RowItemWithColor(stringResource(R.string.oem_cell), stringResource(R.string.oem_dual_cell), NeonPurple)
                 }
                 o?.chargingWirelessPower?.takeIf { it.isNotEmpty() }?.let {
-                    RowItemWithColor(stringResource(R.string.oem_wireless_charging), it, NeonCyan)
+                    RowItemWithColor(stringResource(R.string.oem_wireless_charging), it, PorcelainGreenDeep)
                 }
             }
         }
@@ -269,7 +269,7 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
                 RowItem(stringResource(R.string.oem_panel_type), o?.displayPanelType?.ifEmpty { "-" } ?: "-")
                 RowItem(stringResource(R.string.oem_panel_manufacturer), o?.displayPanelManufacturer?.ifEmpty { "-" } ?: "-")
                 if (o?.displayLTPO == true) {
-                    RowItemWithColor(stringResource(R.string.oem_variable_refresh), stringResource(R.string.oem_ltpo_label), NeonCyan)
+                    RowItemWithColor(stringResource(R.string.oem_variable_refresh), stringResource(R.string.oem_ltpo_label), PorcelainGreenDeep)
                 }
                 val refreshLabel = FormatUtils.joinNonBlank(" ~ ",
                     o?.displayMinRefreshRate,
@@ -329,10 +329,10 @@ fun OemScreen(viewModel: OemViewModel = koinViewModel()) {
             val mode = o?.powerMode ?: OemPowerMode.BALANCED
             val modeName = stringResource(mode.labelRes)
             val modeColor = when (mode) {
-                OemPowerMode.ULTRA_POWER_SAVE, OemPowerMode.POWER_SAVE -> NeonCyan      // 省电类 → 青色
+                OemPowerMode.ULTRA_POWER_SAVE, OemPowerMode.POWER_SAVE -> PorcelainGreenDeep      // 省电类 → 瓷绿
                 OemPowerMode.BALANCED -> WarningNeon                                     // 均衡 → 橙色 (中性)
                 OemPowerMode.PERFORMANCE -> NeonPurpleBright                            // 性能 → 亮紫
-                OemPowerMode.BOOST -> NeonMagenta                                       // Boost → 品红
+                OemPowerMode.BOOST -> PorcelainPinkDeep                                       // Boost → 胭脂
                 else -> MaterialTheme.colorScheme.onSurface
             }
             RowItemWithColor(stringResource(R.string.oem_current_scheduler), modeName, modeColor)

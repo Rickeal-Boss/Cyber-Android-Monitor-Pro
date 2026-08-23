@@ -385,10 +385,10 @@ private fun SensorValueCard(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = when {
-                            value <= 10f -> NeonCyan     // 暗光 → 青色
+                            value <= 10f -> PorcelainGreenDeep     // 暗光 → 瓷绿
                             value <= 500f -> NeonPurple  // 室内 → 紫色
                             value <= 10000f -> SuccessNeon // 室外 → 绿色
-                            else -> NeonMagenta          // 强光 → 品红
+                            else -> PorcelainPinkDeep          // 强光 → 胭脂
                         }
                     )
                 }
@@ -402,7 +402,7 @@ private fun SensorValueCard(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = when {
-                            value <= 0.5f -> NeonMagenta
+                            value <= 0.5f -> PorcelainPinkDeep
                             value <= 2f -> WarningNeon
                             else -> SuccessNeon
                         }
@@ -436,7 +436,7 @@ private fun SensorValueCard(
                                     .clip(RoundedCornerShape(3.dp))
                                     .background(
                                         when {
-                                            pct <= 0.1f -> NeonMagenta
+                                            pct <= 0.1f -> PorcelainPinkDeep
                                             pct <= 0.3f -> WarningNeon
                                             else -> SuccessNeon
                                         }
@@ -540,7 +540,7 @@ private fun SensorValueCard(
                         color = when (ld.accuracy) {
                             3 -> SuccessNeon
                             2 -> WarningNeon
-                            else -> NeonMagenta
+                            else -> PorcelainPinkDeep
                         }
                     )
                 }
@@ -586,7 +586,7 @@ private fun PressureAltimeterCard(
                     stringResource(if (state?.referenceSet == true) R.string.altitude_relative
                     else R.string.altitude_absolute),
                     fontSize = 11.sp,
-                    color = if (state?.referenceSet == true) SuccessNeon else NeonCyan
+                    color = if (state?.referenceSet == true) SuccessNeon else PorcelainGreenDeep
                 )
             }
 
@@ -633,7 +633,7 @@ private fun PressureAltimeterCard(
                         state?.rateMPerMin == null -> MaterialTheme.colorScheme.onSurfaceVariant
                         state.rateMPerMin > 0.5 -> SuccessNeon
                         state.rateMPerMin < -0.5 -> WarningNeon
-                        else -> NeonCyan
+                        else -> PorcelainGreenDeep
                     }
                 )
             }
@@ -750,7 +750,7 @@ private fun StepCounterCard(state: StepUiState?) {
             Text(
                 (state?.ratePerMin ?: 0).toString() + " /min",
                 fontSize = 11.sp,
-                color = NeonCyan
+                color = PorcelainGreenDeep
             )
         }
     }

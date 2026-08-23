@@ -117,7 +117,7 @@ fun DeviceScreen(
                 // SoC 制程工艺
                 if (detail?.socProcessNode?.isNotEmpty() == true) {
                     RowItem(stringResource(R.string.device_process_node), detail!!.socProcessNode,
-                        valueColor = NeonCyan)
+                        valueColor = PorcelainGreenDeep)
                 }
             }
 }
@@ -268,7 +268,7 @@ fun DeviceScreen(
                     label = stringResource(R.string.device_hdr_lab_entry),
                     value = stringResource(R.string.device_hdr_lab_entry_value),
                     onClick = onOpenHdrLab,
-                    valueColor = NeonCyan
+                    valueColor = PorcelainGreenDeep
                 )
             }
 }
@@ -417,7 +417,7 @@ fun DeviceScreen(
                         contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(stepUi?.todaySteps?.toString() ?: "---",
-                                fontSize = 36.sp, fontWeight = FontWeight.Bold, color = NeonCyan)
+                                fontSize = 36.sp, fontWeight = FontWeight.Bold, color = PorcelainGreenDeep)
                             Text(stringResource(R.string.step_today_title),
                                 fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -518,20 +518,20 @@ fun DeviceScreen(
     SectionCard(stringResource(R.string.device_section_identifiers)) {
                     if (hasFingerprint) {
                         RowItem(stringResource(R.string.device_fingerprint), detail!!.deviceFingerprint,
-                            valueColor = NeonCyan)
+                            valueColor = PorcelainGreenDeep)
                     }
                     if (hasAndroidId) {
                         RowItem("Android ID", detail!!.androidId,
-                            valueColor = NeonCyan)
+                            valueColor = PorcelainGreenDeep)
                     }
                     if (hasSerial) {
                         RowItem(stringResource(R.string.device_serial_number),
                             detail!!.serialNumber.let { if (it == "common_unavailable") stringResource(R.string.common_unavailable) else it },
-                            valueColor = NeonCyan)
+                            valueColor = PorcelainGreenDeep)
                     }
                     if (hasHwSerial) {
                         RowItem(stringResource(R.string.device_hardware_serial), detail!!.hardwareSerial,
-                            valueColor = NeonCyan)
+                            valueColor = PorcelainGreenDeep)
                     }
                 }
 }

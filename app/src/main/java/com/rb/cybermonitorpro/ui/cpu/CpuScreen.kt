@@ -43,7 +43,6 @@ import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.theme.NeonCyan
-import com.rb.cybermonitorpro.ui.theme.NeonMagenta
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
@@ -294,7 +293,7 @@ private fun ClusterCard(name: String, subtitle: String, frequency: String, freqD
 
 @Composable
 private fun CoreItem(core: CpuCoreInfo) {
-    val freqColor = if (!core.online) NeonMagenta.copy(alpha = 0.5f) else NeonPurpleBright
+    val freqColor = if (!core.online) PorcelainInkDeep.copy(alpha = 0.5f) else NeonPurpleBright
     Card(Modifier.fillMaxWidth().padding(horizontal = 2.dp), shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))) {
         Column(Modifier.padding(12.dp)) {

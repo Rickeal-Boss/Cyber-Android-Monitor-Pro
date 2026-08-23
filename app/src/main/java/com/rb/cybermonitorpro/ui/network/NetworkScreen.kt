@@ -301,7 +301,7 @@ private fun signalLevelColor(value: Int, good: Int, poor: Int): androidx.compose
     return when {
         value >= good -> SuccessNeon
         value >= poor -> WarningNeon
-        else -> NeonMagenta
+        else -> PorcelainPinkDeep
     }
 }
 
