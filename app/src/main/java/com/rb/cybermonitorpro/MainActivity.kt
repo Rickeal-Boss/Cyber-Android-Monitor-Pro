@@ -846,7 +846,7 @@ private fun MainTabs(
             Icon(
                 CyberIcons.Window,
                 contentDescription = null,
-                tint = Color(0xFF1A1A2E).copy(alpha = 0.85f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(17.dp)
             )
         }
@@ -859,7 +859,7 @@ private fun MainTabs(
             Icon(
                 CyberIcons.Settings,
                 contentDescription = null,
-                tint = Color(0xFF1A1A2E).copy(alpha = 0.85f),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(17.dp)
             )
         }
