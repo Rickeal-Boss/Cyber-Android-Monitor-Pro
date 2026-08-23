@@ -2,6 +2,8 @@ package com.rb.cybermonitorpro.ui.sensors
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -40,6 +42,11 @@ import org.koin.androidx.compose.koinViewModel
 // 轴颜色映射 (现取可变 token，深浅切换自动跟随)
 // 嵌瓷三轴: 宝蓝×柿红×瓷绿 (潮汕嵌瓷经典三色)
 private val axisColors: List<Color> get() = listOf(PorcelainBlue, PorcelainRed, PorcelainGreen)
+
+// 嵌瓷瓷片白边: 浅色=镜瓷白 / 深色=天青墨底 (与 CyberBackground 对齐), 供图例点描边
+@Composable
+private fun legendDotBorderColor(): Color =
+    if (isSystemInDarkTheme()) Color(0xFF14161A) else Color.White
 
 /**
  * 传感器详情内容 — F5 拆出（MainActivity 传感器覆盖层承载）。
@@ -497,6 +504,7 @@ private fun SensorValueCard(
                                     .size(10.dp)
                                     .clip(CircleShape)
                                     .background(axisColors.getOrElse(i) { NeonPurple })
+                                    .border(1.dp, legendDotBorderColor(), CircleShape)
                             )
                             Spacer(Modifier.height(6.dp))
                             Text(
@@ -817,6 +825,7 @@ private fun SensorChartCard(
                                 .size(8.dp)
                                 .clip(CircleShape)
                                 .background(axisColors.getOrElse(i) { NeonPurple })
+                                .border(1.dp, legendDotBorderColor(), CircleShape)
                         )
                         Spacer(Modifier.width(3.dp))
                         Text(
