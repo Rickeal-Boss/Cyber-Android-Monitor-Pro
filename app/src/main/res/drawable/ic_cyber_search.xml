@@ -4,30 +4,34 @@
     android:viewportWidth="24"
     android:viewportHeight="24">
 
-    <!-- 切角透镜 (八边形) -->
+    <!-- 切角透镜 (八边形, 与 CPU/Device 同族切角语言, 中心 10,10) -->
     <path
         android:strokeColor="@android:color/white"
         android:strokeWidth="1.8"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
         android:fillColor="@android:color/transparent"
-        android:pathData="M10,3 L14.5,4 L17,7 L18,10.5 L17,14 L14.5,17 L10,18 L5.5,17 L3,14 L2,10.5 L3,7 L5.5,4 Z" />
+        android:pathData="M6.2,3.5 L13.8,3.5 L16.5,6.2 L16.5,13.8 L13.8,16.5 L6.2,16.5 L3.5,13.8 L3.5,6.2 Z" />
 
-    <!-- 透镜内扫描线 -->
+    <!-- 断续十字准星 (锁定语义) -->
     <path
         android:strokeColor="@android:color/white"
         android:strokeWidth="1.2"
         android:strokeLineCap="round"
         android:fillColor="@android:color/transparent"
-        android:pathData="M5,10.5 L15,10.5" />
+        android:pathData="M6,10 L8.2,10 M11.8,10 L14,10 M10,6 L10,8.2 M10,11.8 L10,14" />
 
-    <!-- 手柄 -->
+    <!-- 中心方点 (填充) -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M9,9 L11,9 L11,11 L9,11 Z" />
+
+    <!-- 手柄 (从切角中点 15.15,15.15 伸出, 主轮廓线宽强化识别) -->
     <path
         android:strokeColor="@android:color/white"
-        android:strokeWidth="1.5"
+        android:strokeWidth="1.8"
         android:strokeLineCap="round"
-        android:strokeLineJoin="round"
         android:fillColor="@android:color/transparent"
-        android:pathData="M15,15 L20,20" />
+        android:pathData="M15.15,15.15 L20.8,20.8" />
 
 </vector>
