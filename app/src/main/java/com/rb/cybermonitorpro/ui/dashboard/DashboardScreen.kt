@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
-import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -42,15 +41,10 @@ import com.rb.cybermonitorpro.ui.components.InfoCard
 import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.effects.batteryTempBorderColor
-import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.entranceReveal
-import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
-import com.rb.cybermonitorpro.ui.nightlight.HdrMetricText
-import com.rb.cybermonitorpro.ui.nightlight.hdrLinearProgressPatch
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.delay
-import java.util.UUID
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyGridState
@@ -146,7 +140,7 @@ fun DashboardScreen(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberHdrScrollState()).padding(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         // ── 设备信息卡片（开机时长 + 深度待机）──
@@ -222,10 +216,7 @@ private fun QuickLinkCard(
 ) {
     Card(
         modifier = modifier
-            .revealLight(radius = 140.dp, intensity = 0.18f)
-
-            .fillMaxWidth().height(56.dp)
-            .cardGradientBorder(20.dp),
+            .fillMaxWidth().height(56.dp),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -374,7 +365,7 @@ private fun MetricCardByType(
         "cpu_temp" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_cpu_temp), value = cpuTemp,
             valueColor = NeonPurpleBright, modifier = Modifier.fillMaxWidth()
-        ) { LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth(), hdrKey = "dash.cpu.chart") }
+        ) { LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth()) }
 
         "mem_usage" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_mem_usage), value = memUsed,
@@ -385,34 +376,32 @@ private fun MetricCardByType(
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
                 Spacer(Modifier.height(8.dp))
-                HdrMetricText(
+                Text(
                     text = stringResource(R.string.memory_swap_zram_title),
                     fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
-                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal, monospace = false
+                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal
                 )
                 Spacer(Modifier.height(3.dp))
                 val szText = FormatUtils.formatBytes(swapzramUsedKB * 1024)
-                HdrMetricText(
+                Text(
                     text = "$szText ${stringResource(R.string.common_in_use)}",
                     fontSize = 16.sp, color = memValueColor,
-                    fontWeight = FontWeight.SemiBold, monospace = true
+                    fontWeight = FontWeight.SemiBold
                 )
                 if (swapzramPct >= 0f) {
                     Spacer(Modifier.height(6.dp))
-                    val swapProgressKey = remember { "dash.swapzram.progress:${UUID.randomUUID()}" }
                     LinearProgressIndicator(
                         progress = { swapzramPct },
-                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp))
-                            .hdrLinearProgressPatch(swapProgressKey, swapzramPct, memValueColor.copy(alpha = 0.75f)),
+                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
                         color = memValueColor.copy(alpha = 0.75f), trackColor = CyberMuted
                     )
                 }
                 val szTotalText = FormatUtils.formatBytes(swapzramTotalKB * 1024)
                 Spacer(Modifier.height(4.dp))
-                HdrMetricText(
+                Text(
                     text = stringResource(R.string.memory_swap_total, szTotalText),
                     fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.6f),
-                    fontWeight = FontWeight.Normal, monospace = false
+                    fontWeight = FontWeight.Normal
                 )
             }
         }
@@ -427,16 +416,16 @@ private fun MetricCardByType(
                 Spacer(Modifier.height(10.dp))
                 HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
                 Spacer(Modifier.height(8.dp))
-                HdrMetricText(
+                Text(
                     text = stringResource(R.string.dashboard_metric_battery_temp),
                     fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
-                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal, monospace = false
+                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal
                 )
                 Spacer(Modifier.height(3.dp))
-                HdrMetricText(
+                Text(
                     text = batteryTemp,
                     fontSize = 16.sp, color = SuccessNeon,
-                    fontWeight = FontWeight.SemiBold, monospace = true
+                    fontWeight = FontWeight.SemiBold
                 )
             }
         }
@@ -444,7 +433,7 @@ private fun MetricCardByType(
         "gpu_load" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_gpu_load), value = gpuLoadText,
             valueColor = NeonPurpleBright, modifier = Modifier.fillMaxWidth()
-        ) { LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth(), hdrKey = "dash.gpu.chart") }
+        ) { LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth()) }
     }
 }
 

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -72,7 +71,7 @@ fun GpuScreen(
     var cardIdx = 0
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberHdrScrollState()).padding(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         val subtitle = FormatUtils.joinNonBlank(" · ",
@@ -107,7 +106,7 @@ fun GpuScreen(
                     Text("%.0f%%".format(effectiveUtil), fontSize = 12.sp, color = SuccessNeon)
                 }
             }
-            LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth(), hdrKey = "gpu.load.chart")
+            LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth())
         }
 
         // GPU 频率 (DVFS 感知)
@@ -121,12 +120,12 @@ fun GpuScreen(
                 else stringResource(R.string.gpu_subtitle_max_normal, it)
             } ?: ""
         ) {
-            LineChart(data = gpuFreqChart, modifier = Modifier.fillMaxWidth(), hdrKey = "gpu.freq.chart")
+            LineChart(data = gpuFreqChart, modifier = Modifier.fillMaxWidth())
         }
 
         // GPU 温度
         MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU temperature", value = temp, valueColor = NeonPurpleBright) {
-            LineChart(data = gpuTempChart, modifier = Modifier.fillMaxWidth(), hdrKey = "gpu.temp.chart")
+            LineChart(data = gpuTempChart, modifier = Modifier.fillMaxWidth())
         }
 
         // 调速器信息

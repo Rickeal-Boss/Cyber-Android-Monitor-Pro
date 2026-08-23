@@ -63,7 +63,9 @@ import com.rb.cybermonitorpro.ui.theme.TextSecondary
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
 import kotlinx.coroutines.delay
 
-private val HdrLabCardGradient = Brush.linearGradient(listOf(CyberCardStart, CyberCardEnd))
+// 现取可变 token：深浅切换后 HDR 实验室卡片渐变自动跟随，不被文件加载期冻结
+private val HdrLabCardGradient: Brush
+    get() = Brush.linearGradient(listOf(CyberCardStart, CyberCardEnd))
 
 /**
  * ★ 2026-08-16 HDR 实验室 — 局部 EDR（HDR headroom）真机验证页（详情页二层覆盖层）。

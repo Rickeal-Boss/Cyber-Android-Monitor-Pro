@@ -3,7 +3,7 @@ package com.rb.cybermonitorpro.ui.sensors
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -34,18 +34,16 @@ import com.rb.cybermonitorpro.data.model.SensorItemInfo
 import com.rb.cybermonitorpro.data.model.SensorLiveData
 import com.rb.cybermonitorpro.data.model.SensorTypeMeta
 import com.rb.cybermonitorpro.ui.components.LightCircleBackButton
-import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
 
-// 轴颜色映射
-private val axisColors = listOf(NeonPurple, NeonCyan, NeonMagenta)
+// 轴颜色映射 (现取可变 token，深浅切换自动跟随)
+private val axisColors: List<Color> get() = listOf(NeonPurple, NeonCyan, NeonMagenta)
 
 /**
  * 传感器详情内容 — F5 拆出（MainActivity 传感器覆盖层承载）。
  * progress = 传感器覆盖层主时钟（MainActivity.sensorProgress Animatable）：
  * 非标题内容的 alpha 与 24dp→0 上移全部由其在 draw 阶段驱动（零重组）。
- * 滚动必须用 rememberHdrScrollState()（pre20 回归红线，勿回退 rememberScrollState）。
  */
 @Composable
 fun SensorDetailContent(
@@ -126,7 +124,7 @@ fun SensorDetailContent(
         onDispose { viewModel.stopListening() }
     }
 
-    val scrollState = rememberHdrScrollState()
+    val scrollState = rememberScrollState()
 
     // ── 全屏沉浸式 Box (对齐设置页/悬浮窗覆盖层风格) ──
     Box(Modifier.fillMaxSize()) {
@@ -224,7 +222,7 @@ fun SensorDetailContent(
 @Composable
 private fun HealthSummaryCard(step: StepUiState?, heart: HeartRateAggregate?) {
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -279,7 +277,7 @@ private fun SensorValueCard(
     val unit = meta?.unit?.takeIf { it.isNotEmpty() } ?: ""
 
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -563,7 +561,7 @@ private fun PressureAltimeterCard(
     var gpsUnavailable by remember { mutableStateOf(false) }
 
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -686,7 +684,7 @@ private fun StepCounterCard(state: StepUiState?) {
     }
 
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -779,7 +777,7 @@ private fun SensorChartCard(
     }
 
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -880,7 +878,7 @@ private fun SensorChartCard(
 @Composable
 private fun SensorInfoCard(sensor: SensorItemInfo, meta: SensorTypeMeta?) {
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
@@ -972,9 +970,10 @@ private fun SensorLineChart(
     val minVal by remember { derivedStateOf { values.minOrNull() ?: 0f } }
     val maxVal by remember { derivedStateOf { values.maxOrNull() ?: 1f } }
     val range = remember(minVal, maxVal) { (maxVal - minVal).coerceAtLeast(0.001f) }
-    val gridColor = remember { NeonCyan.copy(alpha = 0.12f) }
-    val axisColor = remember { NeonPurple.copy(alpha = 0.45f) }
-    val labelColor = remember { NeonPurpleBright.copy(alpha = 0.55f) }
+    // 直接现取可变 token：深浅切换后自动重组，无需 remember 冻结
+    val gridColor = NeonCyan.copy(alpha = 0.12f)
+    val axisColor = NeonPurple.copy(alpha = 0.45f)
+    val labelColor = NeonPurpleBright.copy(alpha = 0.55f)
 
     Canvas(modifier) {
         val w = size.width; val h = size.height; val pad = 14.dp.toPx()
@@ -1075,8 +1074,9 @@ private fun MultiAxisChart(
         derivedStateOf { recentSeries.flatMap { series -> series.map { it.value } }.maxOrNull() ?: 1f }
     }
     val globalRange = remember(globalMin, globalMax) { (globalMax - globalMin).coerceAtLeast(0.001f) }
-    val gridColor = remember { NeonCyan.copy(alpha = 0.12f) }
-    val axisColor = remember { NeonPurple.copy(alpha = 0.45f) }
+    // 直接现取可变 token：深浅切换后自动重组，无需 remember 冻结
+    val gridColor = NeonCyan.copy(alpha = 0.12f)
+    val axisColor = NeonPurple.copy(alpha = 0.45f)
 
     Canvas(modifier) {
         val w = size.width; val h = size.height; val pad = 14.dp.toPx()

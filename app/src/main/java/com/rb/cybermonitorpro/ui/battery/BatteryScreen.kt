@@ -17,7 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import com.rb.cybermonitorpro.ui.components.CyberIcons
@@ -58,13 +58,12 @@ import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.components.CardGradient
 import com.rb.cybermonitorpro.ui.components.CyberJoystickSwitch
 import com.rb.cybermonitorpro.ui.effects.batteryTempBorderColor
-import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
-import com.rb.cybermonitorpro.ui.effects.revealLight
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
-import com.rb.cybermonitorpro.ui.theme.PurpleGlowLight
+import com.rb.cybermonitorpro.ui.theme.AmbientShadow
+import com.rb.cybermonitorpro.ui.theme.SpotShadow
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.TextPrimary
 import com.rb.cybermonitorpro.ui.theme.TextSecondary
@@ -365,7 +364,7 @@ fun BatteryScreen(
                         value = "${level}%",
                         valueColor = NeonPurpleBright
                     ) {
-                        LineChart(data = battLevelChart, modifier = Modifier.fillMaxWidth(), hdrKey = "batt.level.chart")
+                        LineChart(data = battLevelChart, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -376,7 +375,7 @@ fun BatteryScreen(
                         value = "${(power / 1000f).let { "%.1f".format(it) }} W",
                         valueColor = NeonPurpleBright
                     ) {
-                        LineChart(data = battPowerChart, modifier = Modifier.fillMaxWidth(), hdrKey = "batt.power.chart")
+                        LineChart(data = battPowerChart, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -432,7 +431,7 @@ fun BatteryScreen(
                         valueColor = NeonPurpleBright,
                         borderColor = batteryTempBorderColor(temp)
                     ) {
-                        LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth(), hdrKey = "batt.temp.chart")
+                        LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth())
                     }
                 }
             }
@@ -475,7 +474,7 @@ fun BatteryScreen(
     // 外层可滚动 Column：固定头部 + 可重排卡片列表（与概览页 ReorderableCardGrid 同构）。
     // 内层 LazyColumn 用 userScrollEnabled=false + heightIn(max) 上限，规避 infinity-max-height 崩溃。
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberHdrScrollState()).padding(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         // ── 状态概览 (固定头部, 不参与重排) ──
@@ -592,7 +591,7 @@ private fun resolveBatteryCardOrder(stored: String): List<String> {
 }
 
 /**
- * 双电芯手动开关卡片 — 复用全局霓虹卡片容器 (revealLight + hdrHighlight + CardGradient)。
+ * 双电芯手动开关卡片 — 复用全局霓虹卡片容器 (釉影 + CardGradient)。
  * 开 = 测量电压翻倍 (effectiveVoltage)，用于双电芯机型准确计算功率。
  */
 @Composable
@@ -605,9 +604,7 @@ private fun DualCellToggleCard(
     Card(
         modifier = Modifier.fillMaxWidth()
 
-            .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlowLight)
-            .cardGradientBorder(20.dp, hdrHighlight = true),
+            .shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp), ambientColor = AmbientShadow, spotColor = SpotShadow),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
@@ -704,9 +701,7 @@ private fun BatteryCurrentMultiplierCard(
 
     Card(
         modifier = Modifier.fillMaxWidth()
-            .revealLight(radius = 160.dp, intensity = 0.22f)
-            .shadow(elevation = 10.dp, shape = RoundedCornerShape(20.dp), ambientColor = PurpleGlowLight)
-            .cardGradientBorder(20.dp, hdrHighlight = true),
+            .shadow(elevation = 2.dp, shape = RoundedCornerShape(20.dp), ambientColor = AmbientShadow, spotColor = SpotShadow),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

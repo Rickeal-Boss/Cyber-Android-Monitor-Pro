@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -39,7 +39,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import com.rb.cybermonitorpro.data.model.CameraSensorInfo
 import com.rb.cybermonitorpro.data.model.DeviceDetailInfo
 import com.rb.cybermonitorpro.data.model.OemPowerMode
-import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.FormatUtils
@@ -82,7 +81,7 @@ fun DeviceScreen(
     var devCardIdx = 0
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberHdrScrollState()).padding(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         Text(stringResource(R.string.device_title), fontSize = 18.sp, fontWeight = FontWeight.Bold,
@@ -725,12 +724,13 @@ private fun CameraRow(sensor: CameraSensorInfo) {
 
 // ═══════ 共享组件 ═══════
 
-private val SectionGradient = Brush.linearGradient(listOf(CyberCardStart, CyberCardEnd))
+private val SectionGradient: Brush
+    get() = Brush.linearGradient(listOf(CyberCardStart, CyberCardEnd))
 
 @Composable
 private fun SectionCard(title: String, content: @Composable () -> Unit) {
     Card(
-        Modifier.fillMaxWidth().cardGradientBorder(20.dp, hdrHighlight = true).cardRipple(), shape = RoundedCornerShape(20.dp),
+        Modifier.fillMaxWidth().cardRipple(), shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {

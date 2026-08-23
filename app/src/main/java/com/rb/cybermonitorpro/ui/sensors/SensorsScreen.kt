@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -57,7 +57,6 @@ import androidx.core.content.ContextCompat
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.SensorItemInfo
 import com.rb.cybermonitorpro.data.model.SensorTypeMeta
-import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.effects.cardRipple
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
@@ -92,8 +91,7 @@ private fun SensorListContent(
     onRefreshSensors: () -> Unit
 ) {
     val ctx = LocalContext.current
-    // pre20 红线: 列表滚动必须用 rememberHdrScrollState (上报垂直滚动状态给 HDR 贴片渲染)
-    val scrollState = rememberHdrScrollState()
+    val scrollState = rememberScrollState()
     var query by remember { mutableStateOf("") }
     var highlightedIdx by remember { mutableStateOf(-1) }
     // 滚动列表容器顶部在根坐标系的 Y (视口锚点)
@@ -310,7 +308,6 @@ private fun SensorItemCard(
             cardCenter = it.boundsInRoot().center
             onCardPositioned(it.boundsInRoot().top)
         }
-        .cardGradientBorder(20.dp, hdrHighlight = true)
         .cardRipple(onClick = { onClick(cardCenter) })
 
     val cardContent: @Composable ColumnScope.() -> Unit = {
@@ -363,8 +360,7 @@ private fun SensorItemCard(
         }
     }
 
-    // 外包 Box 承载脉冲 scale + 辉光; 卡片描边/水波纹修饰符顺序不变
-    // (KB §3 红线: cardGradientBorder 在 OUTER、cardRipple 在 INNER)
+    // 外包 Box 承载脉冲 scale + 辉光; 水波纹修饰符在 Card 内部
     Box(
         modifier
             .graphicsLayer {

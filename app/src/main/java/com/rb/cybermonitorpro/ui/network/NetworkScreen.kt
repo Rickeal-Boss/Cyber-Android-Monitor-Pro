@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -65,7 +64,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberHdrScrollState()).padding(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         var cardIdx = 0
@@ -86,7 +85,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
 
         MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Network activity", value = "${wifiInfo?.linkSpeedMbps ?: 0} Mbps", valueColor = NeonPurpleBright) {
             DualLineChart(data1 = wifiSpeedChart, data2 = signalChart,
-                modifier = Modifier.fillMaxWidth(), lineColor1 = NeonPurple, lineColor2 = NeonMagenta, hdrKey = "net.activity.chart")
+                modifier = Modifier.fillMaxWidth(), lineColor1 = NeonPurple, lineColor2 = NeonMagenta)
         }
 
         // WiFi 频率 / 标准 / 信道宽度 (P3)
@@ -180,7 +179,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
             val pct = kotlin.math.min(100, (signalStrength + 120) * 100 / 60).coerceIn(0, 100)
             MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = stringResource(R.string.network_signal_strength_title), value = "$signalStrength dBm · $pct%",
                 valueColor = signalLevelColor(signalStrength, -80, -100)) {
-                LineChart(data = signalChart, modifier = Modifier.fillMaxWidth(), hdrKey = "net.signal.chart")
+                LineChart(data = signalChart, modifier = Modifier.fillMaxWidth())
             }
         }
 

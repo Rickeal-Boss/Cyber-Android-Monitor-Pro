@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -122,7 +122,7 @@ fun FloatingWindowScreen(onBack: () -> Unit) {
     }
 
     Column(
-        modifier = Modifier.padding(top = 56.dp).padding(horizontal = 16.dp).verticalScroll(rememberHdrScrollState()),
+        modifier = Modifier.padding(top = 56.dp).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Text(stringResource(R.string.float_title), fontSize = 20.sp, fontWeight = FontWeight.Bold,
