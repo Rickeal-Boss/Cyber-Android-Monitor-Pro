@@ -1,56 +1,193 @@
 package com.rb.cybermonitorpro.ui.theme
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
 // ============================================
-//  Cyberpunk Mobile HUD 主题 (Ardot 设计稿)
-//  暗紫渐变 · 霓虹辉光 · 钢蓝辅色
+//  镜瓷白 · 天青 主题 (Edition 6.0.606.0)
+//  浅色 = 镜瓷白系 · 深色 = 天青墨系
+//  32 个色板 token 均为可变 State，深浅切换由 updateThemeColors(dark) 批量赋值
+//  业务代码引用 token 名零改动（仅读取当前值，可变色自动触发重组）
 // ============================================
 
-// ── 背景与表面 ──
-val CyberBackground     = Color(0xFF0A0A0F)   // 深黑底色
-val CyberCardStart      = Color(0xFF171417)   // 卡片渐变起点 (暗紫黑)
-val CyberCardEnd        = Color(0xFF451B45)   // 卡片渐变终点 (暗紫)
-val CyberMuted          = Color(0xFF27273B)   // 图标底板/次级表面
-val CyberPill           = Color(0xFF1E1C35)   // 底部药丸/浮层
-val CyberElevated       = Color(0xFF18182A)   // 弹窗表面
+// ── 浅色基准色 (镜瓷白) ──
+private val LightCyberBackground     = Color(0xFFF0F2EF)
+private val LightCyberCardStart      = Color(0xFFFFFFFF)
+private val LightCyberCardEnd        = Color(0xFFFFFFFF)
+private val LightCyberMuted          = Color(0xFFEDEFEB)
+private val LightCyberPill           = Color(0xFFF7F8F5)
+private val LightCyberElevated       = Color(0xFFFFFFFF)
+private val LightNeonPurple          = Color(0xFF4F7A70)
+private val LightNeonPurpleBright    = Color(0xFF6E9A8D)
+private val LightNeonPurplePale      = Color(0xFFE3EAE7)
+private val LightNeonPurpleDeep      = Color(0xFF3D6259)
+private val LightNeonSteelBlue       = Color(0xFF6E746D)
+private val LightNeonCyan            = Color(0xFF5C8A7E)
+private val LightNeonMagenta         = Color(0xFFC77D9E)
+private val LightNeonMagentaPurple   = Color(0xFF6E9A8D)
+private val LightPurpleGlow          = Color(0x264F7A70)   // ~15% 天青辉光
+private val LightPurpleGlowLight     = Color(0x1A4F7A70)   // ~10% 淡辉光
+private val LightPurpleGlowStrong    = Color(0x404F7A70)   // ~25% 强辉光
+private val LightChartLinePurple     = Color(0xFF4F7A70)
+private val LightChartAreaPurple     = Color(0x294F7A70)   // ~16% 透明
+private val LightChartGlow           = Color(0x334F7A70)   // ~20% 辉光
+private val LightSuccessNeon         = Color(0xFF4CAF7D)
+private val LightWarningNeon         = Color(0xFFD4943A)
+private val LightErrorNeon           = Color(0xFFD4574E)
+private val LightTitaniumGold        = Color(0xFFC9A84C)
+private val LightDeepRedAlert        = Color(0xFFB83A3A)
+private val LightNeonDeepPink        = Color(0xFFC77D9E)
+private val LightTextPrimary         = Color(0xFF2B302D)
+private val LightTextSecondary       = Color(0xFF6E746D)
+private val LightTextValue           = Color(0xFF3D443F)
+private val LightTextOnPrimary       = Color(0xFFFFFFFF)
+private val LightDividerCyber        = Color(0xFFE0E3DF)
+private val LightProgressTrack       = Color(0xFFE8EAE6)
 
-// ── 霓虹紫色系 ──
-val NeonPurple          = Color(0xFF7C3AED)   // 主霓虹紫 (Ardot Primary)
-val NeonPurpleBright    = Color(0xFFA78BFA)   // 高亮紫 (Ardot Secondary)
-val NeonPurplePale      = Color(0xFFE2E8F0)   // 浅紫白文字
-val NeonPurpleDeep      = Color(0xFF4C1D95)   // 深紫边框
+// ── 深色基准色 (天青墨) ──
+private val DarkCyberBackground      = Color(0xFF14161A)
+private val DarkCyberCardStart       = Color(0xFF1E2226)
+private val DarkCyberCardEnd         = Color(0xFF1E2226)
+private val DarkCyberMuted           = Color(0xFF2A2E33)
+private val DarkCyberPill            = Color(0xFF1E2226)
+private val DarkCyberElevated        = Color(0xFF25292D)
+private val DarkNeonPurple           = Color(0xFF8FBFB2)
+private val DarkNeonPurpleBright     = Color(0xFFA9CFC4)
+private val DarkNeonPurplePale       = Color(0xFF35423D)
+private val DarkNeonPurpleDeep       = Color(0xFF6FA392)
+private val DarkNeonSteelBlue        = Color(0xFF9AA39E)
+private val DarkNeonCyan             = Color(0xFF9FC9BE)
+private val DarkNeonMagenta          = Color(0xFFE098B8)
+private val DarkNeonMagentaPurple    = Color(0xFFA9CFC4)
+private val DarkPurpleGlow           = Color(0x268FBFB2)   // ~15% 天青辉光
+private val DarkPurpleGlowLight      = Color(0x1A8FBFB2)   // ~10% 淡辉光
+private val DarkPurpleGlowStrong     = Color(0x408FBFB2)   // ~25% 强辉光
+private val DarkChartLinePurple      = Color(0xFF8FBFB2)
+private val DarkChartAreaPurple      = Color(0x298FBFB2)   // ~16% 透明
+private val DarkChartGlow            = Color(0x338FBFB2)   // ~20% 辉光
+private val DarkSuccessNeon          = Color(0xFF6FCF97)
+private val DarkWarningNeon          = Color(0xFFE8B05C)
+private val DarkErrorNeon            = Color(0xFFE8766E)
+private val DarkTitaniumGold         = Color(0xFFD4B86A)
+private val DarkDeepRedAlert         = Color(0xFFD05858)
+private val DarkNeonDeepPink         = Color(0xFFE098B8)
+private val DarkTextPrimary          = Color(0xFFE8EAE7)
+private val DarkTextSecondary        = Color(0xFF9AA39E)
+private val DarkTextValue            = Color(0xFFCBD3CF)
+private val DarkTextOnPrimary        = Color(0xFF14161A)
+private val DarkDividerCyber         = Color(0xFF2A2E33)
+private val DarkProgressTrack        = Color(0xFF2A2E33)
 
-// ── 辅助色 ──
-val NeonSteelBlue       = Color(0xFF3D70B8)   // 钢蓝 (非激活Tab)
-val NeonCyan            = Color(0xFF00D4FF)   // 霓虹青
-val NeonMagenta         = Color(0xFFF43F5E)   // 玫瑰红 (Ardot Accent)
-val NeonMagentaPurple   = Color(0xFFD946EF)   // 紫红 (FancySlider 已选轨道/强调)
+// ── 32 个可变色板 token (初始 = 浅色基准) ──
+var CyberBackground     by mutableStateOf(LightCyberBackground)
+var CyberCardStart      by mutableStateOf(LightCyberCardStart)
+var CyberCardEnd        by mutableStateOf(LightCyberCardEnd)
+var CyberMuted          by mutableStateOf(LightCyberMuted)
+var CyberPill           by mutableStateOf(LightCyberPill)
+var CyberElevated       by mutableStateOf(LightCyberElevated)
+var NeonPurple          by mutableStateOf(LightNeonPurple)
+var NeonPurpleBright    by mutableStateOf(LightNeonPurpleBright)
+var NeonPurplePale      by mutableStateOf(LightNeonPurplePale)
+var NeonPurpleDeep      by mutableStateOf(LightNeonPurpleDeep)
+var NeonSteelBlue       by mutableStateOf(LightNeonSteelBlue)
+var NeonCyan            by mutableStateOf(LightNeonCyan)
+var NeonMagenta         by mutableStateOf(LightNeonMagenta)
+var NeonMagentaPurple   by mutableStateOf(LightNeonMagentaPurple)
+var PurpleGlow          by mutableStateOf(LightPurpleGlow)
+var PurpleGlowLight     by mutableStateOf(LightPurpleGlowLight)
+var PurpleGlowStrong    by mutableStateOf(LightPurpleGlowStrong)
+var ChartLinePurple     by mutableStateOf(LightChartLinePurple)
+var ChartAreaPurple     by mutableStateOf(LightChartAreaPurple)
+var ChartGlow           by mutableStateOf(LightChartGlow)
+var SuccessNeon         by mutableStateOf(LightSuccessNeon)
+var WarningNeon         by mutableStateOf(LightWarningNeon)
+var ErrorNeon           by mutableStateOf(LightErrorNeon)
+var TitaniumGold        by mutableStateOf(LightTitaniumGold)
+var DeepRedAlert        by mutableStateOf(LightDeepRedAlert)
+var NeonDeepPink        by mutableStateOf(LightNeonDeepPink)
+var TextPrimary         by mutableStateOf(LightTextPrimary)
+var TextSecondary       by mutableStateOf(LightTextSecondary)
+var TextValue           by mutableStateOf(LightTextValue)
+var TextOnPrimary       by mutableStateOf(LightTextOnPrimary)
+var DividerCyber        by mutableStateOf(LightDividerCyber)
+var ProgressTrack       by mutableStateOf(LightProgressTrack)
 
-// ── 辉光阴影色 ──
-val PurpleGlow          = Color(0x267C3AED)   // ~15% 紫色辉光
-val PurpleGlowLight     = Color(0x1A7C3AED)   // ~10% 淡辉光
-val PurpleGlowStrong    = Color(0x407C3AED)   // ~25% 强辉光 (底部药丸)
+// ── 固定釉影 token — 不随主题切换，供各卡片阴影复用 ──
+internal val AmbientShadow = Color(0x0D2A2E33)
+internal val SpotShadow    = Color(0x142A2E33)
 
-// ── 图表颜色 ──
-val ChartLinePurple     = NeonPurple
-val ChartAreaPurple     = Color(0x307C3AED)   // ~19% 透明
-val ChartGlow           = Color(0x507C3AED)   // 辉光
-
-// ── 功能色 ──
-val SuccessNeon         = Color(0xFF34C759)   // 荧光绿 (设计稿)
-val WarningNeon         = Color(0xFFFFAB00)   // 琥珀霓虹
-val ErrorNeon           = Color(0xFFFF1744)   // 猩红霓虹
-val TitaniumGold        = Color(0xFFC9A86A)   // 钛金 (电池温度 >40℃ 描边)
-val DeepRedAlert        = Color(0xFF9B1C1C)   // 深红 (电池温度 >44℃ 描边)
-val NeonDeepPink        = Color(0xFFC2185B)   // 深粉 (摇杆开关开启态)
-
-// ── 文字色 ──
-val TextPrimary         = Color(0xFFE2E8F0)   // 主文字
-val TextSecondary       = Color(0xFF94A3B8)   // 副文字
-val TextValue           = NeonPurpleBright     // 数值高亮
-val TextOnPrimary       = Color(0xFFFFFFFF)
-
-// ── 分割线 ──
-val DividerCyber        = Color(0xFF4C1D95)   // 紫色分割线
-val ProgressTrack       = Color(0xFF1A1028)   // 进度条背景
+/**
+ * 按主题深浅批量赋值 32 个色板 token。
+ * 在 DeviceInfoViewerTheme 的 SideEffect 中调用；赋值即触发读取方重组。
+ */
+internal fun updateThemeColors(dark: Boolean) {
+    if (dark) {
+        CyberBackground     = DarkCyberBackground
+        CyberCardStart      = DarkCyberCardStart
+        CyberCardEnd        = DarkCyberCardEnd
+        CyberMuted          = DarkCyberMuted
+        CyberPill           = DarkCyberPill
+        CyberElevated       = DarkCyberElevated
+        NeonPurple          = DarkNeonPurple
+        NeonPurpleBright    = DarkNeonPurpleBright
+        NeonPurplePale      = DarkNeonPurplePale
+        NeonPurpleDeep      = DarkNeonPurpleDeep
+        NeonSteelBlue       = DarkNeonSteelBlue
+        NeonCyan            = DarkNeonCyan
+        NeonMagenta         = DarkNeonMagenta
+        NeonMagentaPurple   = DarkNeonMagentaPurple
+        PurpleGlow          = DarkPurpleGlow
+        PurpleGlowLight     = DarkPurpleGlowLight
+        PurpleGlowStrong    = DarkPurpleGlowStrong
+        ChartLinePurple     = DarkChartLinePurple
+        ChartAreaPurple     = DarkChartAreaPurple
+        ChartGlow           = DarkChartGlow
+        SuccessNeon         = DarkSuccessNeon
+        WarningNeon         = DarkWarningNeon
+        ErrorNeon           = DarkErrorNeon
+        TitaniumGold        = DarkTitaniumGold
+        DeepRedAlert        = DarkDeepRedAlert
+        NeonDeepPink        = DarkNeonDeepPink
+        TextPrimary         = DarkTextPrimary
+        TextSecondary       = DarkTextSecondary
+        TextValue           = DarkTextValue
+        TextOnPrimary       = DarkTextOnPrimary
+        DividerCyber        = DarkDividerCyber
+        ProgressTrack       = DarkProgressTrack
+    } else {
+        CyberBackground     = LightCyberBackground
+        CyberCardStart      = LightCyberCardStart
+        CyberCardEnd        = LightCyberCardEnd
+        CyberMuted          = LightCyberMuted
+        CyberPill           = LightCyberPill
+        CyberElevated       = LightCyberElevated
+        NeonPurple          = LightNeonPurple
+        NeonPurpleBright    = LightNeonPurpleBright
+        NeonPurplePale      = LightNeonPurplePale
+        NeonPurpleDeep      = LightNeonPurpleDeep
+        NeonSteelBlue       = LightNeonSteelBlue
+        NeonCyan            = LightNeonCyan
+        NeonMagenta         = LightNeonMagenta
+        NeonMagentaPurple   = LightNeonMagentaPurple
+        PurpleGlow          = LightPurpleGlow
+        PurpleGlowLight     = LightPurpleGlowLight
+        PurpleGlowStrong    = LightPurpleGlowStrong
+        ChartLinePurple     = LightChartLinePurple
+        ChartAreaPurple     = LightChartAreaPurple
+        ChartGlow           = LightChartGlow
+        SuccessNeon         = LightSuccessNeon
+        WarningNeon         = LightWarningNeon
+        ErrorNeon           = LightErrorNeon
+        TitaniumGold        = LightTitaniumGold
+        DeepRedAlert        = LightDeepRedAlert
+        NeonDeepPink        = LightNeonDeepPink
+        TextPrimary         = LightTextPrimary
+        TextSecondary       = LightTextSecondary
+        TextValue           = LightTextValue
+        TextOnPrimary       = LightTextOnPrimary
+        DividerCyber        = LightDividerCyber
+        ProgressTrack       = LightProgressTrack
+    }
+}
