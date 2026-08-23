@@ -35,7 +35,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.graphics.Color
@@ -65,7 +67,6 @@ import com.rb.cybermonitorpro.ui.components.LightCircleBackButton
 import com.rb.cybermonitorpro.ui.components.GlassCircleButton
 import com.rb.cybermonitorpro.ui.components.NeonDivider
 import com.rb.cybermonitorpro.ui.components.NeonHeaderDecoration
-import com.rb.cybermonitorpro.ui.components.neonBorderGlow
 import com.rb.cybermonitorpro.ui.cpu.CpuScreen
 import com.rb.cybermonitorpro.ui.dashboard.DashboardScreen
 import com.rb.cybermonitorpro.ui.device.DeviceScreen
@@ -78,22 +79,11 @@ import com.rb.cybermonitorpro.ui.network.NetworkScreen
 import com.rb.cybermonitorpro.ui.sensors.SensorDetailContent
 import com.rb.cybermonitorpro.ui.sensors.SensorsScreen
 import com.rb.cybermonitorpro.ui.settings.SettingsScreen
-import com.rb.cybermonitorpro.ui.effects.GlobalLightProvider
 import com.rb.cybermonitorpro.ui.effects.LocalSharedTransitionScope
 import com.rb.cybermonitorpro.ui.effects.StaggeredPageProvider
 import com.rb.cybermonitorpro.ui.effects.acrylic
 import com.rb.cybermonitorpro.ui.effects.circularReveal
 import com.rb.cybermonitorpro.ui.effects.rememberCircularRevealState
-import com.rb.cybermonitorpro.ui.effects.revealLight
-import com.rb.cybermonitorpro.ui.effects.AppGlowBackground
-import com.rb.cybermonitorpro.ui.nightlight.CyberNightlightHost
-import com.rb.cybermonitorpro.ui.nightlight.HdrOverlayState
-import com.rb.cybermonitorpro.ui.nightlight.HdrPatchHost
-import com.rb.cybermonitorpro.ui.nightlight.hdrTabIndicatorPatch
-import com.rb.cybermonitorpro.ui.nightlight.hdrTabBarBorderPatch
-import com.rb.cybermonitorpro.ui.nightlight.hdrTabIconPatch
-import com.rb.cybermonitorpro.ui.nightlight.HdrMetricText
-import com.rb.cybermonitorpro.ui.nightlight.HdrPatchRegistry
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -514,19 +504,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
-            // ★ 固定软件背景光晕 — 根层一次性渲染, 不随卡片/页面/滚动重绘 (性能优化)
-            AppGlowBackground()
-            // ★ CyberNightlight TurboXDR：局部 HDR 增亮浮层（setZOrderMediaOverlay 位于 SDR UI 之上，
-            //   触摸穿透；覆盖层打开时 hidden=true 隐藏；当前 Tab 变化时触发一次性边缘闪光）
-            CyberNightlightHost(hidden = overlayVisible, currentPage = pagerState.currentPage, pagerState = pagerState)
-            // ★ 行业首创：局部 UI 元素级真 HDR 增亮浮层（卡片描边 / Tab 指示条 / 大数字 / 折线+网格）
-            HdrPatchHost(hidden = overlayVisible, pagerState = pagerState, modifier = Modifier.matchParentSize())
-            // ★ Windows 10 风格全局光照 — 包裹全部内容以捕获指针事件
             // ★ F5-2: SharedTransitionLayout 包裹 — 传感器卡片 ↔ 详情标题 sharedElement 形变
             //   (CARD-01: 实验 API 必须 @OptIn; scope 经 CompositionLocal 下发, 调用方判空降级)
             SharedTransitionLayout {
                 CompositionLocalProvider(LocalSharedTransitionScope provides this@SharedTransitionLayout) {
-                    GlobalLightProvider {
             // ★ 主 Tab 页始终保持在 composition 中，保留所有滚动状态
             MainTabs(
                 pagerState = pagerState,
@@ -737,8 +718,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     }
                 }
             }
-            } // end GlobalLightProvider
-                } // end CompositionLocalProvider(LocalSharedTransitionScope)
+            } // end CompositionLocalProvider(LocalSharedTransitionScope)
             } // end SharedTransitionLayout
         }
     }
@@ -777,21 +757,12 @@ private fun MainTabs(
     }
 
     Column(Modifier.fillMaxSize()) {
-        // ── 暗玻璃药丸头部: padding + 大圆角容器 + 动效装饰 + Windows 10 光照 ──
+        // ── 天青玻璃药丸头部: padding + 大圆角容器 + 动效装饰 ──
         Box(
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 6.dp, vertical = 4.dp)
                 .height(64.dp)
-                .revealLight(radius = 200.dp, intensity = 0.15f)
-                .neonBorderGlow()
-                // ★ 新增(Tab 栏描边 HDR): 与 neonBorderGlow 同款圆角/描边，仅 TurboXDR 开启时由 PQ 浮层点亮（topZone 绕过顶撞裁剪）
-                .hdrTabBarBorderPatch("topbar.border")
-                // ★ 修复(顶撞): 记录药丸头部+Tab 行底部（根坐标），供渲染器减去 surfaceRoot 后裁剪内容贴片
-                .onGloballyPositioned { coords ->
-                    val rootY = coords.localToRoot(Offset.Zero).y
-                    HdrPatchRegistry.contentClipTop = rootY + coords.size.height
-                }
         ) {
             // 底层: 动效装饰 (渐变光晕 + 内发光边框 + 粒子) — 独立剪裁，不影响 TabRow indicator
             NeonHeaderDecoration(Modifier.matchParentSize().clip(RoundedCornerShape(26.dp)))
@@ -810,10 +781,8 @@ private fun MainTabs(
                 divider = {},
                 indicator = { pos ->
                     TabRowDefaults.Indicator(
-                        Modifier.tabIndicatorOffset(pos[pagerState.currentPage])
-                            .hdrTabIndicatorPatch("topbar.indicator"),
-                        // PQ 点亮时隐藏 SDR 指示条，由透明 PQ 浮层承担高亮（避免重影/过曝）
-                        color = if (HdrOverlayState.pqActive.value) Color.Transparent else NeonPurple,
+                        Modifier.tabIndicatorOffset(pos[pagerState.currentPage]),
+                        color = NeonPurple,
                         height = 3.dp
                     )
                 }
@@ -822,28 +791,39 @@ private fun MainTabs(
                 val onTabClick: () -> Unit = remember(i, ctx, scope, pagerState) {
                     { HapticUtils.lightTap(ctx); scope.launch { pagerState.animateScrollToPage(i) }; Unit }
                 }
+                val selected = pagerState.currentPage == i
                 Tab(
-                    selected = pagerState.currentPage == i,
+                    selected = selected,
                     onClick = onTabClick,
+                    // ★ 足线选中态: 选中 Tab 背景 10% 天青药丸(圆角 12dp) + 底部 2dp 天青短线
+                    modifier = Modifier.drawBehind {
+                        if (selected) {
+                            drawRoundRect(
+                                color = NeonPurple.copy(alpha = 0.10f),
+                                cornerRadius = CornerRadius(12.dp.toPx())
+                            )
+                            val lineH = 2.dp.toPx()
+                            val lineW = size.width * 0.5f
+                            drawRoundRect(
+                                color = NeonPurple,
+                                topLeft = Offset(size.width / 2f - lineW / 2f, size.height - lineH - 5.dp.toPx()),
+                                size = Size(lineW, lineH),
+                                cornerRadius = CornerRadius(lineH / 2f)
+                            )
+                        }
+                    },
                     text = {
-                        // ★ 修复(Tab 标签无 HDR): 选中项标签以 TEXT_GLYPH 点亮（topZone 绕过顶撞裁剪）
-                        HdrMetricText(
+                        Text(
                             text = tab.title,
-                            fontSize = 12.sp,
-                            color = if (pagerState.currentPage == i) NeonPurple else NeonSteelBlue.copy(alpha = 0.7f),
-                            letterSpacing = 0.sp,
-                            topZone = true,
-                            gate = pagerState.currentPage == i,
-                            monospace = false,
-                            fontWeight = if (pagerState.currentPage == i) FontWeight.Bold else FontWeight.Normal
+                            fontSize = 13.sp,
+                            color = if (selected) NeonPurple else NeonSteelBlue.copy(alpha = 0.7f),
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
                         )
                     },
                     icon = {
-                        // ★ 修复(Tab 图标无 HDR): 选中项矢量图标外圈霓虹光环（topZone 绕过顶撞裁剪）
                         Icon(
                             painterResource(tab.iconRes), null,
                             Modifier.size(16.dp)
-                                .hdrTabIconPatch("tab.icon.$i", selected = pagerState.currentPage == i, iconRes = tab.iconRes)
                         )
                     },
                     selectedContentColor = NeonPurple,
