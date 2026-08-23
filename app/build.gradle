@@ -50,7 +50,10 @@ android {
     }
 
 defaultConfig {
-    applicationId "com.rb.cybermonitorpro"
+    // ★ 特别分发版 (Edition): applicationId 加 .edition 后缀 → 与正式版可并行安装,
+    //   数据目录/SharedPreferences 隔离 (namespace 保持 com.rb.cybermonitorpro 不动,
+    //   R 类 / BuildConfig / 组件名全部不受影响)
+    applicationId "com.rb.cybermonitorpro.edition"
     minSdk 21
     targetSdk 36   // Android 16 (API 36)；2026-08-31 Play 目标 API 截止。健康权限: 本应用未声明/使用 BODY_SENSORS 或 android.permission.health.*，无需迁移。
     versionCode 20260823
