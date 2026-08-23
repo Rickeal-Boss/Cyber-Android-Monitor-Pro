@@ -26,7 +26,6 @@ import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonMagenta
-import com.rb.cybermonitorpro.ui.nightlight.hdrChartPatches
 
 // ═══════ 安全 coerceIn — 防御 minimum > maximum ═══════
 
@@ -71,8 +70,6 @@ fun LineChart(
     showGrid: Boolean = true,
     gridLines: Int = 5,
     useGradient: Boolean = false,
-    /** 局部 HDR：非空时把折线本体 + 网格线画进 PQ surface（行业首创 HDR 引入 UI）。 */
-    hdrKey: String? = null,
 ) {
     if (data.isEmpty()) return
 
@@ -93,7 +90,7 @@ fun LineChart(
     }
     // ★ 面积渐变 Brush — 同样提到 Composition 层
     val areaBrush = remember(areaColor) {
-        Brush.verticalGradient(listOf(areaColor.copy(alpha = 0.3f), areaColor.copy(alpha = 0.05f)))
+        Brush.verticalGradient(listOf(areaColor.copy(alpha = 0.16f), areaColor.copy(alpha = 0f)))
     }
 
     // ★ Path 对象复用 — 动画期间零分配
@@ -109,16 +106,9 @@ fun LineChart(
         if (!showGrid) null else Pair(gridLines, DividerCyber)
     }
 
-    // 局部 HDR 贴片：hdrKey 非空时把折线 + 网格上报至 HdrPatchRegistry（窗口坐标，与绘制公式一致）
-    val chartModifier = if (hdrKey != null)
-        modifier
-            .fillMaxWidth().height(120.dp)
-            .graphicsLayer { }
-            .then(Modifier.hdrChartPatches(hdrKey, data, lineColor, gridLines, showGrid))
-    else
-        modifier
-            .fillMaxWidth().height(120.dp)
-            .graphicsLayer { }
+    val chartModifier = modifier
+        .fillMaxWidth().height(120.dp)
+        .graphicsLayer { }
 
     Canvas(modifier = chartModifier) {
         val w = size.width; val h = size.height; val pad = 8.dp.toPx()
@@ -192,8 +182,6 @@ fun DualLineChart(
     gridLines: Int = 5,
     useGradient1: Boolean = false,
     useGradient2: Boolean = false,
-    /** 局部 HDR：非空时把两条折线 + 网格线画进 PQ surface（行业首创 HDR 引入 UI）。 */
-    hdrKey: String? = null,
 ) {
     if (data1.isEmpty() || data2.isEmpty()) return
 
@@ -230,12 +218,6 @@ fun DualLineChart(
     Canvas(modifier = modifier
         .fillMaxWidth().height(120.dp)
         .graphicsLayer { }
-        .let { m ->
-            if (hdrKey != null)
-                m.hdrChartPatches(hdrKey, data1, lineColor1, gridLines, showGrid)
-                    .hdrChartPatches(hdrKey + ".b", data2, lineColor2, gridLines, false)
-            else m
-        }
     ) {
         val w = size.width; val h = size.height; val pad = 8.dp.toPx()
         val cw = w - pad * 2; val ch = h - pad * 2

@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
@@ -47,7 +46,6 @@ import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.NeonMagenta
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
-import com.rb.cybermonitorpro.ui.effects.CyberNightlightSwitch
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import org.koin.androidx.compose.koinViewModel
 
@@ -63,9 +61,6 @@ fun CpuScreen(
     val histData by viewModel.historyData.observeAsState(emptyMap())
     var selectedView by remember { mutableIntStateOf(0) }
     val ctx = LocalContext.current
-
-    // 读取 TurboXDR 总开关：开关变化时本屏重组，触发所有 onGloballyPositioned 重新上报/清理 HDR 贴片
-    @Suppress("unused") val nightlightEnabled = CyberNightlightSwitch.enabled
 
     val arch = cpuInfo?.architecture ?: stringResource(R.string.common_detecting)
     val coreCount = cpuInfo?.coreCount ?: 0
@@ -92,7 +87,7 @@ fun CpuScreen(
     var cardIdx = 0
 
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberHdrScrollState()).padding(16.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp)
     ) {
         InfoCard(
@@ -118,7 +113,7 @@ fun CpuScreen(
                 }
             } ?: ""
         ) {
-            LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth(), hdrKey = "cpu.temp.chart")
+            LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth())
         }
 
         // CPU 深度睡眠 (C-States)
@@ -138,7 +133,7 @@ fun CpuScreen(
                     }
                 } ?: ""
             ) {
-                LineChart(data = deepSleepChart, modifier = Modifier.fillMaxWidth(), hdrKey = "cpu.cstates.chart")
+                LineChart(data = deepSleepChart, modifier = Modifier.fillMaxWidth())
             }
 
             // 各 C-State 详情
@@ -286,7 +281,7 @@ private fun ClusterCard(name: String, subtitle: String, frequency: String, freqD
                 Text(frequency, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = NeonPurpleBright)
             }
             Spacer(Modifier.height(12.dp))
-            LineChart(data = freqData, modifier = Modifier.fillMaxWidth(), hdrKey = "cpu.freq.chart")
+            LineChart(data = freqData, modifier = Modifier.fillMaxWidth())
         }
     }
 }

@@ -21,7 +21,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.GpsSatelliteInfo
-import com.rb.cybermonitorpro.ui.nightlight.hdrSatSkyPatch
 import com.rb.cybermonitorpro.ui.theme.*
 import kotlin.math.*
 
@@ -68,8 +67,6 @@ fun SatelliteSkyView(
                     .fillMaxWidth()
                     .aspectRatio(1f)
                     .padding(8.dp)
-                    // ★ 修复(卫星图内点无 HDR): 按 drawSkyPlot 同公式上报每颗卫星圆点为 HDR 贴片
-                    .hdrSatSkyPatch(satellites)
             ) {
                 drawSkyPlot(satellites, size.minDimension)
             }
