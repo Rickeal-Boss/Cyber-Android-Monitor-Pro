@@ -161,7 +161,7 @@ fun DashboardScreen(
         )
 
         // ── 数据源健康指示条 ──
-        DataSourceHealthBar(sourceHealth, Modifier.entranceReveal(1))
+        DataSourceHealthBar(sourceHealth, Modifier.entranceReveal(1), onNavigate = onNavigate)
 
         // ── 分割线 ──
         HorizontalDivider(thickness = 1.dp, color = NeonPurpleDeep.copy(alpha = 0.3f))
@@ -488,14 +488,42 @@ private fun gpuLoad(historyData: Map<String, List<HistoryDataPoint>>): String {
 
 // ── 数据源健康状态指示条 ──
 @Composable
-private fun DataSourceHealthBar(health: SourceHealth, modifier: Modifier = Modifier) {
+private fun DataSourceHealthBar(health: SourceHealth, modifier: Modifier = Modifier,
+                                onNavigate: (Int) -> Unit = {}) {
     if (health.allHealthy) return // 全部正常则不显示
+
+    val ctx = LocalContext.current
+    // 数据源 → tab 映射（IO/WiFi/SYS/OEM 无对应 tab，点击不响应）
+    val sources: List<Pair<String, Pair<SourceHealth.Health, Int?>>> = listOf(
+        "CPU" to (health.cpu to 1),
+        "GPU" to (health.gpu to 2),
+        "BAT" to (health.battery to 4),
+        "RAM" to (health.memory to 3),
+        "IO" to (health.storage to null),
+        "WiFi" to (health.wifi to null),
+        "4G" to (health.mobileNetwork to 5),
+        "IF" to (health.networkInterface to 5),
+        "SYS" to (health.system to null),
+        "SNS" to (health.sensors to 7),
+        "DEV" to (health.deviceDetail to 8),
+        "OEM" to (health.oem to null)
+    )
+    // 导航优先级: 先找首个 ERROR 源（可跳转），否则首个 WARN 源（可跳转）
+    val navTarget = remember(health) {
+        sources.firstOrNull { it.second.first == SourceHealth.Health.ERROR && it.second.second != null }
+            ?.second?.second
+            ?: sources.firstOrNull { it.second.first == SourceHealth.Health.WARN && it.second.second != null }
+                ?.second?.second
+    }
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(8.dp))
             .background(CyberPill)
+            .clickable(enabled = navTarget != null) {
+                navTarget?.let { HapticUtils.standardTap(ctx); onNavigate(it) }
+            }
             .padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -510,25 +538,10 @@ private fun DataSourceHealthBar(health: SourceHealth, modifier: Modifier = Modif
         Spacer(Modifier.weight(1f))
 
         // 枚举所有数据源的状态点
-        val sources = listOf(
-            "CPU" to health.cpu,
-            "GPU" to health.gpu,
-            "BAT" to health.battery,
-            "RAM" to health.memory,
-            "IO" to health.storage,
-            "WiFi" to health.wifi,
-            "4G" to health.mobileNetwork,
-            "IF" to health.networkInterface,
-            "SYS" to health.system,
-            "SNS" to health.sensors,
-            "DEV" to health.deviceDetail,
-            "OEM" to health.oem
-        )
-        sources.forEach { (label, h) ->
-            val color = when (h) {
+        sources.forEach { (_, h) ->
+            val color = when (h.first) {
                 SourceHealth.Health.ERROR -> ErrorNeon
                 SourceHealth.Health.WARN -> WarningNeon
-                SourceHealth.Health.OK -> SuccessNeon
                 else -> SuccessNeon
             }
             Box(
