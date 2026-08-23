@@ -4,12 +4,13 @@
 
 ## 0. 项目基本信息
 - 仓库：github.com/Rickeal-Boss/Cyber-Android-Monitor-Pro；6.0.6 为 GitHub 默认分支，当前开发分支 `6.0.6.3`（基于 6.0.6 @ ef77a4d，2026-08-22 起传感器/海拔修复线）。
+- 6.0.606 线（2026-08-23 起，设备详情页系统步数卡片功能）：GitHub 默认分支 `6.0.606.0.9`（基于 6.0.606.0 @ b17c47e；`6.0.606.0.2` 效果不满意已架空/不采用）。Tag 序列 `v6.0.606.0.9-debug-pre1` 起。见 §12。
 - 技术栈：Kotlin + Jetpack Compose；局部 HDR / TurboXDR（PQ 贴片）在原生 `GLSurfaceView` 上合成。
 - Git author（强制保留）：`Rickeal-Boss (private) <rickealobossdayone@agentmail.com>`。
 
 ## 1. CI 约定（重要）
 - 触发：GitHub Actions 由 **Tag** 触发（非分支 push）。workflow `.github/workflows/android-build.yml` 匹配 `v*-debug-pre*` → `Build Signed Release APK`（`./gradlew assembleRelease`）。
-- 轮询脚本：`C:\Users\W2\Videos\newW2zhuan\ci_poll.sh <40位 head_sha> [timeout=1800]`；读 `$PAT` env，`curl --ssl-no-revoke`，失败用 `actions/jobs/{id}/logs` 端点 + 302 匿名跟随拉日志到 `ci_logs_<run>.txt`。脚本内部依赖 `python3`。
+- 轮询脚本：`C:\Users\Z\Downloads\newW2zhuan\ci_poll.sh <40位 head_sha> [timeout=1800]`；读 `$PAT` env，`curl --ssl-no-revoke`，失败用 `actions/jobs/{id}/logs` 端点 + 302 匿名跟随拉日志到 `ci_logs_<run>.txt`。脚本内部依赖 `python3`。
 - **PAT 注入**：必须 `export PAT=...` 后在同一命令用 `$PAT` 展开；不可 inline `VAR=val cmd`（父 shell 不展开 → 401）。
 - **git push 凭据助手语法（pre7 踩坑）**：`-c credential.helper='!f() { printf "username=x-access-token\npassword=%s\n" "$PAT"; }; f'`。`!` 后的 shell 片段必须**定义后调用** `f`，否则 git 把追加的 `get` 当命令 → "syntax error near unexpected token" → 回退交互式用户名提示、最终 `could not read Username`。
 - **本机 CI 必须由主线程持有后台任务**：子 agent 结束后其后台 bash 会被回收，推送不落地。主理人直接 `run_in_background` 跑 push+poll 才可靠。
@@ -88,3 +89,10 @@
 - 关键事实（供未来重启）：API 36 `ProgressStyle` 无双栏文本能力（Segment 只有 length+color、Point 只有 position+color，禁 RemoteViews）；真双栏模板 `MetricStyle`（≤3 指标并排）属 **Android 17（API 37）**；完整提升体验需 **36.1 QPR1**（SDK_INT 恒 36，须 `Build.VERSION.SDK_INT_FULL`/`BuildCompat.isAtLeastB_1()` 判断；compat 路径 `NotificationCompat.setRequestPromotedOngoing` 需 core≥1.17）。Eligibility：`POST_PROMOTED_NOTIFICATIONS`（normal 装时授予）+ setOngoing + contentTitle + 禁 customContentView/group summary/colorized + channel≠IMPORTANCE_MIN。官方 1 秒内多次更新会被丢弃→变更阈值节流；用户划掉不得自动重发（setDeleteIntent）。国产 ROM 分裂：小米（miui.focus.param 私有+邮件申请+年度续期）/vivo（superx 私有，islandData 原生左右双栏但 scene 白名单无硬件监控）/OPPO ColorOS 15（私有流体云）；ColorOS 16/OriginOS 6/Nothing OS 4/三星 One UI 8 Now Bar 消费原生 API。
 - CAM-P 冲突评估结论：唯一 FGS（FloatingWindowService）通知 id=1001/通道 floating_window(LOW) 不可复用（互踩）；**三权限缺口：POST_NOTIFICATIONS/READ_PHONE_STATE/ACCESS_FINE_LOCATION 全声明全无运行时申请**（Android 13+ 新装通知默认关）；**采集循环归 MainActivity（DisposableEffect）——activity 回收即全部 SharedFlow 停发（悬浮窗既有隐患）**，任何常驻通知须服务自持采集；电池温度现成 `repo.batteryFlow`（sticky intent 官方唯一路径，无 BatteryManager 属性）；SS-RSRP 现有 parseNr 轮询路径（`tm.signalStrength` API 28+，<28 无守卫已顺手修）。
 - 完整方案 α（独立 LiveUpdatesService + 通知 id 1002 + live_updates 通道 + 温度仪表条 + 双权限申请 + 节流器，8 文件拆解）存档于每日记忆 2026-08-22，重启时可直接派工。
+
+## 12. 设备详情页系统步数卡片（6.0.606.0.9，2026-08-23）
+- **功能**：DeviceScreen 新增「运动健康（步数）」卡片，依赖 STEP_COUNTER 传感器（TYPE_STEP_COUNTER=19）+ ACTIVITY_RECOGNITION 运行时权限（API 29+）。架构链路：`DeviceRepository.hasStepCounter()`/`enableStepCounter(onReading)`（三级降级链取传感器）→ `StepCounterStore` 账本对账（`offset + (raw - bootBaseline)`，`dayStamp` 取今日步数）→ `DeviceViewModel._stepUi: MutableLiveData<StepUiState>`（todaySteps/totalSteps/stepsSinceBoot，60s 速率窗口）→ `DeviceScreen` 用 `val stepUi by viewModel.stepUi.observeAsState()` 渲染；未授权时显示「点击授权」`RowItemClickable`（照蓝牙先例 `activityPermLauncher.launch(ACTIVITY_RECOGNITION)`）。派生指标常量 `AVG_STRIDE_M=0.762f`/`KCAL_PER_STEP=0.04f`/`STEPS_PER_MIN=100f` 在 `SensorDetailViewModel` 提为 `internal const val` 单一来源，跨页共享（消除字面量重复）。
+- 三语 strings 各 +5 条：`device_section_health` / `device_step_total_label` / `device_step_boot_label` / `device_step_permission_label` / `device_step_permission_action`。
+- **★ CI 编译失败教训（括号失衡逃逸静态审查）**：首次提交 `913bfe8` 因插入的步数卡外层 `if (hasStepCounter || needActivityPerm) {` 缺闭合 `}`（只闭合了内层 `Box`），把文件级 `private fun SectionCard/RowItem/RowItemClickable` 重新嵌套为 `DeviceScreen` 的**局部函数**（局部函数须先声明后使用）→ 报 `Unresolved reference 'SectionCard'/'RowItem'` 级联 + "@Composable invocations can only happen from a @Composable function"。**根因是结构性括号失衡，code-quality-reviewer 的 import/scope 静态审查给 PASS 无法发现**（函数定义本身语法合法，只是被错误嵌套）。修复 = 在外层 if 末尾补 `}`（L440 闭 Box、L442 闭 if）。
+- **★ 审查清单追加项（本地无 JDK 不可编译，括号类错误只能靠 CI 暴露）**：Compose 文件改完后必须①肉眼/grep 核对顶层 `private fun`（尤其 `SectionCard/RowItem/RowItemClickable`）仍在**文件作用域**（`grep '^private fun'`）；②整体括号配平，尤其新插入的 `if` / `Box` / `SectionCard` 三层嵌套要逐层数；③确认新调用的修饰符/导入在作用域可见（延续 §6b）。任一缺失只能等 CI 编译失败才暴露。
+- Round：`v6.0.606.0.9-debug-pre1` 首次 run #32627541620 编译失败（括号失衡）→ 补 `}` 后同 tag 名 `-f` 强制推送重触发。CI 仅编译不跑设备，步数真机行为（传感器可用性/授权后重采）须用户真机复测。
