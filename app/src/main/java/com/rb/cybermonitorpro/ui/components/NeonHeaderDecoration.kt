@@ -1,25 +1,19 @@
 package com.rb.cybermonitorpro.ui.components
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.rb.cybermonitorpro.ui.theme.*
 
 /**
- * 顶部标题栏霓虹装饰 — 纯色底 + 渐变光晕 + 霓虹边框光效
+ * 顶部标题栏霓虹装饰 — 纯色底 + 渐变光晕
  *
  * 去除了 infiniteTransition / Brush.radialGradient / Canvas 自绘,
- * 改为纯静态背景 + border + shadow 实现，零重组开销。
+ * 改为纯静态背景实现，零重组开销。
  */
 @Composable
 fun NeonHeaderDecoration(
@@ -50,38 +44,6 @@ fun NeonHeaderDecoration(
         )
     }
 }
-
-/**
- * 霓虹边框光效 Modifier — 可复用于任何圆角容器
- *
- * 效果: 渐变描边 + 紫色外发光投影
- * shape 默认与头部药丸 (26.dp) 对齐
- */
-fun Modifier.neonBorderGlow(
-    cornerRadius: Dp = 26.dp,
-    borderWidth: Dp = 1.5.dp,
-    glowElevation: Dp = 6.dp,
-): Modifier = this
-    .shadow(
-        elevation = glowElevation,
-        shape = RoundedCornerShape(cornerRadius),
-        ambientColor = NeonPurple.copy(alpha = 0.5f),
-        spotColor = NeonPurpleBright.copy(alpha = 0.7f),
-    )
-    .border(
-        width = borderWidth,
-        brush = Brush.horizontalGradient(
-            colors = listOf(
-                Color.Transparent,
-                NeonPurpleDeep.copy(alpha = 0.4f),
-                NeonPurpleBright.copy(alpha = 0.7f),
-                NeonPurple.copy(alpha = 0.6f),
-                NeonPurpleDeep.copy(alpha = 0.4f),
-                Color.Transparent,
-            )
-        ),
-        shape = RoundedCornerShape(cornerRadius),
-    )
 
 /**
  * 霓虹动效分割线 — 极简版

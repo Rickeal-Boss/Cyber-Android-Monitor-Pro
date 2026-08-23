@@ -762,10 +762,6 @@
     <string name="settings_haptic_weak">弱</string>
     <string name="settings_haptic_medium">中</string>
     <string name="settings_haptic_strong">強</string>
-    <string name="settings_globallight">全域光照</string>
-    <string name="settings_globallight_desc">卡片指標跟隨光照效果；入門裝置關閉可降低 GPU 光柵開銷</string>
-    <string name="settings_globallight_on">已開啟</string>
-    <string name="settings_globallight_off">已關閉</string>
 
     <string name="settings_turboxdr">CyberNightlight TurboXDR</string>
     <string name="settings_turboxdr_desc">區域 HDR 增亮：卡片描邊、文字、圖示、折線僅高亮元素發光，不抬高整屏亮度</string>

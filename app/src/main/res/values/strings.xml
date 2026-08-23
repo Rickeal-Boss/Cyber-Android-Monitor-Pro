@@ -52,10 +52,6 @@
     <string name="settings_haptic_weak">Weak</string>
     <string name="settings_haptic_medium">Medium</string>
     <string name="settings_haptic_strong">Strong</string>
-    <string name="settings_globallight">Global Lighting</string>
-    <string name="settings_globallight_desc">Pointer-follow reveal lighting on cards; turn off to cut GPU raster cost on low-end devices</string>
-    <string name="settings_globallight_on">On</string>
-    <string name="settings_globallight_off">Off</string>
 
     <string name="settings_turboxdr">CyberNightlight TurboXDR</string>
     <string name="settings_turboxdr_desc">Local HDR boost for card borders, text, icons and charts — only highlighted elements glow</string>
