@@ -49,6 +49,17 @@ object FloatingWindowConfig {
     val TEXT_SIZE_RANGE = 9f..22f
     val ALPHA_RANGE = 0.2f..1f
 
+    /** 首次打开悬浮窗设置页时写入的默认文字色 = textColorPresets[1] 浅蓝 */
+    private const val DEFAULT_TEXT_COLOR_CYAN = 0xFF00D4FF.toInt()
+
+    /** 首次打开时的默认坐标（推断基线: x=16 左侧连续排列, 需对照 final.jpeg 微调） */
+    val DEFAULT_POSITIONS = listOf(
+        "gpu_usage" to (16 to 160), "cpu_temp" to (16 to 216), "gpu_temp" to (16 to 272),
+        "cpu_freq" to (16 to 328),   // 4 行较高, 其后间隙留大
+        "ram" to (16 to 440), "battery_temp" to (16 to 496), "battery_cur" to (16 to 552),
+        "battery_pow" to (16 to 608), "fps" to (16 to 664)
+    )
+
     private val _textSizeSp = MutableStateFlow(DEFAULT_TEXT_SIZE_SP)
     val textSizeFlow: StateFlow<Float> = _textSizeSp.asStateFlow()
 
@@ -155,4 +166,30 @@ object FloatingWindowConfig {
 
     fun getWindowY(key: String, default: Int): Int = prefs?.getInt("pos_${key}_y", default) ?: default
     fun setWindowY(key: String, v: Int) { prefs?.edit()?.putInt("pos_${key}_y", v)?.apply() }
+
+    /**
+     * 首次打开悬浮窗设置页时的一次性默认写入（非首次安装）。
+     * 靠 floatsettings_first_opened 标志只写一次, 老用户已有 visible_metrics 时不会被覆盖。
+     * 必须在组合期「先写后读」同步调用（FloatingWindowScreen 的 toggles 用 remember 读初始值）。
+     */
+    fun ensureFirstOpenedDefaults() {
+        val p = prefs ?: return
+        if (p.getBoolean("floatsettings_first_opened", false)) return
+        // ★ 老用户守卫：任一旧 key 已存在 → 说明是老版本升级用户，
+        //   只补 flagsettings_first_opened 标志、不覆盖其已自定义的配置。
+        if (p.contains("visible_metrics") || p.contains("text_color") || p.contains("pos_gpu_usage_x")) {
+            p.edit().putBoolean("floatsettings_first_opened", true).apply()
+            return
+        }
+        _visibleMetrics.value = ALL_METRICS
+        _textColor.value = DEFAULT_TEXT_COLOR_CYAN
+        // 单次 edit 链合并写入 SP, 减少 I/O
+        val e = p.edit()
+            .putStringSet("visible_metrics", ALL_METRICS)
+            .putInt("text_color", DEFAULT_TEXT_COLOR_CYAN)
+        DEFAULT_POSITIONS.forEach { (k, xy) ->
+            e.putInt("pos_${k}_x", xy.first).putInt("pos_${k}_y", xy.second)
+        }
+        e.putBoolean("floatsettings_first_opened", true).apply()
+    }
 }

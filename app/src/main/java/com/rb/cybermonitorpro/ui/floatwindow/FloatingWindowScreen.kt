@@ -96,6 +96,9 @@ private val metricToggles = listOf(
 @Composable
 fun FloatingWindowScreen(onBack: () -> Unit) {
     val ctx = LocalContext.current
+    // ★ 首次打开本页时一次性写入默认值（先写后读：toggles 在组合期读初始值, 必须同步执行, 不能用 LaunchedEffect）
+    remember { FloatingWindowConfig.ensureFirstOpenedDefaults(); true }
+
     val enabled by FloatingWindowConfig.enabledFlow.collectAsState()
 
     // ★ 每个指标独立 state（从 FloatingWindowConfig 读取初始值）

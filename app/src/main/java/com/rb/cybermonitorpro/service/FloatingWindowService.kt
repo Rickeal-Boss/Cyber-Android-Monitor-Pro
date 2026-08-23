@@ -254,15 +254,15 @@ class FloatingWindowService : Service() {
 
     // ── 9 个独立窗口 ──
     private val itemDefs = listOf(
-        "gpu_usage"    to { makeItem("gpu_usage", "$gpuLabel --%", 16, 200) },
-        "cpu_temp"     to { makeItem("cpu_temp", "$cpuLabel --°C", 16, 320) },
-        "gpu_temp"     to { makeItem("gpu_temp", "$gpuLabel --°C", 16, 380) },
-        "cpu_freq"     to { makeItem("cpu_freq", cpuFreqHeaders.take(4).joinToString("\n") { "$it --MHz" }, 16, 440) },
-        "ram"          to { makeItem("ram", "$ramLabel --%", 16, 620) },
-        "battery_temp" to { makeItem("battery_temp", "$batLabel --°C", 16, 680) },
-        "battery_cur"  to { makeItem("battery_cur", "$currentLabel --mA", 16, 740) },
-        "battery_pow"  to { makeItem("battery_pow", "$powerLabel --W", 16, 800) },
-        "fps"          to { makeItem("fps", "$fpsLabel --", 16, 860) }
+        "gpu_usage"    to { makeItem("gpu_usage", "$gpuLabel --%", 16, 160) },
+        "cpu_temp"     to { makeItem("cpu_temp", "$cpuLabel --°C", 16, 216) },
+        "gpu_temp"     to { makeItem("gpu_temp", "$gpuLabel --°C", 16, 272) },
+        "cpu_freq"     to { makeItem("cpu_freq", cpuFreqHeaders.take(4).joinToString("\n") { "$it --MHz" }, 16, 328) },
+        "ram"          to { makeItem("ram", "$ramLabel --%", 16, 440) },
+        "battery_temp" to { makeItem("battery_temp", "$batLabel --°C", 16, 496) },
+        "battery_cur"  to { makeItem("battery_cur", "$currentLabel --mA", 16, 552) },
+        "battery_pow"  to { makeItem("battery_pow", "$powerLabel --W", 16, 608) },
+        "fps"          to { makeItem("fps", "$fpsLabel --", 16, 664) }
     )
 
     @SuppressLint("MissingPermission")
