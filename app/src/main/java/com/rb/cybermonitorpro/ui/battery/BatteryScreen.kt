@@ -63,7 +63,9 @@ import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
 import com.rb.cybermonitorpro.ui.theme.PorcelainBlue
+import com.rb.cybermonitorpro.ui.theme.PorcelainBlueDeep
 import com.rb.cybermonitorpro.ui.theme.PorcelainPink
+import com.rb.cybermonitorpro.ui.theme.PorcelainPinkDeep
 import com.rb.cybermonitorpro.ui.theme.AmbientShadow
 import com.rb.cybermonitorpro.ui.theme.SpotShadow
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
@@ -375,7 +377,7 @@ fun BatteryScreen(
                     MetricCard(
                         title = if (isCharging) stringResource(R.string.battery_charging_power_title) else stringResource(R.string.battery_discharge_power_title),
                         value = "${(power / 1000f).let { "%.1f".format(it) }} W",
-                        valueColor = NeonPurpleBright
+                        valueColor = PorcelainBlueDeep
                     ) {
                         LineChart(data = battPowerChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainBlue)
                     }
@@ -430,7 +432,7 @@ fun BatteryScreen(
                     MetricCard(
                         title = stringResource(R.string.battery_temperature_title),
                         value = "%.1f°C".format(temp),
-                        valueColor = NeonPurpleBright,
+                        valueColor = PorcelainPinkDeep,
                         borderColor = batteryTempBorderColor(temp)
                     ) {
                         LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainPink)

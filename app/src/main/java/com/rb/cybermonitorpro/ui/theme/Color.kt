@@ -8,8 +8,9 @@ import androidx.compose.ui.graphics.Color
 // ============================================
 //  镜瓷白 · 天青 主题 (Edition 6.0.606.0)
 //  浅色 = 镜瓷白系 · 深色 = 天青墨系
-//  40 个色板 token 均为可变 State，深浅切换由 updateThemeColors(dark) 批量赋值
+//  48 个色板 token 均为可变 State，深浅切换由 updateThemeColors(dark) 批量赋值
 //  业务代码引用 token 名零改动（仅读取当前值，可变色自动触发重组）
+//  含 8 个嵌瓷 deep 阶 token（主指标大数字专用：数字-曲线同色加深，白底对比度 ≥4.5:1）
 // ============================================
 
 // ── 浅色基准色 (镜瓷白) ──
@@ -56,6 +57,16 @@ private val LightPorcelainPink       = Color(0xFFB85C7E)
 private val LightPorcelainNeutral    = Color(0xFFAEBEB8)
 private val LightPorcelainInk        = Color(0xFF3A3A40)
 
+// ── 嵌瓷 deep 阶 浅色基准 (主指标大数字专用: 白底对比度 ≥4.5:1 的深色阶) ──
+private val LightPorcelainBlueDeep    = Color(0xFF2E567F)
+private val LightPorcelainRedDeep     = Color(0xFFA0472E)
+private val LightPorcelainGreenDeep   = Color(0xFF23685A)
+private val LightPorcelainGoldDeep    = Color(0xFF8A6E1A)
+private val LightPorcelainVioletDeep  = Color(0xFF5F5286)
+private val LightPorcelainPinkDeep    = Color(0xFF9A4A63)
+private val LightPorcelainNeutralDeep = Color(0xFF7A8680)
+private val LightPorcelainInkDeep     = Color(0xFF232327)
+
 // ── 深色基准色 (天青墨) ──
 private val DarkCyberBackground      = Color(0xFF14161A)
 private val DarkCyberCardStart       = Color(0xFF1E2226)
@@ -99,6 +110,16 @@ private val DarkPorcelainViolet      = Color(0xFFAD9FD0)
 private val DarkPorcelainPink        = Color(0xFFDA94AC)
 private val DarkPorcelainNeutral     = Color(0xFFC9D6D1)
 private val DarkPorcelainInk         = Color(0xFF55555E)
+
+// ── 嵌瓷 deep 阶 深色基准 (主指标大数字专用: 天青墨底上的亮阶) ──
+private val DarkPorcelainBlueDeep    = Color(0xFF9FC0E2)
+private val DarkPorcelainRedDeep     = Color(0xFFEFA98C)
+private val DarkPorcelainGreenDeep   = Color(0xFF8FD0C0)
+private val DarkPorcelainGoldDeep    = Color(0xFFE8D488)
+private val DarkPorcelainVioletDeep  = Color(0xFFC4B8E6)
+private val DarkPorcelainPinkDeep    = Color(0xFFF0BBD0)
+private val DarkPorcelainNeutralDeep = Color(0xFFD8E2DD)
+private val DarkPorcelainInkDeep     = Color(0xFF6E6E78)
 
 // ── 40 个可变色板 token (初始 = 浅色基准) ──
 var CyberBackground     by mutableStateOf(LightCyberBackground)
@@ -144,12 +165,22 @@ var PorcelainPink       by mutableStateOf(LightPorcelainPink)
 var PorcelainNeutral    by mutableStateOf(LightPorcelainNeutral)
 var PorcelainInk        by mutableStateOf(LightPorcelainInk)
 
+// ── 8 个嵌瓷 deep 阶 token (主指标大数字专用: 数字-曲线同色, 初始 = 浅色基准) ──
+var PorcelainBlueDeep      by mutableStateOf(LightPorcelainBlueDeep)
+var PorcelainRedDeep       by mutableStateOf(LightPorcelainRedDeep)
+var PorcelainGreenDeep     by mutableStateOf(LightPorcelainGreenDeep)
+var PorcelainGoldDeep      by mutableStateOf(LightPorcelainGoldDeep)
+var PorcelainVioletDeep    by mutableStateOf(LightPorcelainVioletDeep)
+var PorcelainPinkDeep      by mutableStateOf(LightPorcelainPinkDeep)
+var PorcelainNeutralDeep   by mutableStateOf(LightPorcelainNeutralDeep)
+var PorcelainInkDeep       by mutableStateOf(LightPorcelainInkDeep)
+
 // ── 固定釉影 token — 不随主题切换，供各卡片阴影复用 ──
 internal val AmbientShadow = Color(0x0D2A2E33)
 internal val SpotShadow    = Color(0x142A2E33)
 
 /**
- * 按主题深浅批量赋值 40 个色板 token。
+ * 按主题深浅批量赋值 48 个色板 token。
  * 在 DeviceInfoViewerTheme 的 SideEffect 中调用；赋值即触发读取方重组。
  */
 internal fun updateThemeColors(dark: Boolean) {
@@ -194,6 +225,14 @@ internal fun updateThemeColors(dark: Boolean) {
         PorcelainPink       = DarkPorcelainPink
         PorcelainNeutral    = DarkPorcelainNeutral
         PorcelainInk        = DarkPorcelainInk
+        PorcelainBlueDeep      = DarkPorcelainBlueDeep
+        PorcelainRedDeep       = DarkPorcelainRedDeep
+        PorcelainGreenDeep     = DarkPorcelainGreenDeep
+        PorcelainGoldDeep      = DarkPorcelainGoldDeep
+        PorcelainVioletDeep    = DarkPorcelainVioletDeep
+        PorcelainPinkDeep      = DarkPorcelainPinkDeep
+        PorcelainNeutralDeep   = DarkPorcelainNeutralDeep
+        PorcelainInkDeep       = DarkPorcelainInkDeep
     } else {
         CyberBackground     = LightCyberBackground
         CyberCardStart      = LightCyberCardStart
@@ -235,5 +274,13 @@ internal fun updateThemeColors(dark: Boolean) {
         PorcelainPink       = LightPorcelainPink
         PorcelainNeutral    = LightPorcelainNeutral
         PorcelainInk        = LightPorcelainInk
+        PorcelainBlueDeep      = LightPorcelainBlueDeep
+        PorcelainRedDeep       = LightPorcelainRedDeep
+        PorcelainGreenDeep     = LightPorcelainGreenDeep
+        PorcelainGoldDeep      = LightPorcelainGoldDeep
+        PorcelainVioletDeep    = LightPorcelainVioletDeep
+        PorcelainPinkDeep      = LightPorcelainPinkDeep
+        PorcelainNeutralDeep   = LightPorcelainNeutralDeep
+        PorcelainInkDeep       = LightPorcelainInkDeep
     }
 }

@@ -34,8 +34,11 @@ import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.PorcelainBlue
+import com.rb.cybermonitorpro.ui.theme.PorcelainBlueDeep
 import com.rb.cybermonitorpro.ui.theme.PorcelainRed
+import com.rb.cybermonitorpro.ui.theme.PorcelainRedDeep
 import com.rb.cybermonitorpro.ui.theme.PorcelainViolet
+import com.rb.cybermonitorpro.ui.theme.PorcelainVioletDeep
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
@@ -101,7 +104,7 @@ fun GpuScreen(
         }
 
         // GPU 负载 + 有效利用率
-        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU load", value = load, valueColor = NeonPurpleBright,
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU load", value = load, valueColor = PorcelainVioletDeep,
             subtitle = loadSource ?: "") {
             if (effectiveUtil != null && !effectiveUtil.isNaN()) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -117,7 +120,7 @@ fun GpuScreen(
             modifier = Modifier.staggeredSwipe(cardIdx++),
             title = "GPU frequency (DVFS)",
             value = frequency,
-            valueColor = if (isThrottled) WarningNeon else NeonPurpleBright,
+            valueColor = if (isThrottled) WarningNeon else PorcelainBlueDeep,
             subtitle = maxFreq?.let {
                 if (isThrottled) stringResource(R.string.gpu_subtitle_max_throttled, it)
                 else stringResource(R.string.gpu_subtitle_max_normal, it)
@@ -127,7 +130,7 @@ fun GpuScreen(
         }
 
         // GPU 温度
-        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU temperature", value = temp, valueColor = NeonPurpleBright) {
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU temperature", value = temp, valueColor = PorcelainRedDeep) {
             LineChart(data = gpuTempChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainRed)
         }
 

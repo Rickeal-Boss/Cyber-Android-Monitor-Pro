@@ -83,7 +83,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
         InfoCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = wifiStatus, subtitle = wifiSubtitle.ifEmpty { stringResource(R.string.common_waiting_data) },
             icon = CyberIcons.Share, iconTint = NeonPurple)
 
-        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Network activity", value = "${wifiInfo?.linkSpeedMbps ?: 0} Mbps", valueColor = NeonPurpleBright) {
+        MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Network activity", value = "${wifiInfo?.linkSpeedMbps ?: 0} Mbps", valueColor = PorcelainBlueDeep) {
             DualLineChart(data1 = wifiSpeedChart, data2 = signalChart,
                 modifier = Modifier.fillMaxWidth(), lineColor1 = PorcelainBlue, lineColor2 = PorcelainRed)
         }

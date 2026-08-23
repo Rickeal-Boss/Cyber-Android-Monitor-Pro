@@ -364,7 +364,7 @@ private fun MetricCardByType(
     when (id) {
         "cpu_temp" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_cpu_temp), value = cpuTemp,
-            valueColor = NeonPurpleBright, modifier = Modifier.fillMaxWidth()
+            valueColor = PorcelainRedDeep, modifier = Modifier.fillMaxWidth()
         ) { LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainRed) }
 
         "mem_usage" -> MetricCard(
@@ -432,7 +432,7 @@ private fun MetricCardByType(
 
         "gpu_load" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_gpu_load), value = gpuLoadText,
-            valueColor = NeonPurpleBright, modifier = Modifier.fillMaxWidth()
+            valueColor = PorcelainVioletDeep, modifier = Modifier.fillMaxWidth()
         ) { LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainViolet) }
     }
 }

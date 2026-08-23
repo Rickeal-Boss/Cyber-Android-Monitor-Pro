@@ -48,7 +48,11 @@ import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.PorcelainBlue
+import com.rb.cybermonitorpro.ui.theme.PorcelainBlueDeep
+import com.rb.cybermonitorpro.ui.theme.PorcelainGreenDeep
+import com.rb.cybermonitorpro.ui.theme.PorcelainInkDeep
 import com.rb.cybermonitorpro.ui.theme.PorcelainRed
+import com.rb.cybermonitorpro.ui.theme.PorcelainRedDeep
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -107,7 +111,7 @@ fun CpuScreen(
             modifier = Modifier.staggeredSwipe(cardIdx++),
             title = "CPU temperature",
             value = temp,
-            valueColor = NeonPurpleBright,
+            valueColor = PorcelainRedDeep,
             subtitle = tempSource?.let { key ->
                 when (key) {
                     "cpu_temp_source_degraded" -> stringResource(R.string.cpu_temp_source_degraded)
@@ -280,7 +284,7 @@ private fun ClusterCard(name: String, subtitle: String, frequency: String, freqD
                     Text(name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     Text(subtitle, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text(frequency, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = NeonPurpleBright)
+                Text(frequency, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = PorcelainBlueDeep)
             }
             Spacer(Modifier.height(12.dp))
             LineChart(data = freqData, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainBlue)
@@ -296,9 +300,9 @@ private fun CoreItem(core: CpuCoreInfo) {
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.cpu_core_title, core.coreIndex), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                if (!core.online) Text(stringResource(R.string.cpu_core_off), fontSize = 11.sp, color = NeonMagenta)
+                if (!core.online) Text(stringResource(R.string.cpu_core_off), fontSize = 11.sp, color = PorcelainInkDeep)
                 else if (!core.usagePercent.isNaN())
-                    Text("%.0f%%".format(core.usagePercent), fontSize = 11.sp, color = NeonCyan)
+                    Text("%.0f%%".format(core.usagePercent), fontSize = 11.sp, color = PorcelainGreenDeep)
             }
             Spacer(Modifier.height(4.dp))
             Text("${core.currentFreqKHz / 1000} MHz", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = freqColor)
