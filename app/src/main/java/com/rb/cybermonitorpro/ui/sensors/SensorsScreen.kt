@@ -141,7 +141,7 @@ private fun SensorListContent(
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp)
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // ── 固定头部 (不随列表滚动): 标题 + 搜索框 ──
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
