@@ -2,7 +2,7 @@ name: Android Release Build
 
 on:
   push:
-    branches: [ main, master, DLC, yingai, II, III, IIII, IIIII, IIIIII, preview, 4.0, 4.0icon, 4.0.404.0, Hy-agent, newth-generation, core-fix ]
+    branches: [ main, master, DLC, yingai, II, III, IIII, IIIII, IIIIII, preview, 4.0, 4.0icon, 4.0.404.0, Hy-agent, newth-generation, core-fix, 6.0.606.0.9 ]
     # ★ Debug 预发布包仅 tag 触发：打 v*-debug-pre* 标签时才构建并上传 debug APK，
     #   避免每次分支 push 都多跑一次 assembleDebug + 上传，拖长 CI。
     tags: [ 'v*-debug-pre*' ]
