@@ -82,4 +82,21 @@ class StepCounterStore(
 
     /** 上次已知总步数（进入页面前先展示，避免空白） */
     fun lastKnownTotal(): Long = read(KEY_LAST_TOTAL, 0L)
+
+    /**
+     * 只读预览账本 — 纯读、不写、不动账本不变量。
+     * 供进入 STEP_COUNTER 详情页时预填初始值：首次回调前显示上次已知总量，
+     * 避免 on-change 语义下用户不走路就不触发 onSensorChanged 导致卡片恒 "---" / 假 0。
+     */
+    fun peekLedger(): StepLedger {
+        val total = read(KEY_LAST_TOTAL, 0L)
+        val dayStart = read(KEY_DAY_START, 0L)
+        val baseline = read(KEY_BOOT_BASELINE, -1L)
+        val sinceBoot = if (baseline >= 0) (read(KEY_LAST_RAW, 0L) - baseline).coerceAtLeast(0L) else 0L
+        return StepLedger(
+            totalSteps = total,
+            todaySteps = (total - dayStart).coerceAtLeast(0L),
+            stepsSinceBoot = sinceBoot
+        )
+    }
 }

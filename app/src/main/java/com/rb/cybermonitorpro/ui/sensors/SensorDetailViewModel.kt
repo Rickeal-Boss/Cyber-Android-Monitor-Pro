@@ -84,6 +84,13 @@ class SensorDetailViewModel(
             detectorBaseTotal = stepStore.lastKnownTotal()
             detectorSessionSteps = 0L
         }
+        if (sensor.type == Sensor.TYPE_STEP_COUNTER) {
+            // 首次回调前预填上次已知账本（STEP_COUNTER 为 on-change + since-boot 累积语义,
+            // 不走路就不触发 onSensorChanged, 卡片会永远 "---"）
+            val l = stepStore.peekLedger()
+            _stepUi.value = StepUiState(l.totalSteps, l.todaySteps, l.stepsSinceBoot,
+                fromDetector = false, ratePerMin = 0)
+        }
         repo.enableSensor(sensor.type)
     }
 
