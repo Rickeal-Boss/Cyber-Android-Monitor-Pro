@@ -31,6 +31,17 @@ data class StepUiState(
     val stepsSinceBoot: Long,        // 本次开机
     val fromDetector: Boolean,       // true = STEP_DETECTOR 降级（仅监听期计数）
     val ratePerMin: Int,             // 最近 60s 步频（步/分钟）
+    val distanceKm: Float? = null,   // 派生: 今日步数 × 平均步幅
+    val caloriesKcal: Int? = null,   // 派生: 今日步数 × 每步卡路里
+    val activeMinutes: Int? = null,  // 派生: 今日步数 / 常速步频
+)
+
+/** 心率聚合状态（HEART_RATE 详情页 HealthSummaryCard 消费, 5min 滚动窗口统计） */
+data class HeartRateAggregate(
+    val max: Int?,
+    val min: Int?,
+    val avg: Int?,
+    val sampleCount: Int,
 )
 
 /**
@@ -68,6 +79,11 @@ class SensorDetailViewModel(
     // 60s 步频窗口: (timestampMs, totalSteps)
     private val stepRateWindow = ArrayDeque<Pair<Long, Long>>()
 
+    // ── 心率聚合（HEART_RATE，5min 滚动窗口）──
+    private val _heartRateAgg = MutableLiveData<HeartRateAggregate>()
+    val heartRateAgg: LiveData<HeartRateAggregate> get() = _heartRateAgg
+    private val heartRateWindow = ArrayDeque<Pair<Long, Float>>()
+
     // GPS 校准按需开启的监听（离开页面时回停，避免常驻耗电）
     private var gpsEnabledForCalibration = false
 
@@ -88,8 +104,15 @@ class SensorDetailViewModel(
             // 首次回调前预填上次已知账本（STEP_COUNTER 为 on-change + since-boot 累积语义,
             // 不走路就不触发 onSensorChanged, 卡片会永远 "---"）
             val l = stepStore.peekLedger()
+            val (distanceKm, caloriesKcal, activeMinutes) = estimateStepHealth(l.todaySteps)
             _stepUi.value = StepUiState(l.totalSteps, l.todaySteps, l.stepsSinceBoot,
-                fromDetector = false, ratePerMin = 0)
+                fromDetector = false, ratePerMin = 0,
+                distanceKm = distanceKm, caloriesKcal = caloriesKcal, activeMinutes = activeMinutes)
+        }
+        if (sensor.type == Sensor.TYPE_HEART_RATE) {
+            // 防旧值残留: 进入页面清窗 + 重置聚合 (HEART_RATE 无权限时不返回样本)
+            heartRateWindow.clear()
+            _heartRateAgg.postValue(HeartRateAggregate(max = null, min = null, avg = null, sampleCount = 0))
         }
         repo.enableSensor(sensor.type)
     }
@@ -124,6 +147,7 @@ class SensorDetailViewModel(
                 val total = detectorBaseTotal + detectorSessionSteps
                 pushStepUi(total, detectorSessionSteps, detectorSessionSteps, fromDetector = true)
             }
+            Sensor.TYPE_HEART_RATE -> onHeartRateSample(data.x, data.timestampMs)
         }
     }
 
@@ -293,6 +317,7 @@ class SensorDetailViewModel(
             val dtMin = (now - t0) / 60000.0
             if (dtMin >= 0.05) (((total - total0) / dtMin).toInt().coerceAtLeast(0)) else 0
         } ?: 0
+        val (distanceKm, caloriesKcal, activeMinutes) = estimateStepHealth(today)
         _stepUi.postValue(
             StepUiState(
                 totalSteps = total,
@@ -300,8 +325,35 @@ class SensorDetailViewModel(
                 stepsSinceBoot = sinceBoot,
                 fromDetector = fromDetector,
                 ratePerMin = ratePerMin,
+                distanceKm = distanceKm,
+                caloriesKcal = caloriesKcal,
+                activeMinutes = activeMinutes,
             )
         )
+    }
+
+    /**
+     * 由今日步数派生运动健康摘要（距离/卡路里/活跃时长）。
+     * 活跃时长统一按 todaySteps/常速步频估算（KB §10 实证 SIGNIFICANT_MOTION/MOTION_DETECT
+     * 为 one-shot/on-change, 拿不到活跃时长）。
+     */
+    private fun estimateStepHealth(todaySteps: Long): Triple<Float?, Int?, Int?> {
+        if (todaySteps <= 0L) return Triple(null, null, null)
+        val f = todaySteps.toFloat()
+        return Triple(f * AVG_STRIDE_M / 1000f, (f * KCAL_PER_STEP).toInt(), (f / STEPS_PER_MIN).toInt())
+    }
+
+    /** HEART_RATE 单样本聚合 — 5min 滚动窗口内统计 max/min/avg */
+    private fun onHeartRateSample(bpm: Float, eventTsMs: Long) {
+        if (bpm.isNaN() || bpm <= 0f) return
+        val now = if (eventTsMs > 0L) eventTsMs else System.currentTimeMillis()
+        heartRateWindow.addLast(now to bpm)
+        while (heartRateWindow.isNotEmpty() && now - heartRateWindow.first().first > HEART_RATE_WINDOW_MS) heartRateWindow.removeFirst()
+        val vals = heartRateWindow.map { it.second }
+        if (vals.isEmpty()) return
+        _heartRateAgg.postValue(HeartRateAggregate(
+            max = vals.maxOrNull()?.toInt(), min = vals.minOrNull()?.toInt(),
+            avg = (vals.sum() / vals.size).toInt(), sampleCount = vals.size))
     }
 
     override fun onCleared() {
@@ -312,5 +364,14 @@ class SensorDetailViewModel(
     companion object {
         /** GPS 校准允许的最大水平精度 (m); 超过此值认为 GPS 海拔不可靠 */
         private const val GPS_CALIB_MAX_ACCURACY_M = 20f
+
+        /** 心率聚合滚动窗口 (ms): 5 分钟 */
+        private const val HEART_RATE_WINDOW_MS = 5 * 60_000L
+        /** 平均步幅 (m/步) — 通用成人均值, 用于距离估算 */
+        private const val AVG_STRIDE_M = 0.762f
+        /** 每步卡路里 (kcal/步) — 通用估算系数 */
+        private const val KCAL_PER_STEP = 0.04f
+        /** 常速步行步频 (步/分钟) — 用于活跃时长估算 */
+        private const val STEPS_PER_MIN = 100f
     }
 }

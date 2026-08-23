@@ -293,6 +293,18 @@
     <string name="step_today_title">Today Steps</string>
     <string name="step_boot_since">Since boot %1$d</string>
 
+    <!-- ═══ 运动健康摘要 (传感器详情页 HealthSummaryCard) ═══ -->
+    <string name="health_summary_title">Health Activity</string>
+    <string name="health_distance_label">Distance</string>
+    <string name="health_distance_value">%.1f km</string>
+    <string name="health_calories_label">Calories</string>
+    <string name="health_calories_value">%d kcal</string>
+    <string name="health_active_label">Active</string>
+    <string name="health_active_value">%d min</string>
+    <string name="health_heart_max_label">Max</string>
+    <string name="health_heart_min_label">Min</string>
+    <string name="health_heart_avg_label">Avg</string>
+
     <!-- ═══ Device 详情 ═══ -->
     <string name="device_title">Device Details</string>
     <string name="device_brand">Brand</string>

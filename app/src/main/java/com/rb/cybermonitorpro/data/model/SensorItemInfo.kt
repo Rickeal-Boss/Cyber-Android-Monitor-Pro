@@ -209,5 +209,13 @@ enum class SensorTypeMeta(
                 else -> context.getString(R.string.proximity_state_out)
             }
         }
+
+        /**
+         * 运动健康类传感器 — 详情页顶部 HealthSummaryCard 触发类型
+         */
+        fun isHealthMotionType(type: Int): Boolean = when (fromTypeId(type)) {
+            STEP_COUNTER, STEP_DETECTOR, HEART_RATE -> true
+            else -> false
+        }
     }
 }

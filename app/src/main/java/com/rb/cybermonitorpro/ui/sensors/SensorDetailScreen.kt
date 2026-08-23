@@ -60,6 +60,8 @@ fun SensorDetailContent(
     // F4: 气压海拔 / 步数账本状态（PressureAltimeterCard / StepCounterCard 消费）
     val altitudeUi by viewModel.altitudeUi.observeAsState()
     val stepUi by viewModel.stepUi.observeAsState()
+    // F5: 心率聚合状态（HEART_RATE 详情页 HealthSummaryCard 消费）
+    val heartAgg by viewModel.heartRateAgg.observeAsState()
 
     // ★ 改用本地 Compose 状态列表 + LaunchedEffect, 直接消费 sensorLiveData
     //   避免依赖 repo.sensorHistoryData 的间接 LiveData 管线
@@ -163,6 +165,14 @@ fun SensorDetailContent(
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+            // ── 运动健康摘要卡 (仅运动相关 sensor, 标题下方、实时数值上方) ──
+            if (meta != null && SensorTypeMeta.isHealthMotionType(sensor.type)) {
+                HealthSummaryCard(
+                    step = if (meta == SensorTypeMeta.STEP_COUNTER || meta == SensorTypeMeta.STEP_DETECTOR) stepUi else null,
+                    heart = if (meta == SensorTypeMeta.HEART_RATE) heartAgg else null
+                )
+            }
+
             // ── 实时数值卡片 (含光线等级/距离状态) ──
             SensorValueCard(sensor = sensor, meta = meta, liveData = liveData)
 
@@ -205,6 +215,52 @@ fun SensorDetailContent(
                 .padding(top = 8.dp, start = 16.dp)
                 .align(Alignment.TopStart)
         )
+    }
+}
+
+// ============================================================
+//  运动健康摘要卡 (STEP_COUNTER/STEP_DETECTOR → 步数派生; HEART_RATE → 5min 心率聚合)
+// ============================================================
+@Composable
+private fun HealthSummaryCard(step: StepUiState?, heart: HeartRateAggregate?) {
+    Card(
+        Modifier.fillMaxWidth().cardGradientBorder(16.dp, hdrHighlight = true),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Text(
+                stringResource(R.string.health_summary_title),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                if (heart != null) {
+                    healthStatCell(stringResource(R.string.health_heart_max_label), heart.max?.toString() ?: "---")
+                    healthStatCell(stringResource(R.string.health_heart_min_label), heart.min?.toString() ?: "---")
+                    healthStatCell(stringResource(R.string.health_heart_avg_label), heart.avg?.toString() ?: "---")
+                } else if (step != null) {
+                    healthStatCell(stringResource(R.string.health_distance_label),
+                        step.distanceKm?.let { stringResource(R.string.health_distance_value, it) } ?: "---")
+                    healthStatCell(stringResource(R.string.health_calories_label),
+                        step.caloriesKcal?.let { stringResource(R.string.health_calories_value, it) } ?: "---")
+                    healthStatCell(stringResource(R.string.health_active_label),
+                        step.activeMinutes?.let { stringResource(R.string.health_active_value, it) } ?: "---")
+                } else healthStatCell("", "---")
+            }
+        }
+    }
+}
+
+@Composable
+private fun healthStatCell(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(4.dp))
+        Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = NeonPurpleBright)
     }
 }
 

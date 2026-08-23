@@ -914,6 +914,18 @@
     <string name="step_today_title">今日步数</string>
     <string name="step_boot_since">本次开机 %1$d</string>
 
+    <!-- 运动健康摘要 (传感器详情页 HealthSummaryCard) -->
+    <string name="health_summary_title">运动健康</string>
+    <string name="health_distance_label">距离</string>
+    <string name="health_distance_value">%.1f km</string>
+    <string name="health_calories_label">卡路里</string>
+    <string name="health_calories_value">%d kcal</string>
+    <string name="health_active_label">活跃时长</string>
+    <string name="health_active_value">%d 分钟</string>
+    <string name="health_heart_max_label">最高</string>
+    <string name="health_heart_min_label">最低</string>
+    <string name="health_heart_avg_label">平均</string>
+
     <!-- Device 基础字段 -->
     <string name="device_title">设备详情</string>
     <string name="device_brand">品牌</string>
