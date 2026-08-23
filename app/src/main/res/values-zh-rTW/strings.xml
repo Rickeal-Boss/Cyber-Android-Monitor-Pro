@@ -1465,4 +1465,10 @@
     <string name="oem_cross_hyperconnect_enabled">HyperConnect (已啟用)</string>
     <string name="oem_feature_punchhole">挖孔屏</string>
     <string name="oem_feature_oddly_shaped">異形屏</string>
+
+    <!-- 首次啟動權限引導 -->
+    <string name="first_launch_title">開啟監控所需權限</string>
+    <string name="first_launch_desc">CAM-P 需要一些權限來讀取硬體資料（定位、電話狀態、身體活動、附近裝置、通知）。所有資料僅保存在本機、絕不上傳，你也可以稍後在系統設定中授權。</string>
+    <string name="first_launch_grant">同意並授權</string>
+    <string name="first_launch_later">稍後再說</string>
 </resources>

@@ -1474,4 +1474,10 @@
     <string name="oem_cross_hyperconnect_enabled">HyperConnect (Enabled)</string>
     <string name="oem_feature_punchhole">Punch-hole</string>
     <string name="oem_feature_oddly_shaped">Oddly-shaped</string>
+
+    <!-- 首次启动权限引导 -->
+    <string name="first_launch_title">Enable monitoring permissions</string>
+    <string name="first_launch_desc">CAM-P needs a few permissions to read hardware data (location, phone state, activity, nearby devices, notifications). All data stays on-device and is never uploaded. You can also grant them later in system settings.</string>
+    <string name="first_launch_grant">Grant permissions</string>
+    <string name="first_launch_later">Later</string>
 </resources>

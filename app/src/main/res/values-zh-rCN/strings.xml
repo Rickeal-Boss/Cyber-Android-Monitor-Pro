@@ -1460,4 +1460,10 @@
     <string name="oem_cross_hyperconnect_enabled">HyperConnect (已启用)</string>
     <string name="oem_feature_punchhole">挖孔屏</string>
     <string name="oem_feature_oddly_shaped">异形屏</string>
+
+    <!-- 首次启动权限引导 -->
+    <string name="first_launch_title">开启监控所需权限</string>
+    <string name="first_launch_desc">CAM-P 需要一些权限来读取硬件数据（定位、电话状态、身体活动、附近设备、通知）。所有数据仅保存在本机、绝不上传，你也可以稍后在系统设置中授权。</string>
+    <string name="first_launch_grant">同意并授权</string>
+    <string name="first_launch_later">稍后再说</string>
 </resources>

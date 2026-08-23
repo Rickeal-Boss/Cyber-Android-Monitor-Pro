@@ -1,12 +1,16 @@
 package com.rb.cybermonitorpro
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.BackEventCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
@@ -38,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import android.content.Context
 import androidx.compose.ui.platform.LocalConfiguration
@@ -51,6 +56,7 @@ import androidx.core.view.WindowCompat
 import com.rb.cybermonitorpro.HapticUtils
 import com.rb.cybermonitorpro.LocaleManager
 import com.rb.cybermonitorpro.R
+import com.rb.cybermonitorpro.data.AppFirstLaunch
 import com.rb.cybermonitorpro.ui.AppViewModel
 import com.rb.cybermonitorpro.RefreshPolicy
 import com.rb.cybermonitorpro.ui.battery.BatteryScreen
@@ -128,12 +134,24 @@ class MainActivity : ComponentActivity() {
         // 国产 ROM 对 OnBackInvokedCallback 支持参差不齐，启动时输出诊断日志
         com.rb.cybermonitorpro.util.BackGestureCompat.isPredictiveBackSupported(this)
         com.rb.cybermonitorpro.util.BackGestureCompat.logPredictiveBackDevOptionState(this)
+        // ★ 首次启动权限引导: 一次性展示, 同意/稍后均 markShown 后切入主界面
+        val needsFirstLaunch = AppFirstLaunch.shouldShow(this)
         try {
             // ★ 二分法通关: 用回完整 SystemMonitorApp（安全版 NeonHeaderDecoration）
             setContent {
                 DeviceInfoViewerTheme {
                     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                        SystemMonitorApp()
+                        var showFirstLaunch by remember { mutableStateOf(needsFirstLaunch) }
+                        if (showFirstLaunch) {
+                            FirstLaunchPermissionScreen(
+                                onDismiss = {
+                                    AppFirstLaunch.markShown(this@MainActivity)
+                                    showFirstLaunch = false
+                                }
+                            )
+                        } else {
+                            SystemMonitorApp()
+                        }
                     }
                 }
             }
@@ -148,6 +166,61 @@ class MainActivity : ComponentActivity() {
             window.navigationBarColor = android.graphics.Color.TRANSPARENT
         } catch (e: Throwable) {
             Log.w("MainActivity", "系统栏配置失败（OEM 兼容性）", e)
+        }
+    }
+}
+
+/**
+ * 首次启动权限引导页 — 复用 MainActivity + 状态切换（方案 B）。
+ * 按 API 过滤运行时权限清单；SYSTEM_ALERT_WINDOW 不并入 RequestMultiplePermissions
+ * （它必须走 ACTION_MANAGE_OVERLAY_PERMISSION，悬浮窗页已按需引导）。
+ * 首启页不拦截 Back：默认系统返回可退出，不阻塞用户。
+ */
+@Composable
+private fun FirstLaunchPermissionScreen(onDismiss: () -> Unit) {
+    val runtimePerms = remember {
+        buildList {
+            add(Manifest.permission.ACCESS_FINE_LOCATION)
+            add(Manifest.permission.ACCESS_COARSE_LOCATION)
+            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            add(Manifest.permission.READ_PHONE_STATE)
+            if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
+            if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
+            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+        }.toTypedArray()
+    }
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { onDismiss() }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            stringResource(R.string.first_launch_title),
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = NeonPurpleBright
+        )
+        Spacer(Modifier.height(16.dp))
+        Text(
+            stringResource(R.string.first_launch_desc),
+            fontSize = 14.sp,
+            color = TextSecondary,
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(32.dp))
+        Button(
+            onClick = { launcher.launch(runtimePerms) },
+            colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
+        ) {
+            Text(stringResource(R.string.first_launch_grant), fontSize = 15.sp)
+        }
+        Spacer(Modifier.height(12.dp))
+        TextButton(onClick = { onDismiss() }) {
+            Text(stringResource(R.string.first_launch_later), fontSize = 14.sp, color = TextSecondary)
         }
     }
 }
