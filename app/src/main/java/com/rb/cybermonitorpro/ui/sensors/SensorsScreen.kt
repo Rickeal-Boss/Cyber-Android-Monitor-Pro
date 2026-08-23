@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeight
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import com.rb.cybermonitorpro.ui.nightlight.rememberHdrScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,7 +26,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -52,7 +49,6 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -248,26 +244,15 @@ private fun SensorSearchField(
         value = query,
         onValueChange = onQueryChange,
         singleLine = true,
-        modifier = Modifier
-            .widthIn(max = 210.dp)
-            .requiredHeight(40.dp),          // ★ requiredHeight，不是 heightIn：强制约束优先级高于 M3 内部 defaultMinSize
+        modifier = Modifier.widthIn(max = 210.dp),
         placeholder = {
             Text(
                 stringResource(R.string.sensor_search_hint),
-                fontSize = 12.sp,
+                fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
             )
         },
-        leadingIcon = {
-            Box(Modifier.size(18.dp), contentAlignment = Alignment.Center) {
-                Icon(
-                    painterResource(R.drawable.ic_cyber_search),
-                    contentDescription = stringResource(R.string.sensor_search_hint),
-                    tint = NeonPurpleBright,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        },
+        leadingIcon = { Text("🔍", fontSize = 14.sp) },
         trailingIcon = {
             if (query.isNotEmpty()) {
                 Text(
@@ -286,7 +271,7 @@ private fun SensorSearchField(
             unfocusedIndicatorColor = NeonPurple.copy(alpha = 0.4f),
             cursorColor = NeonPurpleBright
         ),
-        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp)
     )
 }
 
