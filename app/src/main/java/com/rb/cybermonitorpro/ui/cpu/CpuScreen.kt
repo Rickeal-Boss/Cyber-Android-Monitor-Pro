@@ -299,7 +299,7 @@ private fun CoreItem(core: CpuCoreInfo) {
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.cpu_core_title, core.coreIndex), fontSize = 14.sp, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
-                if (!core.online) Text(stringResource(R.string.cpu_core_off), fontSize = 11.sp, color = PorcelainInkDeep)
+                if (!core.online) Text(stringResource(R.string.cpu_core_off), fontSize = 11.sp, color = PorcelainInkDeep.copy(alpha = 0.5f))
                 else if (!core.usagePercent.isNaN())
                     Text("%.0f%%".format(core.usagePercent), fontSize = 11.sp, color = PorcelainGreenDeep)
             }

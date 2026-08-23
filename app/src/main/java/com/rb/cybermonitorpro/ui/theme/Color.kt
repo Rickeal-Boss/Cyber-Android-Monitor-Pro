@@ -64,7 +64,7 @@ private val LightPorcelainGreenDeep   = Color(0xFF23685A)
 private val LightPorcelainGoldDeep    = Color(0xFF8A6E1A)
 private val LightPorcelainVioletDeep  = Color(0xFF5F5286)
 private val LightPorcelainPinkDeep    = Color(0xFF9A4A63)
-private val LightPorcelainNeutralDeep = Color(0xFF7A8680)
+private val LightPorcelainNeutralDeep = Color(0xFF66726C)
 private val LightPorcelainInkDeep     = Color(0xFF232327)
 
 // ── 深色基准色 (天青墨) ──
