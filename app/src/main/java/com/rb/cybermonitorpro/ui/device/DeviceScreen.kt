@@ -435,9 +435,10 @@ fun DeviceScreen(
                         onClick = { activityPermLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION) },
                         valueColor = WarningNeon
                     )
-                }
-            }
-}
+                }                              // 关 else 分支
+            }                                  // 关 SectionCard
+        }                                      // 关 Box
+    }                                          // 关外层 if (hasStepCounter || needActivityPerm)
 
         // ═══════ 12. 多媒体解码器 ═══════
         Box(Modifier.fillMaxWidth().staggeredSwipe(devCardIdx++)) {
