@@ -47,6 +47,8 @@ import com.rb.cybermonitorpro.ui.theme.NeonMagenta
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
+import com.rb.cybermonitorpro.ui.theme.PorcelainBlue
+import com.rb.cybermonitorpro.ui.theme.PorcelainRed
 import org.koin.androidx.compose.koinViewModel
 
 /**
@@ -113,7 +115,7 @@ fun CpuScreen(
                 }
             } ?: ""
         ) {
-            LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth())
+            LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainRed)
         }
 
         // CPU 深度睡眠 (C-States)
@@ -281,7 +283,7 @@ private fun ClusterCard(name: String, subtitle: String, frequency: String, freqD
                 Text(frequency, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = NeonPurpleBright)
             }
             Spacer(Modifier.height(12.dp))
-            LineChart(data = freqData, modifier = Modifier.fillMaxWidth())
+            LineChart(data = freqData, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainBlue)
         }
     }
 }

@@ -38,7 +38,8 @@ import com.rb.cybermonitorpro.ui.theme.*
 import org.koin.androidx.compose.koinViewModel
 
 // 轴颜色映射 (现取可变 token，深浅切换自动跟随)
-private val axisColors: List<Color> get() = listOf(NeonPurple, NeonCyan, NeonMagenta)
+// 嵌瓷三轴: 宝蓝×柿红×瓷绿 (潮汕嵌瓷经典三色)
+private val axisColors: List<Color> get() = listOf(PorcelainBlue, PorcelainRed, PorcelainGreen)
 
 /**
  * 传感器详情内容 — F5 拆出（MainActivity 传感器覆盖层承载）。

@@ -22,9 +22,6 @@ import androidx.compose.ui.unit.dp
 import com.rb.cybermonitorpro.ui.theme.ChartAreaPurple
 import com.rb.cybermonitorpro.ui.theme.DividerCyber
 import com.rb.cybermonitorpro.ui.theme.ChartLinePurple
-import com.rb.cybermonitorpro.ui.theme.NeonCyan
-import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
-import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonMagenta
 
 // ═══════ 安全 coerceIn — 防御 minimum > maximum ═══════
@@ -84,8 +81,9 @@ fun LineChart(
     }
 
     // 渐变 Brush — Composition 层缓存
+    // 嵌瓷逻辑: 每条线是纯色瓷片, 靠色相区分; useGradient 仅做同色相 alpha 渐变 (不换色相)
     val gradientBrush = remember(useGradient, lineColor) {
-        if (useGradient) Brush.horizontalGradient(listOf(NeonCyan, NeonPurple, NeonPurpleBright))
+        if (useGradient) Brush.verticalGradient(listOf(lineColor.copy(alpha = 0.35f), lineColor.copy(alpha = 0.08f)))
         else Brush.horizontalGradient(listOf(lineColor, lineColor))
     }
     // ★ 面积渐变 Brush — 同样提到 Composition 层
@@ -195,12 +193,13 @@ fun DualLineChart(
         else (maxLen * revealProgress).toInt().safeCoerceIn(2, maxLen)
     }
 
+    // 嵌瓷逻辑: 双线各自纯色瓷片, 不互相混色; useGradient 仅做同色相 alpha 渐变
     val brush1 = remember(useGradient1, lineColor1) {
-        if (useGradient1) Brush.horizontalGradient(listOf(NeonCyan, lineColor1))
+        if (useGradient1) Brush.verticalGradient(listOf(lineColor1.copy(alpha = 0.35f), lineColor1.copy(alpha = 0.08f)))
         else Brush.horizontalGradient(listOf(lineColor1, lineColor1))
     }
     val brush2 = remember(useGradient2, lineColor2) {
-        if (useGradient2) Brush.horizontalGradient(listOf(lineColor2, NeonPurpleBright))
+        if (useGradient2) Brush.verticalGradient(listOf(lineColor2.copy(alpha = 0.35f), lineColor2.copy(alpha = 0.08f)))
         else Brush.horizontalGradient(listOf(lineColor2, lineColor2))
     }
 

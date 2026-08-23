@@ -62,6 +62,8 @@ import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
+import com.rb.cybermonitorpro.ui.theme.PorcelainBlue
+import com.rb.cybermonitorpro.ui.theme.PorcelainPink
 import com.rb.cybermonitorpro.ui.theme.AmbientShadow
 import com.rb.cybermonitorpro.ui.theme.SpotShadow
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
@@ -375,7 +377,7 @@ fun BatteryScreen(
                         value = "${(power / 1000f).let { "%.1f".format(it) }} W",
                         valueColor = NeonPurpleBright
                     ) {
-                        LineChart(data = battPowerChart, modifier = Modifier.fillMaxWidth())
+                        LineChart(data = battPowerChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainBlue)
                     }
                 }
             }
@@ -431,7 +433,7 @@ fun BatteryScreen(
                         valueColor = NeonPurpleBright,
                         borderColor = batteryTempBorderColor(temp)
                     ) {
-                        LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth())
+                        LineChart(data = battTempChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainPink)
                     }
                 }
             }

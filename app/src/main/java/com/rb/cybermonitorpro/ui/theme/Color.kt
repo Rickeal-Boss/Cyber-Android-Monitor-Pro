@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.Color
 // ============================================
 //  镜瓷白 · 天青 主题 (Edition 6.0.606.0)
 //  浅色 = 镜瓷白系 · 深色 = 天青墨系
-//  32 个色板 token 均为可变 State，深浅切换由 updateThemeColors(dark) 批量赋值
+//  40 个色板 token 均为可变 State，深浅切换由 updateThemeColors(dark) 批量赋值
 //  业务代码引用 token 名零改动（仅读取当前值，可变色自动触发重组）
 // ============================================
 
@@ -46,6 +46,16 @@ private val LightTextOnPrimary       = Color(0xFFFFFFFF)
 private val LightDividerCyber        = Color(0xFFE0E3DF)
 private val LightProgressTrack       = Color(0xFFE8EAE6)
 
+// ── 嵌瓷色板 浅色基准 (潮汕嵌瓷工艺色: 宝蓝×柿红×瓷绿 等, 图表线专用) ──
+private val LightPorcelainBlue       = Color(0xFF3B6EA5)
+private val LightPorcelainRed        = Color(0xFFC25B3A)
+private val LightPorcelainGreen      = Color(0xFF2E8C7A)
+private val LightPorcelainGold       = Color(0xFFC9A227)
+private val LightPorcelainViolet     = Color(0xFF7B6BA8)
+private val LightPorcelainPink       = Color(0xFFB85C7E)
+private val LightPorcelainNeutral    = Color(0xFFAEBEB8)
+private val LightPorcelainInk        = Color(0xFF3A3A40)
+
 // ── 深色基准色 (天青墨) ──
 private val DarkCyberBackground      = Color(0xFF14161A)
 private val DarkCyberCardStart       = Color(0xFF1E2226)
@@ -80,7 +90,17 @@ private val DarkTextOnPrimary        = Color(0xFF14161A)
 private val DarkDividerCyber         = Color(0xFF2A2E33)
 private val DarkProgressTrack        = Color(0xFF2A2E33)
 
-// ── 32 个可变色板 token (初始 = 浅色基准) ──
+// ── 嵌瓷色板 深色基准 ──
+private val DarkPorcelainBlue        = Color(0xFF7FA8D0)
+private val DarkPorcelainRed         = Color(0xFFE08A66)
+private val DarkPorcelainGreen       = Color(0xFF6FBFAD)
+private val DarkPorcelainGold        = Color(0xFFDCC066)
+private val DarkPorcelainViolet      = Color(0xFFAD9FD0)
+private val DarkPorcelainPink        = Color(0xFFDA94AC)
+private val DarkPorcelainNeutral     = Color(0xFFC9D6D1)
+private val DarkPorcelainInk         = Color(0xFF55555E)
+
+// ── 40 个可变色板 token (初始 = 浅色基准) ──
 var CyberBackground     by mutableStateOf(LightCyberBackground)
 var CyberCardStart      by mutableStateOf(LightCyberCardStart)
 var CyberCardEnd        by mutableStateOf(LightCyberCardEnd)
@@ -114,12 +134,22 @@ var TextOnPrimary       by mutableStateOf(LightTextOnPrimary)
 var DividerCyber        by mutableStateOf(LightDividerCyber)
 var ProgressTrack       by mutableStateOf(LightProgressTrack)
 
+// ── 8 个嵌瓷色板 token (图表线专用, 初始 = 浅色基准) ──
+var PorcelainBlue       by mutableStateOf(LightPorcelainBlue)
+var PorcelainRed        by mutableStateOf(LightPorcelainRed)
+var PorcelainGreen      by mutableStateOf(LightPorcelainGreen)
+var PorcelainGold       by mutableStateOf(LightPorcelainGold)
+var PorcelainViolet     by mutableStateOf(LightPorcelainViolet)
+var PorcelainPink       by mutableStateOf(LightPorcelainPink)
+var PorcelainNeutral    by mutableStateOf(LightPorcelainNeutral)
+var PorcelainInk        by mutableStateOf(LightPorcelainInk)
+
 // ── 固定釉影 token — 不随主题切换，供各卡片阴影复用 ──
 internal val AmbientShadow = Color(0x0D2A2E33)
 internal val SpotShadow    = Color(0x142A2E33)
 
 /**
- * 按主题深浅批量赋值 32 个色板 token。
+ * 按主题深浅批量赋值 40 个色板 token。
  * 在 DeviceInfoViewerTheme 的 SideEffect 中调用；赋值即触发读取方重组。
  */
 internal fun updateThemeColors(dark: Boolean) {
@@ -156,6 +186,14 @@ internal fun updateThemeColors(dark: Boolean) {
         TextOnPrimary       = DarkTextOnPrimary
         DividerCyber        = DarkDividerCyber
         ProgressTrack       = DarkProgressTrack
+        PorcelainBlue       = DarkPorcelainBlue
+        PorcelainRed        = DarkPorcelainRed
+        PorcelainGreen      = DarkPorcelainGreen
+        PorcelainGold       = DarkPorcelainGold
+        PorcelainViolet     = DarkPorcelainViolet
+        PorcelainPink       = DarkPorcelainPink
+        PorcelainNeutral    = DarkPorcelainNeutral
+        PorcelainInk        = DarkPorcelainInk
     } else {
         CyberBackground     = LightCyberBackground
         CyberCardStart      = LightCyberCardStart
@@ -189,5 +227,13 @@ internal fun updateThemeColors(dark: Boolean) {
         TextOnPrimary       = LightTextOnPrimary
         DividerCyber        = LightDividerCyber
         ProgressTrack       = LightProgressTrack
+        PorcelainBlue       = LightPorcelainBlue
+        PorcelainRed        = LightPorcelainRed
+        PorcelainGreen      = LightPorcelainGreen
+        PorcelainGold       = LightPorcelainGold
+        PorcelainViolet     = LightPorcelainViolet
+        PorcelainPink       = LightPorcelainPink
+        PorcelainNeutral    = LightPorcelainNeutral
+        PorcelainInk        = LightPorcelainInk
     }
 }

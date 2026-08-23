@@ -33,6 +33,9 @@ import com.rb.cybermonitorpro.ui.components.MetricCard
 import com.rb.cybermonitorpro.ui.components.charts.LineChart
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
+import com.rb.cybermonitorpro.ui.theme.PorcelainBlue
+import com.rb.cybermonitorpro.ui.theme.PorcelainRed
+import com.rb.cybermonitorpro.ui.theme.PorcelainViolet
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
@@ -106,7 +109,7 @@ fun GpuScreen(
                     Text("%.0f%%".format(effectiveUtil), fontSize = 12.sp, color = SuccessNeon)
                 }
             }
-            LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth())
+            LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainViolet)
         }
 
         // GPU 频率 (DVFS 感知)
@@ -120,12 +123,12 @@ fun GpuScreen(
                 else stringResource(R.string.gpu_subtitle_max_normal, it)
             } ?: ""
         ) {
-            LineChart(data = gpuFreqChart, modifier = Modifier.fillMaxWidth())
+            LineChart(data = gpuFreqChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainBlue)
         }
 
         // GPU 温度
         MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU temperature", value = temp, valueColor = NeonPurpleBright) {
-            LineChart(data = gpuTempChart, modifier = Modifier.fillMaxWidth())
+            LineChart(data = gpuTempChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainRed)
         }
 
         // 调速器信息

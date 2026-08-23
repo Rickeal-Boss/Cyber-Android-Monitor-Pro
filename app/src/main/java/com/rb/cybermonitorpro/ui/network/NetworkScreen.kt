@@ -85,7 +85,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
 
         MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "Network activity", value = "${wifiInfo?.linkSpeedMbps ?: 0} Mbps", valueColor = NeonPurpleBright) {
             DualLineChart(data1 = wifiSpeedChart, data2 = signalChart,
-                modifier = Modifier.fillMaxWidth(), lineColor1 = NeonPurple, lineColor2 = NeonMagenta)
+                modifier = Modifier.fillMaxWidth(), lineColor1 = PorcelainBlue, lineColor2 = PorcelainRed)
         }
 
         // WiFi 频率 / 标准 / 信道宽度 (P3)
@@ -179,7 +179,7 @@ fun NetworkScreen(viewModel: NetworkViewModel = koinViewModel()) {
             val pct = kotlin.math.min(100, (signalStrength + 120) * 100 / 60).coerceIn(0, 100)
             MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = stringResource(R.string.network_signal_strength_title), value = "$signalStrength dBm · $pct%",
                 valueColor = signalLevelColor(signalStrength, -80, -100)) {
-                LineChart(data = signalChart, modifier = Modifier.fillMaxWidth())
+                LineChart(data = signalChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainBlue)
             }
         }
 
