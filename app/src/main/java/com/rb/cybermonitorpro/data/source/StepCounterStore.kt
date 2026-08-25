@@ -37,6 +37,8 @@ class StepCounterStore(
         const val KEY_LAST_RAW = "step_last_raw"        // 上次原始读数（重启检测用）
         const val KEY_DAY_START = "step_day_start"      // 当日起始总步数
         const val KEY_DAY_STAMP = "step_day_stamp"      // 当日编号（epoch day）
+        /** P2: STEP_DETECTOR 降级会话累计账本键 — 与 STEP_COUNTER 账本 (offset/baseline/...) 完全隔离 */
+        const val KEY_DETECTOR_TOTAL = "step_detector_total"
         private const val DAY_MS = 24L * 60 * 60 * 1000
         private const val TAG = "StepStore"
 
@@ -99,6 +101,17 @@ class StepCounterStore(
 
     /** 上次已知总步数（进入页面前先展示，避免空白） */
     fun lastKnownTotal(): Long = read(KEY_LAST_TOTAL, 0L)
+
+    /**
+     * 读取 STEP_DETECTOR(18) 降级累计账本 (P2)。
+     * 独立命名空间键 [KEY_DETECTOR_TOTAL], 与 STEP_COUNTER 账本 (offset/baseline/
+     * last_total/...) 完全隔离 — 互不读写、不触碰 onHardwareReading/peekLedger 不变量。
+     * 语义: app 监听期累计总步数 (小米等无标准 STEP_COUNTER 的 OEM 降级路径专用)。
+     */
+    fun readDetectorTotal(): Long = read(KEY_DETECTOR_TOTAL, 0L)
+
+    /** 写入 STEP_DETECTOR 降级累计账本 (P2), 供 SensorDetail 每次事件累计后写回, 进入页面 prefill 续计 */
+    fun writeDetectorTotal(total: Long) = write(KEY_DETECTOR_TOTAL, total.coerceAtLeast(0L))
 
     /**
      * 只读预览账本 — 平时不写、不动账本不变量。
