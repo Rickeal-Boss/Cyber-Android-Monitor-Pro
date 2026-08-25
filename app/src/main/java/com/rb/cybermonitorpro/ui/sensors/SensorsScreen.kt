@@ -109,11 +109,14 @@ private fun SensorListContent(
     var query by remember { mutableStateOf("") }
     // 仅"键盘搜索/完成键"提交后用于索引定位, 避免每次按键即时跳动
     var submittedQuery by remember { mutableStateOf("") }
-    // 改动 2: 搜索触发计数 — 每次「键盘搜索/完成键」+1, 作为 LaunchedEffect 唯一 key;
+    // 改动 2: 搜索触发计数 searchTrigger — 仅在 onCommit 自增, 作索引定位 LaunchedEffect 的 key;
     // 即使同查询重复提交也能重新触发单步定位 (修复偶发不触发)。
-    var searchTick by remember { mutableIntStateOf(0) }
-    // 改动 3: 单步定位游标 — 记录当前走到第几个匹配, 到末张后环绕回顶部 (重复按搜索键继续下一步)。
+    var searchTrigger by remember { mutableIntStateOf(0) }
+    // 改动 3: 单步定位游标 searchStep — 记录当前走到第几个匹配, 到末张后环绕回顶部 (重复按搜索键继续下一步)。
     var searchStep by remember { mutableIntStateOf(0) }
+    // 双计数器(改动 3 时序修正): pulseTick 为独立脉冲计数, 仅由索引 LaunchedEffect 在写入 highlightedIdx
+    // 的同一批内自增, 使脉冲精确打在正确高亮卡一次; 卡片维持 LaunchedEffect(pulseTick), 不用 (pulseTick, highlighted)。
+    var pulseTick by remember { mutableIntStateOf(0) }
     var highlightedIdx by remember { mutableStateOf(-1) }
     // 滚动列表容器顶部在根坐标系的 Y (视口锚点)
     var listRootTopPx by remember { mutableStateOf(0f) }
@@ -127,10 +130,10 @@ private fun SensorListContent(
     val keyboardController = LocalSoftwareKeyboardController.current
     val view = LocalView.current
 
-    // 改动 2+3: 单步定位 — 仅以 searchTick 为 key, 每次「搜索键」+1 即重跑 (同查询重复提交也能再触发)。
+    // 改动 2+3: 单步定位 — 仅以 searchTrigger 为 key, 每次 onCommit「搜索键」+1 即重跑 (同查询重复提交也能再触发)。
     // 多匹配时自上而下逐步推进, 到末张后环绕回顶部 (重复按搜索键继续下一步); 不再用 delay 多匹配循环。
-    LaunchedEffect(searchTick) {
-        if (searchTick == 0) return@LaunchedEffect   // 初始未搜索, 不触发
+    LaunchedEffect(searchTrigger) {
+        if (searchTrigger == 0) return@LaunchedEffect   // 初始未搜索, 不触发
         // 纯空格/空 query 不参与匹配 (否则 haystack 含空格恒命中第一张卡 → 跳顶+脉冲)
         val q = submittedQuery
         if (q.isEmpty()) { highlightedIdx = -1; return@LaunchedEffect }
@@ -142,6 +145,8 @@ private fun SensorListContent(
         val matchIdx = matchList[searchStep % matchList.size]
         searchStep++
         highlightedIdx = matchIdx
+        // 双计数器(改动 3 时序修正): pulseTick 与 highlightedIdx 同批写入, 脉冲仅打在正确高亮卡一次
+        pulseTick++
         withFrameNanos { }
         // 坐标就绪等待: 沿用「等帧 + snapshotFlow + 超时」, 并强化兜底
         val cardTop = cardTops[matchIdx]
@@ -188,8 +193,8 @@ private fun SensorListContent(
             SensorSearchField(
                 query = query,
                 onQueryChange = { query = it },
-                onCommit = { submittedQuery = query.trim(); searchTick++ },
-                onClear = { query = ""; submittedQuery = ""; searchStep = 0; searchTick++ },
+                onCommit = { submittedQuery = query.trim(); searchTrigger++ },
+                onClear = { query = ""; submittedQuery = ""; searchStep = 0; searchTrigger++ },
                 focusRequester = focusRequester
             )
         }
@@ -241,7 +246,7 @@ private fun SensorListContent(
                 SensorItemCard(
                     sensor = sensor,
                     highlighted = idx == highlightedIdx,
-                    pulseTick = searchTick,
+                    pulseTick = pulseTick,
                     onClick = { origin ->
                         // 改动 4: 进入覆盖层前关闭输入法, 避免返回键/覆盖层动画被打断
                         focusRequester.freeFocus()
@@ -345,7 +350,8 @@ private fun SensorItemCard(
     var cardCenter by remember { mutableStateOf(Offset.Zero) }
 
     // 搜索定位脉冲: scale 微弹 + 辉光淡出
-    // 改动 3: 脉冲改为跟随「搜索键步进」(pulseTick = searchTick) 重播 — 每次按键 (含单匹配环绕) 都重播脉冲;
+    // 改动 3(双计数器): 脉冲以独立 pulseTick 为 key, 由索引 LaunchedEffect 与 highlightedIdx 同批自增触发;
+    // 因此每次 onCommit 仅高亮卡被重播一次, 单匹配重复按仍重播, 且不会误打旧卡 (不用 (pulseTick, highlighted))。
     // 仅当本卡被高亮 (highlighted) 时才播放。
     val pulse = remember { Animatable(1f) }
     val glow = remember { Animatable(0f) }
