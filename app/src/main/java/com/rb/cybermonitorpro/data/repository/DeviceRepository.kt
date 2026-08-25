@@ -2,6 +2,8 @@ package com.rb.cybermonitorpro.data.repository
 
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -311,7 +313,8 @@ class DeviceRepository(context: Context) {
         appContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     }
     @Volatile private var stepCounterListening = false
-    private var stepCounterCallback: ((Long) -> Unit)? = null
+    // F-04: @Volatile — 主线程写 (enableStepCounter), 传感器/主线程读, 保证可见性
+    @Volatile private var stepCounterCallback: ((Long) -> Unit)? = null
     private val stepCounterListener = object : SensorEventListener {
         override fun onSensorChanged(event: SensorEvent?) {
             event ?: return
@@ -374,7 +377,13 @@ class DeviceRepository(context: Context) {
         stepCounterCallback = onReading
         stepCounterListening = true
         try {
-            sm.registerListener(stepCounterListener, sensor, SensorManager.SENSOR_DELAY_NORMAL)
+            // F-04: 回调投递到主线程, 与 DeviceViewModel.pushStepUi (操作 ArrayDeque) 全程主线程,
+            // 消除传感器线程直调导致的竞态; SensorDetailViewModel 走 enableSensor 不经此路径。
+            sm.registerListener(
+                stepCounterListener, sensor,
+                SensorManager.SENSOR_DELAY_NORMAL,
+                Handler(Looper.getMainLooper())
+            )
         } catch (e: Throwable) {
             stepCounterListening = false
             stepCounterCallback = null

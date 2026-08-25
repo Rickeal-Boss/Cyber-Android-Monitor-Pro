@@ -165,7 +165,8 @@ object ShellCommandDataSource {
      */
     @JvmStatic
     fun getDumpsysProcstats(): String =
-        exec("/system/bin/dumpsys", "procstats", "--hours", "3")
+        // F-06: 慢 ROM 上 procstats 可能超 8s, 差异化放宽到 15s
+        execWithResult("/system/bin/dumpsys", "procstats", "--hours", "3", timeoutMs = 15_000L).output
 
     /**
      * 获取 dumpsys meminfo 输出（含进程级详情）
@@ -173,7 +174,8 @@ object ShellCommandDataSource {
      */
     @JvmStatic
     fun getDumpsysMeminfoDetail(): String =
-        exec("/system/bin/dumpsys", "meminfo", "-a")
+        // F-06: meminfo -a 遍历全进程, 慢 ROM 上可能超 8s, 差异化放宽到 15s
+        execWithResult("/system/bin/dumpsys", "meminfo", "-a", timeoutMs = 15_000L).output
 
     // ========== logcat 系列 ==========
 

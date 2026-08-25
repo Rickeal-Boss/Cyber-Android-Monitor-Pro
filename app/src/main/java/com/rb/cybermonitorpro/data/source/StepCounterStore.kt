@@ -62,8 +62,11 @@ class StepCounterStore(
         val sinceBoot = (raw - baseline).coerceAtLeast(0L)
         val total = offset + sinceBoot
 
-        // 跨日检测
-        val dayStamp = now / DAY_MS
+        // 跨日检测 — 本地日 (F-07): 旧 now/DAY_MS 是 UTC 日期编号, 中国用户 (UTC+8)
+        // 本地 00:00–08:00 之间 dayStamp 仍是前一天, "今日步数"延迟 8 小时才重置。
+        // minSdk=21 且无 coreLibraryDesugaring → 禁用 java.time, 用时区偏移修正为本地日。
+        val tzOffsetMs = java.util.TimeZone.getDefault().getOffset(now)
+        val dayStamp = (now + tzOffsetMs) / DAY_MS
         var dayStart = read(KEY_DAY_START, -1L)
         if (dayStart < 0 || read(KEY_DAY_STAMP, -1L) != dayStamp) {
             // 当日起点 = 昨日最后总量（此处 LAST_TOTAL 尚未被下方覆盖, 读到的仍是旧值）
