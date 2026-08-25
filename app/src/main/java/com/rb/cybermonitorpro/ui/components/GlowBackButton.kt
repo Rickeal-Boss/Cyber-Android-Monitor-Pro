@@ -57,8 +57,12 @@ import kotlin.math.sqrt
 /** 拖拽超过此距离视为"取消", 不触发返回 */
 private val CANCEL_THRESHOLD_DP = 40f
 
-/** 最大拉伸系数 (拖拽达到阈值时的 scaleX/Y) */
-private val MAX_STRETCH = 1.80f
+/**
+ * 最大拉伸系数 (拖拽达到阈值时的 scaleX/Y)
+ * 2026-08-25 下调: 45° 纵横比 2.12 (1.80/0.85) 过夸张, 用户反馈视觉不一致;
+ * 现 1.48/0.89 ≈ 1.66, 保留方向性但不再夸张。
+ */
+private val MAX_STRETCH = 1.48f
 
 /**
  * 浅色圆形返回按钮 — iOS 26 拖拽交互 + 毛玻璃材质 V3.
@@ -141,7 +145,7 @@ fun LightCircleBackButton(
         contentAlignment = Alignment.Center
     ) {
         // ── 按钮本体 (受拖拽影响变形) ──
-        // 果冻拉伸: 非对称橡皮筋 — 拖拽方向拉长到 1.8x, 垂直方向缩到 0.85x
+        // 果冻拉伸: 非对称橡皮筋 — 拖拽方向拉长到 1.48x, 垂直方向缩到 0.89x
         val stretchFactor = if (isInteracting && dragProgress > 0.05f) {
             dragProgress.coerceIn(0f, 1f)
         } else 0f
@@ -161,9 +165,11 @@ fun LightCircleBackButton(
                 .size(btnSize)
                 .graphicsLayer {
                     val n = stretchFactor
-                    rotationZ = if (n > 0f) dragAngle else 0f
+                    // 旋转死区: |offset| 较小时方向角抖动剧烈 (n→0), 直接旋转会方向微抖即旋转;
+                    // 仅 n > 0.12 (拖距约 4.8dp) 才对齐拖拽方向, 早期保持直立。
+                    rotationZ = if (n > 0.12f) dragAngle else 0f
                     scaleX = snapBackScale * (1f + (MAX_STRETCH - 1f) * n) * cancelScale
-                    scaleY = snapBackScale * (1f + (0.85f - 1f) * n) * cancelScale
+                    scaleY = snapBackScale * (1f + (0.89f - 1f) * n) * cancelScale
                     alpha = cancelAlpha
                     translationX = dragOffsetX * 0.25f * dragProgress
                     translationY = dragOffsetY * 0.25f * dragProgress
