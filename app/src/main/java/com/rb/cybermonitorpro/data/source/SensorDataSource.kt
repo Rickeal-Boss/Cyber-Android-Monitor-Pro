@@ -99,7 +99,16 @@ class SensorDataSource(private val context: Context) {
                     isWakeUp = sensor.isWakeUpSensor,
                     reportingMode = sensor.reportingMode,
                     // API 20+: 字符串类型标识, 用于 OEM 私有传感器的名称回退
-                    stringType = try { sensor.stringType ?: "" } catch (_: Throwable) { "" }
+                    stringType = try { sensor.stringType ?: "" } catch (_: Throwable) { "" },
+                    // P1-b: 三语搜索别名预计算 (默认英文/简中/繁中标题 + 硬件名 + 厂商),
+                    // 显示名逻辑不变, 仅扩展搜索命中
+                    searchAliases = SensorTypeMeta.buildSearchAliases(
+                        type = sensor.type,
+                        context = context,
+                        stringType = try { sensor.stringType ?: "" } catch (_: Throwable) { "" },
+                        hardwareName = sensor.name,
+                        vendor = sensor.vendor
+                    )
                 )
             )
         }
