@@ -518,8 +518,14 @@ private fun DataSourceHealthBar(health: SourceHealth, modifier: Modifier = Modif
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text("\u26A0", fontSize = 13.sp)
+        // 三态文案: ERROR 优先展示异常计数; 无 ERROR 仅 WARN 时展示警告计数
+        // (allHealthy 已在函数入口 return, 到达此处必有一个 ERROR 或 WARN 源)
+        val (sourceMsgRes, sourceCount) = when {
+            health.errorCount > 0 -> R.string.dashboard_source_error to health.errorCount
+            else -> R.string.dashboard_source_warning to health.warnCount
+        }
         Text(
-            stringResource(R.string.dashboard_source_error, health.errorCount),
+            stringResource(sourceMsgRes, sourceCount),
             fontSize = 12.sp,
             color = WarningNeon
         )
