@@ -55,6 +55,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.core.content.ContextCompat
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.model.SensorItemInfo
@@ -99,6 +102,8 @@ private fun SensorListContent(
     val ctx = LocalContext.current
     val scrollState = rememberScrollState()
     var query by remember { mutableStateOf("") }
+    // 仅"键盘搜索/完成键"提交后用于索引定位, 避免每次按键即时跳动
+    var submittedQuery by remember { mutableStateOf("") }
     var highlightedIdx by remember { mutableStateOf(-1) }
     // 滚动列表容器顶部在根坐标系的 Y (视口锚点)
     var listRootTopPx by remember { mutableStateOf(0f) }
@@ -106,14 +111,14 @@ private fun SensorListContent(
     val cardTops = remember { mutableStateMapOf<Int, Float>() }
     val density = LocalDensity.current
 
-    // 方案Y: 输入即定位匹配 — 滚动跳转 + 卡片脉冲高亮 (列表保持完整, 不做过滤)
-    // F-16: 同时监听 sensors — 列表异步加载到达前输入时 effect 会重跑; 坐标未就绪时
+    // 方案Y(改): 索引定位仅在"键盘搜索/完成键"提交 submittedQuery 后触发 — 不再每次按键即时定位。
+    // F-16: 同时监听 sensors — 列表异步加载到达前提交时 effect 会重跑; 坐标未就绪时
     // 先等一帧再挂起等待 (旧代码 ?:return 静默放弃且永不重试), withTimeoutOrNull 兜底防挂死。
     // P1-b: 多匹配顺序定位 — 收集全部命中索引逐个高亮+滚动 (~600ms 停留), 不再只定位首条。
     // ★ 每张卡都必须重新等待坐标就绪: 滚动后 cardTops 坐标失效, 等待逻辑不能移出循环。
-    LaunchedEffect(query, sensors) {
-        // 纯空格 query 不参与匹配 (否则 haystack 含空格恒命中第一张卡 → 跳顶+脉冲)
-        val q = query.trim()
+    LaunchedEffect(submittedQuery, sensors) {
+        // 纯空格/空 query 不参与匹配 (否则 haystack 含空格恒命中第一张卡 → 跳顶+脉冲)
+        val q = submittedQuery
         if (q.isEmpty()) {
             highlightedIdx = -1
             return@LaunchedEffect
@@ -181,7 +186,9 @@ private fun SensorListContent(
             )
             SensorSearchField(
                 query = query,
-                onQueryChange = { query = it }
+                onQueryChange = { query = it },
+                onCommit = { submittedQuery = query.trim() },
+                onClear = { query = ""; submittedQuery = "" }
             )
         }
         Text(
@@ -269,7 +276,9 @@ private fun matchesQuery(sensor: SensorItemInfo, q: String, ctx: Context): Boole
 @Composable
 private fun SensorSearchField(
     query: String,
-    onQueryChange: (String) -> Unit
+    onQueryChange: (String) -> Unit,
+    onCommit: () -> Unit,
+    onClear: () -> Unit
 ) {
     TextField(
         value = query,
@@ -290,7 +299,7 @@ private fun SensorSearchField(
                     "✕",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable { onQueryChange("") }
+                    modifier = Modifier.clickable { onClear() }
                 )
             }
         },
@@ -302,7 +311,9 @@ private fun SensorSearchField(
             unfocusedIndicatorColor = NeonPurple.copy(alpha = 0.4f),
             cursorColor = NeonPurpleBright
         ),
-        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp)
+        textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { onCommit() })
     )
 }
 
