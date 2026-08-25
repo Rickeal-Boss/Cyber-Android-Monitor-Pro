@@ -65,6 +65,7 @@ import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -107,9 +108,11 @@ private fun SensorListContent(
     val cardTops = remember { mutableStateMapOf<Int, Float>() }
     val density = LocalDensity.current
 
-    // 方案Y: 输入即定位首条匹配 — 滚动跳转 + 卡片脉冲高亮 (列表保持完整, 不做过滤)
+    // 方案Y: 输入即定位匹配 — 滚动跳转 + 卡片脉冲高亮 (列表保持完整, 不做过滤)
     // F-16: 同时监听 sensors — 列表异步加载到达前输入时 effect 会重跑; 坐标未就绪时
     // 先等一帧再挂起等待 (旧代码 ?:return 静默放弃且永不重试), withTimeoutOrNull 兜底防挂死。
+    // P1-b: 多匹配顺序定位 — 收集全部命中索引逐个高亮+滚动 (~600ms 停留), 不再只定位首条。
+    // ★ 每张卡都必须重新等待坐标就绪: 滚动后 cardTops 坐标失效, 等待逻辑不能移出循环。
     LaunchedEffect(query, sensors) {
         // 纯空格 query 不参与匹配 (否则 haystack 含空格恒命中第一张卡 → 跳顶+脉冲)
         val q = query.trim()
@@ -117,8 +120,14 @@ private fun SensorListContent(
             highlightedIdx = -1
             return@LaunchedEffect
         }
-        val matchIdx = sensors.indexOfFirst { matchesQuery(it, q, ctx) }
-        if (matchIdx >= 0) {
+        val matchIdxList = sensors.mapIndexedNotNull { idx, s ->
+            if (matchesQuery(s, q, ctx)) idx else null
+        }
+        if (matchIdxList.isEmpty()) {
+            highlightedIdx = -1
+            return@LaunchedEffect
+        }
+        for (matchIdx in matchIdxList) {
             highlightedIdx = matchIdx
             // 等待一帧，确保 onGloballyPositioned 已写入本轮布局的坐标。
             // 否则首帧/列表刚刷新/键盘弹起时 cardTops[matchIdx] 可能为 null，
@@ -137,6 +146,8 @@ private fun SensorListContent(
                         with(density) { 12.dp.toPx() }
                 scrollState.animateScrollTo(target.toInt().coerceIn(0, scrollState.maxValue))
             }
+            // 卡片脉冲高亮停留后定位下一张 (P1-b)
+            delay(600L)
         }
     }
 
@@ -239,15 +250,19 @@ private fun SensorListContent(
     }
 }
 
-/** 搜索匹配: 归纳名(含 stringType 回退) / 硬件名 / 厂商, 大小写不敏感 contains */
+/** 搜索匹配: 命中任一搜索别名 (P1-b 三语标题/硬件名/厂商, 预计算) 即算匹配, 大小写不敏感 contains */
 private fun matchesQuery(sensor: SensorItemInfo, q: String, ctx: Context): Boolean {
     if (q.isEmpty()) return false
-    val haystack = listOf(
-        SensorTypeMeta.getDisplayName(sensor.type, ctx, sensor.stringType),
-        sensor.name,
-        sensor.vendor
-    ).joinToString(" ").lowercase()
-    return haystack.contains(q.lowercase())
+    // searchAliases 由 SensorDataSource.getAllSensors 预计算; 防御性回退到旧 haystack
+    // (手工构造的 SensorItemInfo 可能未填充 searchAliases, 如单测)
+    val aliases = sensor.searchAliases.ifEmpty {
+        listOf(
+            SensorTypeMeta.getDisplayName(sensor.type, ctx, sensor.stringType),
+            sensor.name,
+            sensor.vendor
+        ).filter { it.isNotBlank() }
+    }
+    return aliases.any { it.contains(q, ignoreCase = true) }
 }
 
 /**

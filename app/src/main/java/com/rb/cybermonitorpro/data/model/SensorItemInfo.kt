@@ -1,8 +1,10 @@
 package com.rb.cybermonitorpro.data.model
 
 import android.content.Context
+import android.content.res.Configuration
 import androidx.annotation.StringRes
 import com.rb.cybermonitorpro.R
+import java.util.Locale
 
 data class SensorItemInfo(
     val name: String = "",
@@ -18,7 +20,10 @@ data class SensorItemInfo(
     val isWakeUp: Boolean = false,
     val reportingMode: Int = -1,
     /** API 20+ Sensor.getStringType(), 如 "android.sensor.accelerometer" 或 OEM 私有 "com.vendor.sensor.xxx" */
-    val stringType: String = ""
+    val stringType: String = "",
+    /** 搜索别名 (P1-b): 三语标题 + 硬件名 + 厂商, 由 SensorDataSource.getAllSensors 预计算.
+     *  仅用于搜索匹配; 显示名仍走 SensorTypeMeta.getDisplayName, 保持运行时 i18n 单一数据源. */
+    val searchAliases: List<String> = emptyList()
     // ── 注意: 传感器显示名称统一通过 SensorTypeMeta.getDisplayName(type, context) 获取,
     //         不存储到 data class 中, 以保持单一数据源、支持运行时 i18n 切换.
 )
@@ -139,6 +144,46 @@ enum class SensorTypeMeta(
                 else word
             }
         }
+
+        /**
+         * 构建搜索别名 (P1-b): 三语标题 (默认英文 / 简中 / 繁中) + 硬件名 + 厂商。
+         * 仅用于搜索匹配; 显示名仍走 getDisplayName, 保持运行时 i18n 单一数据源。
+         *
+         * 三语解析用 createConfigurationContext(Configuration).getString(resId) (API 17+,
+         * minSdk 21 安全) — 直接解析 values / values-zh-rCN / values-zh-rTW 的 sensor_type_*。
+         * OEM 私有传感器 (type ≥ 65536, 无标准 resId) 以 humanize stringType 英文索引。
+         */
+        fun buildSearchAliases(
+            type: Int,
+            context: Context,
+            stringType: String?,
+            hardwareName: String,
+            vendor: String,
+        ): List<String> {
+            val aliases = mutableListOf<String>()
+            // 当前语言标题 (与显示一致)
+            aliases += getDisplayName(type, context, stringType)
+            // 三语标题: 标准类型用资源 ID 按各 locale 解析; OEM 私有 (fromTypeId==null) 跳过
+            val meta = fromTypeId(type)
+            if (meta != null) {
+                for (locale in SEARCH_ALIAS_LOCALES) {
+                    try {
+                        val cfg = Configuration(context.resources.configuration).apply { setLocale(locale) }
+                        val localized = context.createConfigurationContext(cfg).getString(meta.displayNameResId)
+                        if (localized.isNotBlank()) aliases += localized
+                    } catch (_: Throwable) {
+                        // OEM 资源解析异常静默降级, 不阻塞列表构建
+                    }
+                }
+            }
+            if (hardwareName.isNotBlank()) aliases += hardwareName
+            if (vendor.isNotBlank()) aliases += vendor
+            return aliases.distinct()
+        }
+
+        /** 三语搜索别名 locale 表: 默认英文 / 简中 / 繁中, 对应 values / values-zh-rCN / values-zh-rTW */
+        private val SEARCH_ALIAS_LOCALES =
+            listOf(Locale.ENGLISH, Locale.SIMPLIFIED_CHINESE, Locale.TRADITIONAL_CHINESE)
 
         /**
          * 根据 Context 解析轴标签的本地化名称
