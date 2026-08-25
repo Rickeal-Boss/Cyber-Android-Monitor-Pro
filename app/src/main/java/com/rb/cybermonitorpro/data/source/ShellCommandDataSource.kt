@@ -291,10 +291,11 @@ object ShellCommandDataSource {
         for (line in gfxOutput.split("\n")) {
             val trimmed = line.trim()
             when {
-                trimmed.startsWith("Total frames rendered:") -> {
+                // F-09: 宽松匹配 (ignoreCase), OEM 格式变体不再失效
+                trimmed.startsWith("Total frames rendered", ignoreCase = true) -> {
                     totalFrames = trimmed.substringAfter(":").trim().toLongOrNull() ?: -1L
                 }
-                trimmed.startsWith("Janky frames:") -> {
+                trimmed.startsWith("Janky frames", ignoreCase = true) -> {
                     val jankPart = trimmed.substringAfter(":").trim()
                     jankyPct = jankPart.replace("%", "").replace("(", "").replace(")", "")
                         .trim().toFloatOrNull() ?: Float.NaN
@@ -325,8 +326,9 @@ object ShellCommandDataSource {
     fun extractWifiTemperature(wifiOutput: String?): Float {
         if (wifiOutput.isNullOrEmpty()) return Float.NaN
         val patterns = listOf(
-            Regex("""(?i)(?:wifi|chip).*?temp(?:erature)?[=: ]+(\d+)"""),
-            Regex("""(?i)temp(?:erature)?[=: ]+(\d+)\s*(?:C|c)"""),
+            // F-09: 支持小数温度 (42.5 不再截为 42)
+            Regex("""(?i)(?:wifi|chip).*?temp(?:erature)?[=: ]+(-?\d+(?:\.\d+)?)"""),
+            Regex("""(?i)temp(?:erature)?[=: ]+(-?\d+(?:\.\d+)?)\s*(?:C|c)"""),
         )
         for (regex in patterns) {
             val match = regex.find(wifiOutput) ?: continue

@@ -1,5 +1,6 @@
 package com.rb.cybermonitorpro.ui.device
 
+import android.os.SystemClock
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -44,7 +45,8 @@ class DeviceViewModel(
 
     // ── 内部：账本结算 + 步频窗口 + 派生指标 ──
     private fun pushStepUi(total: Long, today: Long, sinceBoot: Long) {
-        val now = System.currentTimeMillis()
+        // F-10: 步频窗口用单调时钟 — 墙钟跳变 (手动改时间/网络对时) 不再导致步频暴增/清零
+        val now = SystemClock.elapsedRealtime()
         stepRateWindow.addLast(now to total)
         while (stepRateWindow.size > 64 ||
             (stepRateWindow.isNotEmpty() && now - stepRateWindow.first().first > 60_000L)) {

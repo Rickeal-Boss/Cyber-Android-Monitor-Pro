@@ -1,6 +1,7 @@
 package com.rb.cybermonitorpro.ui.sensors
 
 import android.hardware.Sensor
+import android.os.SystemClock
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
@@ -308,7 +309,8 @@ class SensorDetailViewModel(
     // ═══════ 步数分支 ═══════
 
     private fun pushStepUi(total: Long, today: Long, sinceBoot: Long, fromDetector: Boolean) {
-        val now = System.currentTimeMillis()
+        // F-10: 步频窗口用单调时钟 — 墙钟跳变不再导致步频暴增/清零
+        val now = SystemClock.elapsedRealtime()
         stepRateWindow.addLast(now to total)
         while (stepRateWindow.size > 64 || (stepRateWindow.isNotEmpty() && now - stepRateWindow.first().first > 60_000L)) {
             stepRateWindow.removeFirst()
