@@ -92,6 +92,17 @@ defaultConfig {
         targetCompatibility JavaVersion.VERSION_17
     }
 
+    testOptions {
+        unitTests {
+            // F-13 后 StepCounterStore 等引入 Log.*；纯 JVM 单测默认对未 mock 的 android.*
+            // 抛 "not mocked" RuntimeException。此开关让单测中 android.util.Log 返回默认值，
+            // 不炸纯逻辑单测（Android 官方推荐配置）。
+            // Groovy DSL 遵循 JavaBeans: boolean getter isReturnDefaultValues() → 属性名 returnDefaultValues
+            // (写 isReturnDefaultValues= 会找 setIsReturnDefaultValues(), AGP 未定义 → 配置期 MissingPropertyException)
+            returnDefaultValues = true
+        }
+    }
+
     buildFeatures {
         compose true
         buildConfig true    // ← 新增：启用 BuildConfig 字段生成
