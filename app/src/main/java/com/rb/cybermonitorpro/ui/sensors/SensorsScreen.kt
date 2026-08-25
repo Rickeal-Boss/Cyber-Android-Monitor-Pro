@@ -195,7 +195,12 @@ private fun SensorListContent(
             SensorSearchField(
                 query = query,
                 onQueryChange = { query = it },
-                onCommit = { submittedQuery = query.trim(); searchTrigger++ },
+                onCommit = {
+                    val newQ = query.trim()
+                    if (newQ != submittedQuery) searchStep = 0   // 查询变化 → 新查询从顶部开始
+                    submittedQuery = newQ
+                    searchTrigger++
+                },
                 onClear = { query = ""; submittedQuery = ""; searchStep = 0; searchTrigger++ },
                 focusRequester = focusRequester
             )
@@ -367,6 +372,13 @@ private fun SensorItemCard(
                 glow.animateTo(1f, tween(180))
                 glow.animateTo(0f, tween(600))
             }
+        }
+    }
+    // 改动 3(P2): 取消高亮即复位 scale/glow, 避免旧 glow 动画被取消后冻结在中间值留下鬼影光环
+    LaunchedEffect(highlighted) {
+        if (!highlighted) {
+            pulse.snapTo(1f)
+            glow.snapTo(0f)
         }
     }
 
