@@ -258,13 +258,11 @@ class DeviceRepository(context: Context) {
     private suspend fun collectMemoryBlock() {
         try {
             val mem = memoryDataSource.getMemoryInfo()
-            // F-03: dumpsys 降级 (procstats/OOM 不可用) → 上报 WARN, 供 Dashboard 健康状态诊断;
-            // dumpsys 可用时照常 OK, 避免 WARN 被下方无条件 OK 覆盖。
-            if (!mem.dumpsysAvailable) {
-                healthTracker.mark(HealthTracker.SourceHealth.Health.WARN, "memory")
-            } else {
-                healthTracker.mark(HealthTracker.SourceHealth.Health.OK, "memory")
-            }
+            // 内存核心指标 (total/used/available/free/swap/zram) 始终来自 /proc/meminfo,
+            // 几乎总是可用; dumpsys 仅用于 OOM 进程分类 (内存分布饼图) 的增强, 其不可用属于
+            // 降级而非数据异常, 不应触发数据源 WARN (否则在无 DUMP 权限的三方 App 设备上会
+            // 持续误报警告). 仅在采集抛异常时才上报 ERROR.
+            healthTracker.mark(HealthTracker.SourceHealth.Health.OK, "memory")
             _memoryFlow.emit(mem); memoryLiveData.postValue(mem)
             if (mem.totalKB > 0) historyCache.addPoint("ram_usage", mem.usedKB.toFloat() / mem.totalKB * 100f)
         } catch (e: Throwable) {

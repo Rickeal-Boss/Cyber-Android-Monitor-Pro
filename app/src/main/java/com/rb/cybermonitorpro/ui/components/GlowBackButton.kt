@@ -33,8 +33,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.PI
+import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tanh
 
 // ═════════════════════════════════════════════════════
 //  浅色圆形返回按钮 — WorkBuddy Android / iOS 26 风格
@@ -63,6 +66,18 @@ private val CANCEL_THRESHOLD_DP = 40f
  * 现 1.48/0.89 ≈ 1.66, 保留方向性但不再夸张。
  */
 private val MAX_STRETCH = 1.48f
+
+/**
+ * 垂直方向收缩系数 (拖拽达到阈值时); 与 MAX_STRETCH 共同决定椭圆纵横比。
+ * 2026-08-25 随 MAX_STRETCH 同步下调, 保持同一套降级幅度。
+ */
+private val MIN_STRETCH = 0.89f
+
+/**
+ * tanh  ️位移饱和初始斜率 (参考 Kyant0/AndroidLiquidGlass, 适配小按钮)。
+ * 小拖拽线性跟随, 大拖拽饱和到 maxOffset, 避免按钮无限跑。
+ */
+private const val TANH_INITIAL_K = 0.15f
 
 /**
  * 浅色圆形返回按钮 — iOS 26 拖拽交互 + 毛玻璃材质 V3.
@@ -127,12 +142,12 @@ fun LightCircleBackButton(
         label = "cancelScale"
     )
 
-    // 松手回弹 (非取消态时迅速归零)
+    // 松手回弹 (非取消态时迅速归零; MediumBouncy+StiffnessMedium 快速收敛, 消除松手后椭圆残留)
     val snapBackScale by animateFloatAsState(
         targetValue = if (!isInteracting) 1.0f else pressScale,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioLowBouncy,
-            stiffness = Spring.StiffnessLow
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
         ),
         label = "snapBack"
     )
@@ -156,23 +171,32 @@ fun LightCircleBackButton(
             else atan2(dragOffsetY, dragOffsetX).toFloat() * (180f / PI.toFloat())
         }
 
-        // ── ① 果冻形变层: 旋转至拖拽方向 + 沿拖拽轴非对称拉伸 ──
-        // 方案 A (旋转感知定向拉伸): 圆形玻璃底座对旋转不敏感, rotationZ 无视觉副作用;
-        // 旋转后局部 +X 恒指向拖拽方向, scaleX 即"沿拖拽轴拉伸", scaleY 真·垂直轴不变。
-        // 修复 45° 叠加态退化: 旧 cos²/sin² 非对称在 45° 时轴向区分丢失 (均匀缩放)。
+        // ── ① 果冻形变层: 无旋转架构 (采纳 Kyant0 思路) ──
+        // 不加 rotationZ — 从根源消除"方向相反" + "rotationZ 与 cos²/sin² 双叠加态"两个功能性 bug。
+        // 形变仅用 axis-aligned scaleX/scaleY, 经 cos²/sin² 分解到 X/Y , axis:
+        //   水平/垂直拖拽 → 椭圆主轴沿 X/Y (方向正确); 45° → 退化为均匀放大 (无旋转架构已知
+        //   trade-off, 接受). 图标层已在形变层外, 箭头永不被拉伸.
         Box(
             modifier = Modifier
                 .size(btnSize)
                 .graphicsLayer {
                     val n = stretchFactor
-                    // 旋转死区: |offset| 较小时方向角抖动剧烈 (n→0), 直接旋转会方向微抖即旋转;
-                    // 仅 n > 0.12 (拖距约 4.8dp) 才对齐拖拽方向, 早期保持直立。
-                    rotationZ = if (n > 0.12f) dragAngle else 0f
-                    scaleX = snapBackScale * (1f + (MAX_STRETCH - 1f) * n) * cancelScale
-                    scaleY = snapBackScale * (1f + (0.89f - 1f) * n) * cancelScale
+                    // ── 无旋转形变: cos²/sin² 分解 (唯一一套形变公式, 无 rotationZ) ──
+                    val ang = atan2(dragOffsetY.toDouble(), dragOffsetX.toDouble())
+                    val cosA = cos(ang).toFloat()
+                    val sinA = sin(ang).toFloat()
+                    val stretchAlong = 1f + (MAX_STRETCH - 1f) * n   // 拖拽方向
+                    val stretchPerp = 1f + (MIN_STRETCH - 1f) * n    // 垂直方向
+                    val sx = stretchAlong * cosA * cosA + stretchPerp * sinA * sinA
+                    val sy = stretchAlong * sinA * sinA + stretchPerp * cosA * cosA
+                    scaleX = snapBackScale * sx.coerceIn(0.75f, MAX_STRETCH) * cancelScale
+                    scaleY = snapBackScale * sy.coerceIn(0.75f, MAX_STRETCH) * cancelScale
                     alpha = cancelAlpha
-                    translationX = dragOffsetX * 0.25f * dragProgress
-                    translationY = dragOffsetY * 0.25f * dragProgress
+                    // ── tanh 饱和位移: 小拖拽线性跟随, 大拖拽饱和不无限跑 ──
+                    val btnSizePx = with(density) { btnSize.toPx() }
+                    val maxOffset = btnSizePx * 0.5f
+                    translationX = if (n > 0f) maxOffset * tanh(TANH_INITIAL_K * dragOffsetX / maxOffset) else 0f
+                    translationY = if (n > 0f) maxOffset * tanh(TANH_INITIAL_K * dragOffsetY / maxOffset) else 0f
                 }
                 .shadow(
                     elevation = if (isInteracting) 10.dp else 4.dp,
