@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
+import kotlin.math.PI
 import kotlin.math.sqrt
 import kotlin.math.tanh
 
@@ -616,29 +617,25 @@ fun LightCircleBackButton(
         val stretchFactor = if (isInteracting && dragProgress > 0.05f) {
             dragProgress.coerceIn(0f, 1f)
         } else 0f
-        val dragAngleRad = kotlin.math.atan2(dragOffsetY.toDouble(), dragOffsetX.toDouble()).toFloat()
-        val cosA = kotlin.math.cos(dragAngleRad.toDouble()).toFloat()
-        val sinA = kotlin.math.sin(dragAngleRad.toDouble()).toFloat()
-        // 非对称: 拖拽方向 stretch 到 1.8, 垂直方向 shrink 到 0.85
-        val stretchX = 1f + (MAX_STRETCH - 1f) * stretchFactor * cosA * cosA + (0.85f - 1f) * stretchFactor * sinA * sinA
-        val stretchY = 1f + (MAX_STRETCH - 1f) * stretchFactor * sinA * sinA + (0.85f - 1f) * stretchFactor * cosA * cosA
 
-        // 综合缩放 = 按压 × 拉伸 × 取消 × 回弹
-        val finalScaleX = snapBackScale * stretchX.coerceIn(0.75f, MAX_STRETCH) * cancelScale
-        val finalScaleY = snapBackScale * stretchY.coerceIn(0.75f, MAX_STRETCH) * cancelScale
-
-        // 拖拽方向角度 (用于高光弧位置)
+        // 拖拽方向角度 (旋转层 + 高光弧共用; 未旋转坐标系的角度)
         val dragAngle = remember(dragOffsetX, dragOffsetY) {
             if (dragOffsetX == 0f && dragOffsetY == 0f) 0f
-            else kotlin.math.atan2(dragOffsetY, dragOffsetX).toFloat() * (180f / kotlin.math.PI.toFloat())
+            else atan2(dragOffsetY, dragOffsetX).toFloat() * (180f / PI.toFloat())
         }
 
+        // ── ① 果冻形变层: 旋转至拖拽方向 + 沿拖拽轴非对称拉伸 ──
+        // 方案 A (对齐 GlowBackButton): 圆形玻璃底座对旋转不敏感, rotationZ 无视觉副作用;
+        // 旋转后局部 +X 恒指向拖拽方向, scaleX 即"沿拖拽轴拉伸", scaleY 真·垂直轴不变。
+        // 修复 45° 叠加态退化: 旧 cos²/sin² 非对称在 45° 时轴向区分丢失 (均匀缩放)。
         Box(
             modifier = Modifier
                 .size(btnSize)
                 .graphicsLayer {
-                    scaleX = finalScaleX
-                    scaleY = finalScaleY
+                    val n = stretchFactor
+                    rotationZ = if (n > 0f) dragAngle else 0f
+                    scaleX = snapBackScale * (1f + (MAX_STRETCH - 1f) * n) * cancelScale
+                    scaleY = snapBackScale * (1f + (0.85f - 1f) * n) * cancelScale
                     alpha = cancelAlpha
                     translationX = dragOffsetX * 0.25f * dragProgress
                     translationY = dragOffsetY * 0.25f * dragProgress
@@ -679,7 +676,7 @@ fun LightCircleBackButton(
 
                             // 松手判定
                             isInteracting = false
-                            val totalDist = kotlin.math.sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY)
+                            val totalDist = sqrt(dragOffsetX * dragOffsetX + dragOffsetY * dragOffsetY)
 
                             dragOffsetX = 0f
                             dragOffsetY = 0f
@@ -696,7 +693,12 @@ fun LightCircleBackButton(
                             }
                         }
                     }
-                },
+                }
+        )   // ← 形变层结束, 图标移到旋转层之外
+
+        // ── ② 图标层: 旋转层之外, 箭头不旋转、不被各向异性拉伸 ──
+        Box(
+            Modifier.matchParentSize().graphicsLayer { alpha = cancelAlpha },
             contentAlignment = Alignment.Center
         ) {
             // ══ 模糊质感箭头 (三层错位绘制模拟 soft-focus / 景深) ══
@@ -731,7 +733,7 @@ fun LightCircleBackButton(
             )
         }
 
-        // ══ 拖拽高光弧线 V2 — 玻璃折射感 (细/冷色调/柔和边缘) ══
+        // ── ③ 拖拽高光弧线 V2 — 玻璃折射感 (细/冷色调/柔和边缘) ══
         // 设计原则: 真玻璃高光特征 = 极细(1~3px) + 低α(0.05~0.40) + 冷色调偏移 + 边缘柔化
         // 旧版错误: 5层纯白/峰值0.95α/最宽28dp → 像粗白漆条/塑料环
         if (isInteracting && dragProgress > 0.08f) {
