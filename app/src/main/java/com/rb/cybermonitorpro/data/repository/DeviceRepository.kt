@@ -385,6 +385,8 @@ class DeviceRepository(context: Context) {
                 Handler(Looper.getMainLooper())
             )
         } catch (e: Throwable) {
+            // F-13: 注册失败关键日志 (此前静默, 问题难回溯)
+            Log.w(TAG, "STEP_COUNTER registerListener failed", e)
             stepCounterListening = false
             stepCounterCallback = null
         }
