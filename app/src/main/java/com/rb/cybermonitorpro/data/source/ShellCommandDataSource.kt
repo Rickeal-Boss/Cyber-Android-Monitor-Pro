@@ -11,7 +11,7 @@ private const val TAG = "ShellExec"
 /** 命令执行结果 */
 sealed class ExecResult {
     /** 正常完成（输出可能为空字符串） */
-    data class Success(val output: String) : ExecResult()
+    data class Success(val text: String) : ExecResult()
     /** 超时被强杀，partialOutput 为已收集的部分输出 */
     data class Timeout(val partialOutput: String, val command: String, val timeoutMs: Long) : ExecResult()
     /** 执行异常（权限拒绝/启动失败/IO 错误） */
@@ -19,7 +19,7 @@ sealed class ExecResult {
 
     /** 取输出文本（任何状态都返回已收集的内容，可能为空） */
     val output: String get() = when (this) {
-        is Success -> output
+        is Success -> text
         is Timeout -> partialOutput
         is Failure -> ""
     }
