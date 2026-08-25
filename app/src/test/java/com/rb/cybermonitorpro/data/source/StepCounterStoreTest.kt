@@ -145,4 +145,31 @@ class StepCounterStoreTest {
             TimeZone.setDefault(original)
         }
     }
+
+    // ========================================================
+    // P2 STEP_DETECTOR 降级账本 (独立命名空间键) 单测
+    // ========================================================
+
+    @Test
+    fun `detectorTotal 默认0且写入读回`() {
+        val f = FakeStore()
+        assertEquals(0L, f.store.readDetectorTotal())
+        f.store.writeDetectorTotal(1234L)
+        assertEquals(1234L, f.store.readDetectorTotal())
+        // 负值防御: 不入账
+        f.store.writeDetectorTotal(-5L)
+        assertEquals(0L, f.store.readDetectorTotal())
+    }
+
+    @Test
+    fun `detector 账本与 STEP_COUNTER 账本完全隔离`() {
+        val f = FakeStore()
+        // 先写入 detector 账本, 不污染 STEP_COUNTER 结算 (onHardwareReading 不读该键)
+        f.store.writeDetectorTotal(999L)
+        f.store.onHardwareReading(100, now = f.now)
+        f.store.onHardwareReading(260, now = f.now + 1000)
+        assertEquals(160L, f.store.lastKnownTotal())
+        // STEP_COUNTER 结算也不改写 detector 账本 (STEP_COUNTER 键全在 step_* 命名空间)
+        assertEquals(999L, f.store.readDetectorTotal())
+    }
 }

@@ -98,7 +98,9 @@ class SensorDetailViewModel(
         currentSensor = sensor
         currentMeta = SensorTypeMeta.fromTypeId(sensor.type)
         if (sensor.type == Sensor.TYPE_STEP_DETECTOR) {
-            detectorBaseTotal = stepStore.lastKnownTotal()
+            // P2: 降级路径持久化 — 读回上次累计作起点 (独立 step_detector_total 键),
+            // 根治"离开页面重开归零" (小米等无标准 STEP_COUNTER 时 lastKnownTotal 恒 0)
+            detectorBaseTotal = stepStore.readDetectorTotal()
             detectorSessionSteps = 0L
         }
         if (sensor.type == Sensor.TYPE_STEP_COUNTER) {
@@ -142,10 +144,13 @@ class SensorDetailViewModel(
                 pushStepUi(ledger.totalSteps, ledger.todaySteps, ledger.stepsSinceBoot, fromDetector = false)
             }
             Sensor.TYPE_STEP_DETECTOR -> {
-                // 降级路径: 检测器每步一事件(值 1.0)，仅监听期计数
-                // TODO(语义): 降级路径显示的为会话内步数, 非真实今日步数
+                // 降级路径: 检测器每步一事件(值 1.0), 仅监听期计数; 总步数为 app 监听期累计
+                // P2: 每次事件累计后写回 step_detector_total (独立命名空间键, 与 STEP_COUNTER 账本隔离),
+                //     进入页面 prefill 续计, 根治重开归零;
+                //     今日/本次开机仍为会话内步数 (OEM 无 STEP_COUNTER 时无跨日/跨重启原始读数可对账)
                 detectorSessionSteps++
                 val total = detectorBaseTotal + detectorSessionSteps
+                stepStore.writeDetectorTotal(total)
                 pushStepUi(total, detectorSessionSteps, detectorSessionSteps, fromDetector = true)
             }
             Sensor.TYPE_HEART_RATE -> onHeartRateSample(data.x, data.timestampMs)
