@@ -1,9 +1,30 @@
 package com.rb.cybermonitorpro.data.source
 
+import android.util.Log
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
 import com.rb.cybermonitorpro.util.waitForWithTimeout
+
+private const val TAG = "ShellExec"
+
+/** 命令执行结果 */
+sealed class ExecResult {
+    /** 正常完成（输出可能为空字符串） */
+    data class Success(val output: String) : ExecResult()
+    /** 超时被强杀，partialOutput 为已收集的部分输出 */
+    data class Timeout(val partialOutput: String, val command: String, val timeoutMs: Long) : ExecResult()
+    /** 执行异常（权限拒绝/启动失败/IO 错误） */
+    data class Failure(val error: Throwable, val command: String) : ExecResult()
+
+    /** 取输出文本（任何状态都返回已收集的内容，可能为空） */
+    val output: String get() = when (this) {
+        is Success -> output
+        is Timeout -> partialOutput
+        is Failure -> ""
+    }
+    val isSuccess: Boolean get() = this is Success
+}
 
 /**
  * Shell 命令数据源 — 通过 ProcessBuilder 执行 dumpsys / logcat 等系统命令，
@@ -36,13 +57,18 @@ object ShellCommandDataSource {
     )
 
     /**
-     * 执行 shell 命令并返回完整输出
+     * 执行 shell 命令并返回带状态的结果（可区分 成功/超时/失败）。
+     *
+     * 修复 F-02: 旧 exec() 的 catch 把权限拒绝/启动失败/IO 异常全部吞成空字符串,
+     * 调用方无法区分"命令无输出"与"命令不可用"。此版本保留状态与日志,
+     * 超时/失败分别 Log.w, 供线上诊断与 HealthTracker 上报。
      */
     @JvmStatic
-    fun exec(vararg command: String): String {
+    fun execWithResult(vararg command: String, timeoutMs: Long = TIMEOUT_SECONDS * 1000L): ExecResult {
         val output = StringBuilder()
         var process: Process? = null
-        try {
+        val cmdDesc = command.joinToString(" ")
+        return try {
             process = ProcessBuilder(*command)
                 .redirectErrorStream(true)
                 .start()
@@ -52,17 +78,26 @@ object ShellCommandDataSource {
                     output.append(line).append("\n")
                 }
             }
-            val finished = process.waitForWithTimeout(TIMEOUT_SECONDS * 1000L)
+            val finished = process.waitForWithTimeout(timeoutMs)
             if (!finished) {
-                process.destroyForcibly()
+                Log.w(TAG, "exec timeout after ${timeoutMs}ms: $cmdDesc")
+                // waitForWithTimeout 超时已内部 destroyForcibly (API26+) / destroy,
+                // 这里无需重复强杀 (直接调用 destroyForcibly 在 minSdk21 上会 NoSuchMethodError)
+                ExecResult.Timeout(output.toString(), cmdDesc, timeoutMs)
+            } else {
+                ExecResult.Success(output.toString())
             }
-        } catch (_: Throwable) {
-            return ""
+        } catch (e: Throwable) {
+            Log.w(TAG, "exec failed: $cmdDesc", e)
+            ExecResult.Failure(e, cmdDesc)
         } finally {
-            process?.destroy()
+            try { process?.destroy() } catch (_: Throwable) {}
         }
-        return output.toString()
     }
+
+    /** 兼容旧调用：返回输出文本（空串表示任何失败） */
+    @JvmStatic
+    fun exec(vararg command: String): String = execWithResult(*command).output
 
     // ========== dumpsys 系列 ==========
 

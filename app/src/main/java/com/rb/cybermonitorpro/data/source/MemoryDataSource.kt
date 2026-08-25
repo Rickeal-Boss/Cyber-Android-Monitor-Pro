@@ -1,6 +1,9 @@
 package com.rb.cybermonitorpro.data.source
 
+import android.util.Log
 import com.rb.cybermonitorpro.data.model.MemoryInfo
+
+private const val TAG = "MemDS"
 
 /**
  * 内存数据源，解析 /proc/meminfo 和 ZRAM 统计
@@ -88,14 +91,21 @@ class MemoryDataSource {
             val parsed = ShellCommandDataSource.extractTopProcesses(output, 5)
             if (parsed.isEmpty()) {
                 // 连续 3 次空解析才永久跳过; 成功会清零
-                if (++procstatsFailCount >= MAX_DUMPSYS_RETRIES) procstatsPermanentSkip = true
+                if (++procstatsFailCount >= MAX_DUMPSYS_RETRIES) {
+                    procstatsPermanentSkip = true
+                    Log.w(TAG, "procstats permanently skipped after $MAX_DUMPSYS_RETRIES failures")
+                }
                 return
             }
             procstatsFailCount = 0
             cachedProcstats = parsed
             lastProcstatsTime = now
-        } catch (_: Throwable) {
-            if (++procstatsFailCount >= MAX_DUMPSYS_RETRIES) procstatsPermanentSkip = true
+        } catch (e: Throwable) {
+            Log.w(TAG, "procstats failed (${++procstatsFailCount}/$MAX_DUMPSYS_RETRIES)", e)
+            if (procstatsFailCount >= MAX_DUMPSYS_RETRIES) {
+                procstatsPermanentSkip = true
+                Log.w(TAG, "procstats permanently skipped after $MAX_DUMPSYS_RETRIES failures")
+            }
             return
         }
         info.topProcesses = cachedProcstats.map { "${it.first}: ${String.format("%.0f", it.second)}MB" }
@@ -195,14 +205,21 @@ class MemoryDataSource {
                 lastDumpsysMeminfoTime = now
             } else {
                 // 连续 3 次不可用才永久跳过
-                if (++dumpsysOomFailCount >= MAX_DUMPSYS_RETRIES) dumpsysOomPermanentSkip = true
+                if (++dumpsysOomFailCount >= MAX_DUMPSYS_RETRIES) {
+                    dumpsysOomPermanentSkip = true
+                    Log.w(TAG, "dumpsys meminfo OOM permanently skipped after $MAX_DUMPSYS_RETRIES failures")
+                }
             }
             info.systemProcessPssKB = oom.systemPssKB
             info.appProcessPssKB = oom.appPssKB + oom.cachedPssKB
             info.cachedProcessPssKB = oom.cachedPssKB
             info.dumpsysAvailable = oom.isAvailable
-        } catch (_: Throwable) {
-            if (++dumpsysOomFailCount >= MAX_DUMPSYS_RETRIES) dumpsysOomPermanentSkip = true
+        } catch (e: Throwable) {
+            Log.w(TAG, "dumpsys meminfo OOM failed (${++dumpsysOomFailCount}/$MAX_DUMPSYS_RETRIES)", e)
+            if (dumpsysOomFailCount >= MAX_DUMPSYS_RETRIES) {
+                dumpsysOomPermanentSkip = true
+                Log.w(TAG, "dumpsys meminfo OOM permanently skipped after $MAX_DUMPSYS_RETRIES failures")
+            }
             info.dumpsysAvailable = false
         }
     }

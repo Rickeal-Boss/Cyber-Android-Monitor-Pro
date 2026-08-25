@@ -256,9 +256,15 @@ class DeviceRepository(context: Context) {
     private suspend fun collectMemoryBlock() {
         try {
             val mem = memoryDataSource.getMemoryInfo()
+            // F-03: dumpsys 降级 (procstats/OOM 不可用) → 上报 WARN, 供 Dashboard 健康状态诊断;
+            // dumpsys 可用时照常 OK, 避免 WARN 被下方无条件 OK 覆盖。
+            if (!mem.dumpsysAvailable) {
+                healthTracker.mark(HealthTracker.SourceHealth.Health.WARN, "memory")
+            } else {
+                healthTracker.mark(HealthTracker.SourceHealth.Health.OK, "memory")
+            }
             _memoryFlow.emit(mem); memoryLiveData.postValue(mem)
             if (mem.totalKB > 0) historyCache.addPoint("ram_usage", mem.usedKB.toFloat() / mem.totalKB * 100f)
-            healthTracker.mark(HealthTracker.SourceHealth.Health.OK, "memory")
         } catch (e: Throwable) {
             Log.w(TAG, "内存采集失败", e)
             healthTracker.mark(HealthTracker.SourceHealth.Health.ERROR, "memory")
