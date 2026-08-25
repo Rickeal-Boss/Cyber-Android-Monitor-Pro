@@ -34,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,8 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -51,6 +54,9 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -68,7 +74,6 @@ import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -106,6 +111,11 @@ private fun SensorListContent(
     var query by remember { mutableStateOf("") }
     // 仅"键盘搜索/完成键"提交后用于索引定位, 避免每次按键即时跳动
     var submittedQuery by remember { mutableStateOf("") }
+    // 改动 2: 搜索触发计数 — 每次「键盘搜索/完成键」+1, 作为 LaunchedEffect 唯一 key;
+    // 即使同查询重复提交也能重新触发单步定位 (修复偶发不触发)。
+    var searchTick by remember { mutableIntStateOf(0) }
+    // 改动 3: 单步定位游标 — 记录当前走到第几个匹配, 到末张后环绕回顶部 (重复按搜索键继续下一步)。
+    var searchStep by remember { mutableIntStateOf(0) }
     var highlightedIdx by remember { mutableStateOf(-1) }
     // 滚动列表容器顶部在根坐标系的 Y (视口锚点)
     var listRootTopPx by remember { mutableStateOf(0f) }
@@ -113,46 +123,37 @@ private fun SensorListContent(
     val cardTops = remember { mutableStateMapOf<Int, Float>() }
     val density = LocalDensity.current
 
-    // 方案Y(改): 索引定位仅在"键盘搜索/完成键"提交 submittedQuery 后触发 — 不再每次按键即时定位。
-    // F-16: 同时监听 sensors — 列表异步加载到达前提交时 effect 会重跑; 坐标未就绪时
-    // 先等一帧再挂起等待 (旧代码 ?:return 静默放弃且永不重试), withTimeoutOrNull 兜底防挂死。
-    // P1-b: 多匹配顺序定位 — 收集全部命中索引逐个高亮+滚动 (~600ms 停留), 不再只定位首条。
-    // ★ 每张卡都必须重新等待坐标就绪: 滚动后 cardTops 坐标失效, 等待逻辑不能移出循环。
-    LaunchedEffect(submittedQuery, sensors) {
+    // 改动 4: 进入传感器覆盖层 (卡片点击导航) 前关闭输入法所需句柄
+    val focusRequester = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
+
+    // 改动 2+3: 单步定位 — 仅以 searchTick 为 key, 每次「搜索键」+1 即重跑 (同查询重复提交也能再触发)。
+    // 多匹配时自上而下逐步推进, 到末张后环绕回顶部 (重复按搜索键继续下一步); 不再用 delay 多匹配循环。
+    LaunchedEffect(searchTick) {
+        if (searchTick == 0) return@LaunchedEffect   // 初始未搜索, 不触发
         // 纯空格/空 query 不参与匹配 (否则 haystack 含空格恒命中第一张卡 → 跳顶+脉冲)
         val q = submittedQuery
-        if (q.isEmpty()) {
-            highlightedIdx = -1
-            return@LaunchedEffect
-        }
-        val matchIdxList = sensors.mapIndexedNotNull { idx, s ->
+        if (q.isEmpty()) { highlightedIdx = -1; return@LaunchedEffect }
+        val matchList = sensors.mapIndexedNotNull { idx, s ->
             if (matchesQuery(s, q, ctx)) idx else null
         }
-        if (matchIdxList.isEmpty()) {
-            highlightedIdx = -1
-            return@LaunchedEffect
-        }
-        for (matchIdx in matchIdxList) {
-            highlightedIdx = matchIdx
-            // 等待一帧，确保 onGloballyPositioned 已写入本轮布局的坐标。
-            // 否则首帧/列表刚刷新/键盘弹起时 cardTops[matchIdx] 可能为 null，
-            // 旧代码 ?:return 会静默放弃滚动且永不重试（query 未变 effect 不重跑）。
-            withFrameNanos { }
-            // 极罕见情况下一帧后仍未就绪（卡片尚未完成布局），挂起等待位置回调；
-            // withTimeoutOrNull 兜底, 防止永不布局时挂死
-            val cardTop = cardTops[matchIdx]
-                ?: withTimeoutOrNull(2_000L) {
-                    snapshotFlow { cardTops[matchIdx] }.filterNotNull().first()
-                }
-            if (cardTop != null) {
-                // cardTops 是当前滚动状态下的视口坐标 (boundsInRoot 已含滚动平移),
-                // 补偿当前滚动量得到未滚动布局位置, 再留 12dp 顶部呼吸间距
-                val target = cardTop + scrollState.value - listRootTopPx -
-                        with(density) { 12.dp.toPx() }
-                scrollState.animateScrollTo(target.toInt().coerceIn(0, scrollState.maxValue))
+        if (matchList.isEmpty()) { highlightedIdx = -1; return@LaunchedEffect }
+        // 自上而下逐步推进, 到末张后环绕回顶部 (重复按搜索键继续下一步)
+        val matchIdx = matchList[searchStep % matchList.size]
+        searchStep++
+        highlightedIdx = matchIdx
+        withFrameNanos { }
+        // 坐标就绪等待: 沿用「等帧 + snapshotFlow + 超时」, 并强化兜底
+        val cardTop = cardTops[matchIdx]
+            ?: withTimeoutOrNull(2000L) {
+                snapshotFlow { cardTops[matchIdx] }.filterNotNull().first()
             }
-            // 卡片脉冲高亮停留后定位下一张 (P1-b)
-            delay(600L)
+        if (cardTop != null) {
+            val target = cardTop + scrollState.value - listRootTopPx -
+                    with(density) { 12.dp.toPx() }
+            scrollState.animateScrollTo(target.toInt().coerceIn(0, scrollState.maxValue))
         }
     }
 
@@ -189,8 +190,9 @@ private fun SensorListContent(
             SensorSearchField(
                 query = query,
                 onQueryChange = { query = it },
-                onCommit = { submittedQuery = query.trim() },
-                onClear = { query = ""; submittedQuery = "" }
+                onCommit = { submittedQuery = query.trim(); searchTick++ },
+                onClear = { query = ""; submittedQuery = ""; searchStep = 0; searchTick++ },
+                focusRequester = focusRequester
             )
         }
         Text(
@@ -241,7 +243,17 @@ private fun SensorListContent(
                 SensorItemCard(
                     sensor = sensor,
                     highlighted = idx == highlightedIdx,
-                    onClick = { origin -> onSensorClick(sensor, origin) },
+                    pulseTick = searchTick,
+                    onClick = { origin ->
+                        // 改动 4: 进入覆盖层前关闭输入法, 避免返回键/覆盖层动画被打断
+                        focusRequester.freeFocus()
+                        focusManager.clearFocus()
+                        keyboardController?.hide()
+                        // 国产 OEM 健壮性兜底: 部分小米/OPPO/vivo 输入法对 controller.hide() 不响应
+                        val imm = ctx.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+                        imm.hideSoftInputFromWindow(view.windowToken, 0)
+                        onSensorClick(sensor, origin)
+                    },
                     onCardPositioned = { top -> cardTops[idx] = top },
                     modifier = Modifier.staggeredSwipe(idx)
                 )
@@ -280,13 +292,14 @@ private fun SensorSearchField(
     query: String,
     onQueryChange: (String) -> Unit,
     onCommit: () -> Unit,
-    onClear: () -> Unit
+    onClear: () -> Unit,
+    focusRequester: FocusRequester
 ) {
     TextField(
         value = query,
         onValueChange = onQueryChange,
         singleLine = true,
-        modifier = Modifier.widthIn(max = 210.dp),
+        modifier = Modifier.widthIn(max = 210.dp).focusRequester(focusRequester),
         placeholder = {
             Text(
                 stringResource(R.string.sensor_search_hint),
@@ -323,6 +336,7 @@ private fun SensorSearchField(
 private fun SensorItemCard(
     sensor: SensorItemInfo,
     highlighted: Boolean,
+    pulseTick: Int,
     onClick: (Offset) -> Unit,
     onCardPositioned: (Float) -> Unit,
     modifier: Modifier = Modifier
@@ -332,10 +346,12 @@ private fun SensorItemCard(
     // F3: 卡片中心触点（boundsInRoot; RIPPLE-04: 偏移异常时降级 positionInWindow 换算）
     var cardCenter by remember { mutableStateOf(Offset.Zero) }
 
-    // 搜索定位脉冲: scale 微弹 + 辉光淡出, highlighted 变 true 时播放一次
+    // 搜索定位脉冲: scale 微弹 + 辉光淡出
+    // 改动 3: 脉冲改为跟随「搜索键步进」(pulseTick = searchTick) 重播 — 每次按键 (含单匹配环绕) 都重播脉冲;
+    // 仅当本卡被高亮 (highlighted) 时才播放。
     val pulse = remember { Animatable(1f) }
     val glow = remember { Animatable(0f) }
-    LaunchedEffect(highlighted) {
+    LaunchedEffect(pulseTick) {
         if (highlighted) {
             launch {
                 pulse.animateTo(1.04f, tween(180))

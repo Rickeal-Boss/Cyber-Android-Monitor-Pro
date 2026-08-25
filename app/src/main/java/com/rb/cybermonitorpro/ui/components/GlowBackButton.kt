@@ -165,6 +165,19 @@ fun LightCircleBackButton(
             dragProgress.coerceIn(0f, 1f)
         } else 0f
 
+        // ── tanh 饱和位移外提: 供形变层 + 图标层复用, 使箭头跟随拖拽位移 (改动 1) ──
+        // 小拖拽线性跟随, 大拖拽饱和到 maxOffset, 避免按钮无限跑。
+        val dragTx = if (stretchFactor > 0f) {
+            val btnSizePx = with(density) { btnSize.toPx() }
+            val maxOffset = btnSizePx * 0.5f
+            maxOffset * tanh(TANH_INITIAL_K * dragOffsetX / maxOffset)
+        } else 0f
+        val dragTy = if (stretchFactor > 0f) {
+            val btnSizePx = with(density) { btnSize.toPx() }
+            val maxOffset = btnSizePx * 0.5f
+            maxOffset * tanh(TANH_INITIAL_K * dragOffsetY / maxOffset)
+        } else 0f
+
         // 拖拽方向角度 (旋转层 + 高光弧共用; 未旋转坐标系的角度)
         val dragAngle = remember(dragOffsetX, dragOffsetY) {
             if (dragOffsetX == 0f && dragOffsetY == 0f) 0f
@@ -192,11 +205,9 @@ fun LightCircleBackButton(
                     scaleX = snapBackScale * sx.coerceIn(0.75f, MAX_STRETCH) * cancelScale
                     scaleY = snapBackScale * sy.coerceIn(0.75f, MAX_STRETCH) * cancelScale
                     alpha = cancelAlpha
-                    // ── tanh 饱和位移: 小拖拽线性跟随, 大拖拽饱和不无限跑 ──
-                    val btnSizePx = with(density) { btnSize.toPx() }
-                    val maxOffset = btnSizePx * 0.5f
-                    translationX = if (n > 0f) maxOffset * tanh(TANH_INITIAL_K * dragOffsetX / maxOffset) else 0f
-                    translationY = if (n > 0f) maxOffset * tanh(TANH_INITIAL_K * dragOffsetY / maxOffset) else 0f
+                    // ── tanh 饱和位移: 直接引用外提的 dragTx/dragTy (改动 1) ──
+                    translationX = dragTx
+                    translationY = dragTy
                 }
                 .shadow(
                     elevation = if (isInteracting) 10.dp else 4.dp,
@@ -256,7 +267,12 @@ fun LightCircleBackButton(
 
         // ── ② 图标层: 旋转层之外, 箭头不旋转、不被各向异性拉伸 ──
         Box(
-            Modifier.matchParentSize().graphicsLayer { alpha = cancelAlpha },
+            Modifier.matchParentSize().graphicsLayer {
+                alpha = cancelAlpha
+                // 改动 1: 箭头跟随拖拽位移 (与形变层同步), 守住 c4fb83d 无旋转架构 — 不加 scale/rotationZ
+                translationX = dragTx
+                translationY = dragTy
+            },
             contentAlignment = Alignment.Center
         ) {
             // ══ 模糊质感箭头 (三层错位绘制模拟 soft-focus / 景深) ══
