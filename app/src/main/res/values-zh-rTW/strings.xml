@@ -1059,6 +1059,7 @@
     <string name="dashboard_quick_sensor_desc">加速度 · 陀螺 · 光感</string>
     <string name="dashboard_quick_sensor_title">感測器</string>
     <string name="dashboard_source_error">%1$d 個資料來源異常</string>
+    <string name="dashboard_source_warning">%1$d 個資料來源警告</string>
     <string name="device_activated">已啟用</string>
     <string name="device_ai_engine">AI 引擎</string>
     <string name="device_audio_decode">音訊解碼</string>

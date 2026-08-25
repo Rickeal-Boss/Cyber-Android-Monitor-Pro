@@ -27,6 +27,9 @@ class HealthTracker {
         val errorCount get() = listOf(cpu, gpu, battery, memory, storage,
             wifi, mobileNetwork, networkInterface, gps, sensors, system, deviceDetail, oem)
             .count { it == Health.ERROR }
+        val warnCount get() = listOf(cpu, gpu, battery, memory, storage,
+            wifi, mobileNetwork, networkInterface, gps, sensors, system, deviceDetail, oem)
+            .count { it == Health.WARN }
     }
 
     val liveData = MutableLiveData(SourceHealth())
