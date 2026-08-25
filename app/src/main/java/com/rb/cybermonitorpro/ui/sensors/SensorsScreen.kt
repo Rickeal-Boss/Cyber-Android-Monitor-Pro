@@ -38,6 +38,8 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -62,7 +64,10 @@ import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.koin.androidx.compose.koinViewModel
 import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
@@ -101,7 +106,9 @@ private fun SensorListContent(
     val density = LocalDensity.current
 
     // 方案Y: 输入即定位首条匹配 — 滚动跳转 + 卡片脉冲高亮 (列表保持完整, 不做过滤)
-    LaunchedEffect(query) {
+    // F-16: 同时监听 sensors — 列表异步加载到达前输入时 effect 会重跑; 坐标未就绪时
+    // 先等一帧再挂起等待 (旧代码 ?:return 静默放弃且永不重试), withTimeoutOrNull 兜底防挂死。
+    LaunchedEffect(query, sensors) {
         // 纯空格 query 不参与匹配 (否则 haystack 含空格恒命中第一张卡 → 跳顶+脉冲)
         val q = query.trim()
         if (q.isEmpty()) {
@@ -111,12 +118,23 @@ private fun SensorListContent(
         val matchIdx = sensors.indexOfFirst { matchesQuery(it, q, ctx) }
         if (matchIdx >= 0) {
             highlightedIdx = matchIdx
-            val cardTop = cardTops[matchIdx] ?: return@LaunchedEffect
-            // cardTops 是当前滚动状态下的视口坐标 (boundsInRoot 已含滚动平移),
-            // 补偿当前滚动量得到未滚动布局位置, 再留 12dp 顶部呼吸间距
-            val target = cardTop + scrollState.value - listRootTopPx -
-                    with(density) { 12.dp.toPx() }
-            scrollState.animateScrollTo(target.toInt().coerceIn(0, scrollState.maxValue))
+            // 等待一帧，确保 onGloballyPositioned 已写入本轮布局的坐标。
+            // 否则首帧/列表刚刷新/键盘弹起时 cardTops[matchIdx] 可能为 null，
+            // 旧代码 ?:return 会静默放弃滚动且永不重试（query 未变 effect 不重跑）。
+            withFrameNanos { }
+            // 极罕见情况下一帧后仍未就绪（卡片尚未完成布局），挂起等待位置回调；
+            // withTimeoutOrNull 兜底, 防止永不布局时挂死
+            val cardTop = cardTops[matchIdx]
+                ?: withTimeoutOrNull(2_000L) {
+                    snapshotFlow { cardTops[matchIdx] }.filterNotNull().first()
+                }
+            if (cardTop != null) {
+                // cardTops 是当前滚动状态下的视口坐标 (boundsInRoot 已含滚动平移),
+                // 补偿当前滚动量得到未滚动布局位置, 再留 12dp 顶部呼吸间距
+                val target = cardTop + scrollState.value - listRootTopPx -
+                        with(density) { 12.dp.toPx() }
+                scrollState.animateScrollTo(target.toInt().coerceIn(0, scrollState.maxValue))
+            }
         }
     }
 

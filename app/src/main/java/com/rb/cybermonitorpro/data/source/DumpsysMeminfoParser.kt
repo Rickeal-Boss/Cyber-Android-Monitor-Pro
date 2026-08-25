@@ -95,8 +95,8 @@ object DumpsysMeminfoParser {
         for (line in output.split("\n")) {
             val trimmed = line.trim()
 
-            // 检测段落起始
-            if (trimmed == "Total PSS by OOM adjustment:") {
+            // 检测段落起始 (F-08: 宽松匹配 — 允许前导空格/大小写/尾部差异, ROM 变体兼容)
+            if (trimmed.startsWith("Total PSS by OOM adjustment", ignoreCase = true)) {
                 inOomSection = true
                 continue
             }
@@ -143,6 +143,7 @@ object DumpsysMeminfoParser {
 
     /**
      * 解析单行 OOM 分类:   "1,234K: CategoryName" → Pair(1234, "CategoryName")
+     * F-08: 支持小数 (123.5K) 与多单位 (K/M/G), 兼容 ROM 变体
      */
     private fun parseOomLine(line: String): Pair<Long, String>? {
         val colonIdx = line.indexOf(':')
@@ -151,12 +152,16 @@ object DumpsysMeminfoParser {
         val valuePart = line.substring(0, colonIdx).trim()
         val categoryPart = line.substring(colonIdx + 1).trim()
 
-        // 提取数值 (移除逗号千位分隔符和 "K" 后缀)
-        val numericStr = valuePart.replace(",", "")
-            .replace("K", "").replace("kB", "")
-            .trim()
-
-        val valueKB = numericStr.toLongOrNull() ?: return null
+        // 匹配 "1,234K" / "123.5K" / "1.2M" / "1234" 等
+        val numRegex = Regex("""([\d,]+\.?\d*)\s*([KkMmGg]?[Bb]?)""")
+        val match = numRegex.find(valuePart) ?: return null
+        val num = match.groupValues[1].replace(",", "").toFloatOrNull() ?: return null
+        val unit = match.groupValues[2].uppercase()
+        val valueKB = when {
+            unit.startsWith("G") -> (num * 1024 * 1024).toLong()
+            unit.startsWith("M") -> (num * 1024).toLong()
+            else -> num.toLong()  // K 或无单位按 KB
+        }
         if (valueKB <= 0 && categoryPart != "B Services") return null  // B Services 可能为 0K
 
         // 处理 "Persistent Service"  vs "Persistent" 的歧义
@@ -244,21 +249,33 @@ object DumpsysMeminfoParser {
 
     /**
      * 从 "1,234,567K" 格式的字符串中提取 Long 值 (KB)
+     * F-08: 支持小数与多单位 (K/M/G)
      */
     private fun extractFirstNumberKB(text: String): Long {
-        val match = Regex("""([\d,]+)\s*K""").find(text) ?: return -1L
-        return match.groupValues[1].replace(",", "").toLongOrNull() ?: -1L
+        val match = Regex("""([\d,]+\.?\d*)\s*([KkMmGg])""").find(text) ?: return -1L
+        val num = match.groupValues[1].replace(",", "").toFloatOrNull() ?: return -1L
+        return when (match.groupValues[2].uppercase()) {
+            "G" -> (num * 1024 * 1024).toLong()
+            "M" -> (num * 1024).toLong()
+            else -> num.toLong()
+        }
     }
 
     /**
      * 从 "Y cached pss + Z cached kernel + W free" 格式中提取指定项的值
+     * F-08: 同时支持 "123K name" 与 "name: 123K" / "name=123K" 顺序变体
      */
     private fun extractNamedValue(text: String, name: String): Long {
-        // 匹配:  "123,456K named_key"
-        // 注意: "+" 号前面的空格、后缀
         val escapedName = Regex.escape(name)
-        val regex = Regex("""([\d,]+)\s*K\s*$escapedName""")
-        val match = regex.find(text) ?: return -1L
-        return match.groupValues[1].replace(",", "").toLongOrNull() ?: -1L
+        // 匹配:  "123,456K named_key"  /  "named_key: 123,456K"  /  "named_key=123K"
+        val patterns = listOf(
+            Regex("""([\d,]+)\s*K\s*$escapedName"""),
+            Regex("""$escapedName\s*[:=]\s*([\d,]+)\s*K""", RegexOption.IGNORE_CASE)
+        )
+        for (regex in patterns) {
+            val m = regex.find(text) ?: continue
+            return m.groupValues[1].replace(",", "").toLongOrNull() ?: -1L
+        }
+        return -1L
     }
 }

@@ -69,17 +69,22 @@ class WifiDataSource(private val context: Context) {
 
     /**
      * 从 dumpsys wifi 提取额外数据（芯片温度、省电模式）
-     * 仅执行一次后缓存（dumpsys 开销较大）
+     * F-11: 改为带 TTL 的缓存 (120s) — 旧 dumpsysWifiResolved 首次置 true 后永不刷新,
+     * 温度/省电模式状态变化无法反映。dumpsys 开销较大, 仍避免每轮询都执行。
      */
     @Volatile
     private var dumpsysWifiResolved = false
     @Volatile
+    private var lastDumpsysWifiTime = 0L
+    @Volatile
     private var cachedWifiTemp = Float.NaN
     @Volatile
     private var cachedPowerSave = ""
+    private val WIFI_DUMPSYS_TTL_MS = 120_000L   // 2 分钟
 
-    private fun resolveDumpsysWifi(info: WifiDetailInfo) {
-        if (dumpsysWifiResolved) {
+    private fun resolveDumpsysWifi(info: WifiDetailInfo, forceRefresh: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!forceRefresh && dumpsysWifiResolved && now - lastDumpsysWifiTime < WIFI_DUMPSYS_TTL_MS) {
             info.chipTemperatureCelsius = cachedWifiTemp
             info.powerSaveMode = cachedPowerSave
             return
@@ -89,7 +94,10 @@ class WifiDataSource(private val context: Context) {
             cachedWifiTemp = ShellCommandDataSource.extractWifiTemperature(wifiOutput)
             cachedPowerSave = ShellCommandDataSource.extractWifiPowerSave(wifiOutput)
             dumpsysWifiResolved = true
-        } catch (e: Throwable) {}
+            lastDumpsysWifiTime = now
+        } catch (e: Throwable) {
+            Log.w(TAG, "dumpsys wifi failed", e)
+        }
         info.chipTemperatureCelsius = cachedWifiTemp
         info.powerSaveMode = cachedPowerSave
     }
