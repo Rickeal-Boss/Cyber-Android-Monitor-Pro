@@ -57,6 +57,7 @@ import com.rb.cybermonitorpro.HapticUtils
 import com.rb.cybermonitorpro.LocaleManager
 import com.rb.cybermonitorpro.R
 import com.rb.cybermonitorpro.data.AppFirstLaunch
+import com.rb.cybermonitorpro.service.FloatingWindowConfig
 import com.rb.cybermonitorpro.ui.AppViewModel
 import com.rb.cybermonitorpro.RefreshPolicy
 import com.rb.cybermonitorpro.ui.battery.BatteryScreen
@@ -185,6 +186,8 @@ private fun FirstLaunchPermissionScreen(onDismiss: () -> Unit) {
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.NEARBY_WIFI_DEVICES)
             add(Manifest.permission.READ_PHONE_STATE)
             if (Build.VERSION.SDK_INT >= 29) add(Manifest.permission.ACTIVITY_RECOGNITION)
+            // ★ 身体传感器(API 23+ 运行时权限): TYPE_HEART_RATE 直读需要; API 21/22 由清单声明装机即授
+            if (Build.VERSION.SDK_INT >= 23) add(Manifest.permission.BODY_SENSORS)
             if (Build.VERSION.SDK_INT >= 31) add(Manifest.permission.BLUETOOTH_CONNECT)
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
         }.toTypedArray()
@@ -284,7 +287,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
     DisposableEffect(Unit) {
         safeViewModel.startMonitoring()
-        onDispose { safeViewModel.stopMonitoring() }
+        // ★ 采集真值表 (2026-09-01): 悬浮窗开启时 Activity 销毁(如滑走任务)不停采集 — 悬浮窗仍需数据;
+        //   悬浮窗关闭时照常停。MainActivity 销毁而进程因前台服务存活 → 后续由 AppViewModel.onCleared 同守卫兜住
+        onDispose { if (!FloatingWindowConfig.enabled) safeViewModel.stopMonitoring() }
     }
 
     // ★ 前后台统一刷新策略 (2026-06-21):
@@ -297,10 +302,15 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 Lifecycle.Event.ON_STOP -> {
                     Log.d("SystemMonitor", "App → background, RefreshPolicy → BACKGROUND")
                     RefreshPolicy.updateState(RefreshPolicy.RefreshState.BACKGROUND)
+                    // ★ 采集真值表: 仅"悬浮窗关 + App 退后台"停采集 (第 4 行)
+                    //   用 ON_STOP 而非 ON_PAUSE: 通知栏下拉/权限对话框只触发 ON_PAUSE, 用它会误杀前台采集
+                    if (!FloatingWindowConfig.enabled) safeViewModel.stopMonitoring()
                 }
                 Lifecycle.Event.ON_START -> {
                     Log.d("SystemMonitor", "App → foreground, RefreshPolicy → FOREGROUND")
                     RefreshPolicy.updateState(RefreshPolicy.RefreshState.FOREGROUND)
+                    // ★ 回前台无条件恢复采集 (repo.startMonitoring 幂等, 已在跑则零开销)
+                    safeViewModel.startMonitoring()
                 }
                 else -> {}
             }

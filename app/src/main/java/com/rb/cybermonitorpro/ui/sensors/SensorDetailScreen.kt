@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -36,6 +37,8 @@ import com.rb.cybermonitorpro.data.model.SensorTypeMeta
 import com.rb.cybermonitorpro.ui.components.LightCircleBackButton
 import com.rb.cybermonitorpro.ui.effects.cardGradientBorder
 import com.rb.cybermonitorpro.ui.theme.*
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import org.koin.androidx.compose.koinViewModel
 
 // 轴颜色映射
@@ -124,6 +127,22 @@ fun SensorDetailContent(
     DisposableEffect(sensor) {
         viewModel.startListening(sensor)
         onDispose { viewModel.stopListening() }
+    }
+
+    // ★ 后台暂停/前台恢复 (2026-09-01 审查补漏): 详情页仍在组合树但 App 退后台 →
+    //   暂停传感器监听保电, 回前台无缝恢复。背景: API 34+ 系统自动停发身体传感器样本
+    //   (≤33 继续耗电, 行为跨版本不一致) — 统一由 ON_STOP/ON_START 接管, 与 MainActivity 模式一致
+    val sensorLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(sensorLifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_STOP -> viewModel.pauseListening()
+                Lifecycle.Event.ON_START -> viewModel.resumeListening()
+                else -> {}
+            }
+        }
+        sensorLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { sensorLifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val scrollState = rememberHdrScrollState()

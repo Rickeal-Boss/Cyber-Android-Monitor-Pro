@@ -3,6 +3,7 @@ package com.rb.cybermonitorpro.ui
 import androidx.lifecycle.ViewModel
 import com.rb.cybermonitorpro.RefreshPolicy
 import com.rb.cybermonitorpro.data.repository.DeviceRepository
+import com.rb.cybermonitorpro.service.FloatingWindowConfig
 
 /**
  * AppViewModel — 全局监控生命周期管理
@@ -45,6 +46,8 @@ class AppViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        repo.stopMonitoring()
+        // ★ 采集真值表 (2026-09-01): 悬浮窗开启时 VM 清理不停采集 —
+        //   滑走任务栈时前台服务仍在、悬浮窗仍需数据; 悬浮窗关闭时照常停
+        if (!FloatingWindowConfig.enabled) repo.stopMonitoring()
     }
 }

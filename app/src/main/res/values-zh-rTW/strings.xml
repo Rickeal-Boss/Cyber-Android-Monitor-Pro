@@ -980,6 +980,7 @@
 
     <!-- Floating Window 基礎欄位 -->
     <string name="float_title">懸浮窗設定</string>
+    <string name="float_tile_label">懸浮窗</string>
     <string name="float_enable">啟用懸浮窗</string>
     <string name="float_opacity">透明度</string>
     <string name="float_position">位置</string>
@@ -1439,6 +1440,7 @@
     <string name="sensor_search_hint">搜尋感測器…</string>
     <string name="sensor_perm_activity_hint">Android 10+ 需「身體活動」權限才能讀取步數感測器</string>
     <string name="sensor_perm_activity_grant">授權</string>
+    <string name="sensor_perm_body_hint">Android 6+ 需「身體感測器」權限才能讀取心率感測器</string>
     <string name="sensor_list_footnote">OIS/EIS 防抖屬相機能力，請至「裝置 → 相機」查看</string>
     <string name="sensor_mode_continuous">連續 (CONTINUOUS)</string>
     <string name="sensor_mode_on_change">變化時 (ON_CHANGE)</string>
