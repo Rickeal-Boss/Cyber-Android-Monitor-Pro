@@ -23,6 +23,14 @@
     <!-- 身体活动（API 29+ 步数传感器运行时权限, 未授权时步数计数器/步测器不出现在传感器列表） -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
+    <!-- ★ 身体传感器（心率）— 2026-09-01 审查补漏:
+         传感器详情页直读 TYPE_HEART_RATE 全链路已有(列表项/详情健康卡/5min 聚合), 但权限从未声明,
+         导致该功能在全部版本上静默失效(API 23+ 心率传感器不出现在 getSensorList 或不返回样本)。
+         - 不加 maxSdkVersion: android.permission.health.* 是 Health Connect 专用, SensorManager
+           直读心率在全部版本(含 API 34+)都需要 BODY_SENSORS, 收窄会让高版本失效
+         - 不声明 BODY_SENSORS_BACKGROUND: 仅前台详情页使用, 声明反而触发 Play 后台身体数据政策审查 -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+
     <!-- 蓝牙（本地设备） -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -72,6 +80,20 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="real_time_device_monitoring_overlay" />
+        </service>
+
+        <!-- ★ 状态栏快捷磁贴（悬浮窗总开关，API 24+；API 21-23 系统忽略此声明，无副作用。
+             exported+BIND_QUICK_SETTINGS_TILE：仅系统可绑定；新装 App 的磁贴默认折叠在
+             面板编辑页，需用户手动拖出） -->
+        <service
+            android:name=".service.FloatWindowTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_qs_float_window"
+            android:label="@string/float_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
         </service>
     </application>
 </manifest>

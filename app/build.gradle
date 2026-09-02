@@ -55,7 +55,7 @@ defaultConfig {
     //   R 类 / BuildConfig / 组件名全部不受影响)
     applicationId "com.rb.cybermonitorpro.edition"
     minSdk 21
-    targetSdk 36   // Android 16 (API 36)；2026-08-31 Play 目标 API 截止。健康权限: 本应用未声明/使用 BODY_SENSORS 或 android.permission.health.*，无需迁移。
+    targetSdk 36   // Android 16 (API 36)；2026-08-31 Play 目标 API 截止。健康权限: 传感器详情页直读 TYPE_HEART_RATE 需 BODY_SENSORS(全版本有效, Play 上架需填"身体传感器"用途声明); 未使用 Health Connect / android.permission.health.*, 无需健康权限迁移; 仅前台使用, 不声明 BODY_SENSORS_BACKGROUND。
     versionCode 20260823
     versionName "6.0.606.0"
 

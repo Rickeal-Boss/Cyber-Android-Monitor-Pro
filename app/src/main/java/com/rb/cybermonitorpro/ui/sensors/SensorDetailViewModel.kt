@@ -88,6 +88,10 @@ class SensorDetailViewModel(
     // GPS 校准按需开启的监听（离开页面时回停，避免常驻耗电）
     private var gpsEnabledForCalibration = false
 
+    // ★ 后台暂停标志 (2026-09-01): 页面仍在组合树但 App 已退后台(ON_STOP) → 暂停中,
+    //   ON_START 恢复。startListening/stopListening 均复位, 防跨会话脏标志阻塞下次暂停
+    private var sensorPaused = false
+
     fun getSensorInfo(): SensorItemInfo? = currentSensor
     fun getSensorMeta(): SensorTypeMeta? = currentMeta
 
@@ -95,6 +99,7 @@ class SensorDetailViewModel(
      * 进入详情页时调用 — 启动传感器实时监听
      */
     fun startListening(sensor: SensorItemInfo) {
+        sensorPaused = false   // ★ 新监听会话: 复位暂停标志
         currentSensor = sensor
         currentMeta = SensorTypeMeta.fromTypeId(sensor.type)
         if (sensor.type == Sensor.TYPE_STEP_DETECTOR) {
@@ -124,6 +129,7 @@ class SensorDetailViewModel(
      * 离开详情页时调用 — 立即停止传感器监听
      */
     fun stopListening() {
+        sensorPaused = false
         if (gpsEnabledForCalibration) {
             gpsEnabledForCalibration = false
             runCatching { repo.disableGps() }
@@ -131,6 +137,28 @@ class SensorDetailViewModel(
         repo.disableSensor()
         currentSensor = null
         currentMeta = null
+    }
+
+    /**
+     * ★ App 退后台暂停监听 (2026-09-01 审查补漏) — 详情页仍在组合树、App 已不可见:
+     *   停传感器监听保电, 保留 currentSensor/currentMeta 与 GPS 校准状态供恢复。
+     *   背景: API 34+ 系统自动停发身体传感器样本(≤33 继续耗电), 由 ON_STOP 统一接管,
+     *   行为跨版本一致; 用户回到前台 ON_START → resumeListening 无缝续上
+     */
+    fun pauseListening() {
+        if (currentSensor == null || sensorPaused) return
+        sensorPaused = true
+        repo.disableSensor()
+    }
+
+    /**
+     * ★ 回前台恢复监听 — 复用 startListening 入口: 重跑按类型初始化
+     *   (心率清窗防暂停期空洞样本、步数读回账本) 并重新 enableSensor
+     */
+    fun resumeListening() {
+        if (currentSensor == null || !sensorPaused) return
+        sensorPaused = false
+        startListening(currentSensor!!)
     }
 
     /**

@@ -177,6 +177,24 @@ private fun SensorListContent(
         if (granted) onRefreshSensors()
     }
 
+    // ── BODY_SENSORS (API 23+): 心率传感器运行时权限 — 2026-09-01 审查补漏 ──
+    //   未授权时 TYPE_HEART_RATE 不出现在 getSensorList(多数 ROM) 或不返回样本 → 心率功能静默失效;
+    //   与 ACTIVITY_RECOGNITION 同模式: 授权后重采列表回填心率传感器
+    var bodyPermGranted by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < 23 ||
+                ContextCompat.checkSelfPermission(
+                    ctx, Manifest.permission.BODY_SENSORS
+                ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val bodyPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        bodyPermGranted = granted
+        if (granted) onRefreshSensors()
+    }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -224,6 +242,32 @@ private fun SensorListContent(
                 )
                 Button(
                     onClick = { permLauncher.launch(Manifest.permission.ACTIVITY_RECOGNITION) },
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
+                ) {
+                    Text(
+                        stringResource(R.string.sensor_perm_activity_grant),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+        }
+
+        // ── 权限提示行: API 23+ 未授权 BODY_SENSORS 时显示, 授权后消失 (心率传感器) ──
+        if (Build.VERSION.SDK_INT >= 23 && !bodyPermGranted) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    stringResource(R.string.sensor_perm_body_hint),
+                    fontSize = 12.sp,
+                    color = WarningNeon,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(
+                    onClick = { bodyPermLauncher.launch(Manifest.permission.BODY_SENSORS) },
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = NeonPurple)
                 ) {
