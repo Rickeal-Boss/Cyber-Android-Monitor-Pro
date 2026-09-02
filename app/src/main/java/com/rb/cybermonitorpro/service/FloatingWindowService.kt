@@ -60,15 +60,16 @@ class FloatingWindowService : Service() {
 
     private lateinit var repo: DeviceRepository
 
-    // ★ FPS 采集状态 — v2 滑窗统计版 (2026-09-01 审查修复 F1~F7)
-    //   旧实现: 单帧瞬时频率(1e9/delta)逐帧直写 TextView → 读数乱跳 + 每秒 60~120 次重绘 + 120 上限钳错高刷屏
-    //   新实现: 1s 滑窗帧计数 + 异常样本剔除 + 仅窗口边界刷新 → 重绘降至 ≤1 次/秒, 值不变不写
+    // ★ FPS 采集状态 — v3 滚动窗口版 (2026-09-02 验收: 8Hz 输出)
+    //   v1: 单帧瞬时频率(1e9/delta)逐帧直写 → 读数乱跳 + 60~120 次重绘/秒 + 120 上限钳错高刷屏
+    //   v2: 1s 固定窗口计数, 窗口边界刷新(1Hz) → 首值等满 1s + 节奏感知过慢
+    //   v3: 帧时间戳滚动队列 + 首秒外推 + 125ms 输出节拍 → 首值 ~33ms, 8 次/秒
     private var fpsCallback: android.view.Choreographer.FrameCallback? = null  // ★ 保存引用用于 remove
     private var fpsView: TextView? = null          // 缓存视图引用, 替代每帧 map 查找+cast
     private var lastFrameTimeNanos = 0L
     private var expectedPeriodNs = 16_666_667L     // 期望帧周期种子(60Hz), 启动时按 display.refreshRate 动态校准 (F6)
-    private var frameCount = 0                     // 当前统计窗口内已接受的帧数
-    private var windowStartNanos = 0L              // 当前 1s 统计窗口起点
+    private val frameTimes = ArrayDeque<Long>()    // 滚动 1s 窗口的帧时间戳队列 (≤240 项 ≈ 2KB)
+    private var lastFpsOutputMs = 0L               // 8Hz 输出节拍基准 (elapsedRealtime)
     // 预缓存静态标签
     private lateinit var gpuLabel: String
     private lateinit var cpuLabel: String
@@ -392,13 +393,21 @@ class FloatingWindowService : Service() {
      * 1. 幂等守卫: 防 interval 重启路径与常规启动叠加产生重复订阅 Job
      * 2. 数据源兜底: repo.startMonitoring() 幂等(内部 if(monitoring) return) — 进程被杀后
      *    STICKY 重启的服务在此自愈采集链 (原断链: 服务活着但 repo 无轮询 → 悬浮窗全 "--")
-     * 3. 接通悬浮窗间隔设置: combine 发射节拍由 repo 侧轮询决定, 与悬浮窗 refreshInterval
-     *    无关(原"间隔设置是安慰剂"断链); 现以 baseTickMs 为闸门节流, 用户调间隔真实生效
+     * 3. 接通悬浮窗间隔设置: 原断链"间隔设置是安慰剂"。v2 闸门只能削频(调大生效),
+     *    调小被 repo 轮询 interval(NORMAL 2000ms) 封底 → 悬浮窗整体节奏恒 2s 一跳。
+     *    v3 (2026-09-02 用户反馈"全部慢一拍") 补提频守卫: 悬浮窗在跑时轮询频率
+     *    不低于 baseTickMs — 用户调小间隔立即生效; 调大仍由闸门节流, 双向闭环。
+     *    注: setIntervalMs 直接推四模块 interval flows, 只提频不降频, 不覆盖设置页
+     *    模块间隔的降频意图; interval 变更回调会 stop/start 本函数 → 每轮重审自愈。
      */
     private fun startDataCollection() {
         if (collectionJob?.isActive == true) return
-        runCatching { repo.startMonitoring() }
-            .onFailure { Log.w(TAG, "repo.startMonitoring 兜底失败", it) }
+        runCatching {
+            repo.startMonitoring(baseTickMs)
+            // ★ v3 提频守卫: App 已被前台 VM 以 NORMAL(2000ms) 启动时, startMonitoring
+            //   幂等 return 不重推 interval — 此处显式对齐, 悬浮窗节奏 = 用户设置
+            if (baseTickMs < repo.getIntervalMs()) repo.setIntervalMs(baseTickMs)
+        }.onFailure { Log.w(TAG, "repo.startMonitoring 兜底失败", it) }
         collectionJob = serviceScope.launch {
             var lastEmitMs = 0L
             combine(
@@ -475,9 +484,14 @@ class FloatingWindowService : Service() {
         } else setText("battery_pow", "$powerLabel --W")
     }
 
-    // ── FPS (Choreographer 驱动) — v2 滑窗统计版 (2026-09-01 审查修复) ──
+    // ── FPS (Choreographer 驱动) — v3 滚动窗口版 (2026-09-02 用户验收: 每秒 8 次变化达标) ──
     //   语义说明: Choreographer 测得的是"本进程收到 vsync 的节奏" ≈ 当前屏幕刷新率
     //   (受本服务主线程响应能力封顶)。要测前台应用真实帧率需 SurfaceFlinger 层方案(需 root, 二期)。
+    //   v2→v3 变更:
+    //   - 输出节拍 1s/跳 → 125ms/跳 (8Hz, 验收标准); 帧驱动检查, 无额外定时器
+    //   - 统计改为帧时间戳滚动队列: 任意时刻读数 = "过去 1s 实际帧数", 无窗口边界量化跳变
+    //   - 首秒外推: 窗口未满时 count/elapsed 线性外推 → 第 2 帧(~33ms)即出首值, 免 1s 空窗
+    //   - 重绘代价: 8 次/秒 (旧版逐帧直写 120/s 的 1/15, v2 1/s 的 8 倍, 验收要求内)
     private fun startFpsMonitor() {
         handler.post {
             try {
@@ -495,31 +509,38 @@ class FloatingWindowService : Service() {
                     override fun doFrame(frameTimeNanos: Long) {
                         val delta = frameTimeNanos - lastFrameTimeNanos
                         val period = expectedPeriodNs
-                        // F5 异常样本剔除: delta 超出 [0.5×, 2.5×] 期望周期 → 判定为断裂
-                        // (主线程卡顿/熄屏间隙/复现首帧), 重开统计窗口 — 杜绝复现瞬间闪 "FPS: 0"
-                        if (lastFrameTimeNanos > 0L && delta >= period / 2 && delta <= period * 5 / 2) {
-                            if (windowStartNanos == 0L) { windowStartNanos = frameTimeNanos; frameCount = 0 }
-                            frameCount++
-                            // EMA 平滑跟随 LTPO 档位切换 (120→60Hz 时 delta=2×周期, 数窗口内完成自适应)
-                            expectedPeriodNs = (expectedPeriodNs * 3L + delta) / 4L
-                            // F2 节流: 只在 1s 统计窗口边界刷新文本 → 重绘从 60~120 次/秒 降至 ≤1 次/秒
-                            if (frameTimeNanos - windowStartNanos >= 1_000_000_000L) {
-                                val elapsed = frameTimeNanos - windowStartNanos
-                                // 终检修正: 窗口不含首帧(计数从 windowStart 下一帧起), 整除截断会系统性偏低 1
-                                // (60Hz: 60帧/1.0002s → 59.98 截断 59)。四舍五入补偿 → 60/120 读数准确
-                                val fps = ((frameCount * 1_000_000_000L + elapsed / 2L) / elapsed)
-                                    .toInt().coerceIn(0, 240)   // 240 覆盖现有最高刷面板 (F6)
-                                if (fpsView == null) fpsView = windows["fps"] as? TextView   // 窗口重建后懒重取
-                                val text = "$fpsLabel $fps"
-                                if (fpsView?.text?.toString() != text) fpsView?.text = text   // 值变才写
-                                frameCount = 0
-                                windowStartNanos = frameTimeNanos
+                        // F5 异常样本剔除: delta 在 [0.5×, 2.5×] 期望周期内才入窗
+                        // (主线程卡顿帧/熄屏间隙/复现首帧不入窗) — 队列读数不闪 0
+                        val validSample = lastFrameTimeNanos > 0L &&
+                            delta >= period / 2 && delta <= period * 5 / 2
+                        if (validSample) {
+                            frameTimes.addLast(frameTimeNanos)
+                            // 滚动窗口收缩: 弹出 1s 窗口外旧帧
+                            while (frameTimes.size > 1 &&
+                                frameTimeNanos - frameTimes.first() > 1_000_000_000L) {
+                                frameTimes.removeFirst()
                             }
-                        } else {
-                            frameCount = 0
-                            windowStartNanos = frameTimeNanos
+                            // EMA 平滑跟随 LTPO 档位切换 (120→60Hz 时 delta=2×周期, 数帧内完成自适应)
+                            expectedPeriodNs = (expectedPeriodNs * 3L + delta) / 4L
+                        } else if (lastFrameTimeNanos > 0L) {
+                            // 断裂(熄屏唤醒/卡顿风暴): 窗口截断到当前帧, 后续重新积攒
+                            while (frameTimes.isNotEmpty()) frameTimes.removeFirst()
                         }
                         lastFrameTimeNanos = frameTimeNanos
+                        // ★ 8Hz 输出节拍: 每帧检查, 距上次输出 ≥125ms 才写屏
+                        val outNow = android.os.SystemClock.elapsedRealtime()
+                        if (outNow - lastFpsOutputMs >= 125L && frameTimes.size >= 2) {
+                            lastFpsOutputMs = outNow
+                            val windowNs = frameTimeNanos - frameTimes.first()
+                            // N 个时间戳只有 N-1 个帧间隔: 速率 = (N-1)/跨度。
+                            // 首秒外推: 窗口未满时该比值即真实速率(60Hz 第 3 帧: 2戳/33ms=60)
+                            // 满窗后: 61戳/1s = 60 — 同一公式两阶段语义, 无跳变、无量化偏移
+                            val fps = (((frameTimes.size - 1) * 1_000_000_000L + windowNs / 2L) / windowNs)
+                                .toInt().coerceIn(0, 240)   // 240 覆盖现有最高刷面板 (F6)
+                            if (fpsView == null) fpsView = windows["fps"] as? TextView   // 窗口重建后懒重取
+                            val text = "$fpsLabel $fps"
+                            if (fpsView?.text?.toString() != text) fpsView?.text = text   // 值变才写
+                        }
                         choreographer.postFrameCallback(this)
                     }
                 }
@@ -530,7 +551,7 @@ class FloatingWindowService : Service() {
 
     /**
      * ★ 停止 FPS 监控 — 必须调用 removeFrameCallback 防止 Service 泄漏
-     *   v2: 停止时重置全部统计状态, 复现首帧从干净窗口开始 (F5); 视图引用一并释放
+     *   v3: 停止时重置全部统计状态, 复现首帧从干净窗口开始 (F5); 视图引用一并释放
      */
     private fun stopFpsMonitor() {
         fpsCallback?.let { cb ->
@@ -540,8 +561,8 @@ class FloatingWindowService : Service() {
         fpsCallback = null
         fpsView = null
         lastFrameTimeNanos = 0L
-        windowStartNanos = 0L
-        frameCount = 0
+        lastFpsOutputMs = 0L
+        frameTimes.clear()
     }
 
     private fun setText(key: String, text: String) {
