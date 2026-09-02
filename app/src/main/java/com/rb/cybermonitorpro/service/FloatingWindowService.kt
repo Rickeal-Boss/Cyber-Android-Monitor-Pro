@@ -60,14 +60,14 @@ class FloatingWindowService : Service() {
 
     private lateinit var repo: DeviceRepository
 
-    // ★ FPS 采集状态 — v3 滚动窗口版 (2026-09-02 验收: 8Hz 输出)
-    //   v1: 单帧瞬时频率(1e9/delta)逐帧直写 → 读数乱跳 + 60~120 次重绘/秒 + 120 上限钳错高刷屏
-    //   v2: 1s 固定窗口计数, 窗口边界刷新(1Hz) → 首值等满 1s + 节奏感知过慢
-    //   v3: 帧时间戳滚动队列 + 首秒外推 + 125ms 输出节拍 → 首值 ~33ms, 8 次/秒
+    // ★ FPS 采集状态 — v3.1 滚动窗口版 (2026-09-02 修复档位恢复死锁)
+    //   v1: 单帧瞬时频率(1e9/delta)逐帧直写 → 读数乱跳 + 60~120 次重绘/秒
+    //   v2: 1s 固定窗口 + 边界刷新(1Hz) → 首值等满 1s
+    //   v3: 滚动队列 + 8Hz 输出, 但沿用 v2 样本过滤门 → 档位降后恢复被永久拒绝(死锁, 见 startFpsMonitor)
+    //   v3.1: 删除过滤门与 EMA — 滚动窗口 + 1s 收缩自愈一切档位变化, 恒不锁死
     private var fpsCallback: android.view.Choreographer.FrameCallback? = null  // ★ 保存引用用于 remove
     private var fpsView: TextView? = null          // 缓存视图引用, 替代每帧 map 查找+cast
     private var lastFrameTimeNanos = 0L
-    private var expectedPeriodNs = 16_666_667L     // 期望帧周期种子(60Hz), 启动时按 display.refreshRate 动态校准 (F6)
     private val frameTimes = ArrayDeque<Long>()    // 滚动 1s 窗口的帧时间戳队列 (≤240 项 ≈ 2KB)
     private var lastFpsOutputMs = 0L               // 8Hz 输出节拍基准 (elapsedRealtime)
     // 预缓存静态标签
@@ -484,14 +484,17 @@ class FloatingWindowService : Service() {
         } else setText("battery_pow", "$powerLabel --W")
     }
 
-    // ── FPS (Choreographer 驱动) — v3 滚动窗口版 (2026-09-02 用户验收: 每秒 8 次变化达标) ──
+    // ── FPS (Choreographer 驱动) — v3.1 滚动窗口版 (2026-09-02 验收 8Hz + 档位恢复死锁修复) ──
     //   语义说明: Choreographer 测得的是"本进程收到 vsync 的节奏" ≈ 当前屏幕刷新率
     //   (受本服务主线程响应能力封顶)。要测前台应用真实帧率需 SurfaceFlinger 层方案(需 root, 二期)。
-    //   v2→v3 变更:
-    //   - 输出节拍 1s/跳 → 125ms/跳 (8Hz, 验收标准); 帧驱动检查, 无额外定时器
-    //   - 统计改为帧时间戳滚动队列: 任意时刻读数 = "过去 1s 实际帧数", 无窗口边界量化跳变
-    //   - 首秒外推: 窗口未满时 count/elapsed 线性外推 → 第 2 帧(~33ms)即出首值, 免 1s 空窗
-    //   - 重绘代价: 8 次/秒 (旧版逐帧直写 120/s 的 1/15, v2 1/s 的 8 倍, 验收要求内)
+    //   v3 死锁根因 (真机实测: 120 → 60 → 30 后永不回 120):
+    //     样本过滤门 delta ∈ [period/2, 2.5×period] + EMA 仅在接受样本时更新。
+    //     档位下降时(60/30Hz) delta 放大被接受, EMA 跟涨; 恢复 120Hz 时 delta 缩到
+    //     period/2 地板之下 → 永久拒绝 → 队列清空 + EMA 冻结 → 读数卡死 30。
+    //     过滤门原为防"复现闪 0", 实际滚动窗口 + 1s 收缩自带该保护 — 整门删除。
+    //   v3.1: 所有帧一律入窗 (队列 = 过去 1s 真实收到的 vsync 时间戳, 读数即其速率);
+    //     档位恢复时新帧入队/旧帧出队, 读数 ≤1s 内平滑爬回; 熄屏/长卡顿陈旧帧由收缩
+    //     循环自动出队, 无需断裂分支; 8Hz 输出节拍不变。
     private fun startFpsMonitor() {
         handler.post {
             try {
@@ -500,31 +503,18 @@ class FloatingWindowService : Service() {
                 // F7 gate: FPS 指标隐藏时不启动, 配置页关闭该项后零开销
                 if (!FloatingWindowConfig.isVisible("fps")) return@post
                 fpsView = windows["fps"] as? TextView
-                // F6: 按屏幕实际刷新率校准期望周期(替代硬编码 120 上限), 支持 144/165/240Hz 面板
-                @Suppress("DEPRECATION")
-                val hz = (getSystemService(Context.WINDOW_SERVICE) as? WindowManager)?.defaultDisplay?.refreshRate ?: 60f
-                if (hz > 1f) expectedPeriodNs = (1_000_000_000.0 / hz).toLong()
                 val choreographer = android.view.Choreographer.getInstance()
                 fpsCallback = object : android.view.Choreographer.FrameCallback {
                     override fun doFrame(frameTimeNanos: Long) {
-                        val delta = frameTimeNanos - lastFrameTimeNanos
-                        val period = expectedPeriodNs
-                        // F5 异常样本剔除: delta 在 [0.5×, 2.5×] 期望周期内才入窗
-                        // (主线程卡顿帧/熄屏间隙/复现首帧不入窗) — 队列读数不闪 0
-                        val validSample = lastFrameTimeNanos > 0L &&
-                            delta >= period / 2 && delta <= period * 5 / 2
-                        if (validSample) {
+                        // 单调递增守卫(防御性): 正常/卡顿/加速帧一律入窗 —
+                        // 队列即"过去 1s 真实收到的 vsync 时间戳", (N-1)/跨度即读数, 任何档位变化自愈
+                        if (frameTimeNanos > lastFrameTimeNanos) {
                             frameTimes.addLast(frameTimeNanos)
-                            // 滚动窗口收缩: 弹出 1s 窗口外旧帧
+                            // 滚动窗口收缩: 弹出 1s 窗口外旧帧 (含熄屏/长卡顿陈旧帧 — 自动出队, 无需断裂分支)
                             while (frameTimes.size > 1 &&
                                 frameTimeNanos - frameTimes.first() > 1_000_000_000L) {
                                 frameTimes.removeFirst()
                             }
-                            // EMA 平滑跟随 LTPO 档位切换 (120→60Hz 时 delta=2×周期, 数帧内完成自适应)
-                            expectedPeriodNs = (expectedPeriodNs * 3L + delta) / 4L
-                        } else if (lastFrameTimeNanos > 0L) {
-                            // 断裂(熄屏唤醒/卡顿风暴): 窗口截断到当前帧, 后续重新积攒
-                            while (frameTimes.isNotEmpty()) frameTimes.removeFirst()
                         }
                         lastFrameTimeNanos = frameTimeNanos
                         // ★ 8Hz 输出节拍: 每帧检查, 距上次输出 ≥125ms 才写屏
@@ -551,7 +541,7 @@ class FloatingWindowService : Service() {
 
     /**
      * ★ 停止 FPS 监控 — 必须调用 removeFrameCallback 防止 Service 泄漏
-     *   v3: 停止时重置全部统计状态, 复现首帧从干净窗口开始 (F5); 视图引用一并释放
+     *   v3.1: 停止时重置全部统计状态, 复现首帧从干净窗口开始 (F5); 视图引用一并释放
      */
     private fun stopFpsMonitor() {
         fpsCallback?.let { cb ->
