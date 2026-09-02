@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no"/>
+<title>Cyber Monitor Pro · 网页模拟版</title>
+<!-- 离线自包含：不依赖任何外部字体/CDN，离线字体栈见 style.css --font-num -->
+<link rel="icon" href="data:,"/>
+<link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+<div id="phone" data-layout="portrait">
+  <!-- 药丸头部 (MainActivity.kt:781-887 — Box 64dp + NeonHeaderDecoration + Row[TabRow|Btn|Btn]) -->
+  <div id="pill-header">
+    <div class="pill-deco"></div>
+    <div class="pill-row">
+      <!-- ScrollableTabRow: edgePadding=0 / divider={} / indicator 3dp -->
+      <nav id="tab-row"></nav>
+      <button class="glass-circle-btn" id="btn-float" title="悬浮窗设置"></button>
+      <button class="glass-circle-btn" id="btn-settings" title="设置"></button>
+    </div>
+  </div>
+
+  <!-- NeonDivider (NeonHeaderDecoration.kt:89-106 — 1.5dp 横向渐变, 水平边距 6dp) -->
+  <div class="neon-divider"></div>
+
+  <!-- HorizontalPager: 9 screens -->
+  <main id="pager"></main>
+
+  <!-- 覆盖层：设置(水波纹) / 悬浮窗配置(水波纹) / 传感器详情(缩放) / HDR实验室(缩放)
+       返回圆钮 .glow-back-btn = LightCircleBackButton (GlowBackButton.kt:99)
+       ⚠️ 设置/悬浮窗的 innerHTML 由 app.js overlayWaveBody() 整体重写，
+          该处按钮需由 app.js 在模板内一并输出，否则会被覆盖丢失。 -->
+  <div class="overlay wave" id="overlay-settings" style="background:#0A0A0F">
+    <button class="glow-back-btn" data-close="1" type="button" title="返回" aria-label="返回">←</button>
+  </div>
+  <div class="overlay wave" id="overlay-float" style="background:#0A0A0F">
+    <button class="glow-back-btn" data-close="1" type="button" title="返回" aria-label="返回">←</button>
+  </div>
+  <div class="overlay scrim-scale" id="overlay-sensor"><div class="overlay-bg"></div>
+    <button class="glow-back-btn" data-close="1" type="button" title="返回" aria-label="返回">←</button>
+  </div>
+  <div class="overlay scrim-scale" id="overlay-hdr"><div class="overlay-bg"></div>
+    <button class="glow-back-btn" data-close="1" type="button" title="返回" aria-label="返回">←</button>
+  </div>
+
+  <!-- HDR 全屏验证 -->
+  <div id="fullscreen-hdr"></div>
+
+  <!-- 全局光照呼吸罩 / 夜光条 -->
+  <div id="global-light-veil"></div>
+  <div id="night-bar"></div>
+
+  <!-- 悬浮窗模拟浮球 -->
+  <div id="float-ball"></div>
+
+  <div id="toast"></div>
+</div>
+
+<script src="icons.js"></script>
+<script src="i18n.js"></script>
+<script src="data.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
