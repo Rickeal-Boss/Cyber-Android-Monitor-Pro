@@ -112,6 +112,8 @@ class DeviceRepository(context: Context) {
 
     @Volatile private var monitoring = false
     @Volatile private var intervalMs: Long = RefreshPolicy.Tier.NORMAL.defaultMs
+    /** ★ 悬浮窗提频窗 — >0 时 policy 推流对每模块 min(eff, override) 只提速; 详见 setPaceOverride */
+    @Volatile private var paceOverrideMs = 0L
 
     private var cpuJob: Job? = null
     private var gpuJob: Job? = null
@@ -410,25 +412,30 @@ class DeviceRepository(context: Context) {
     // ═══════ 分模块间隔控制 ═══════
 
     private fun pushAllIntervalFlows(baseMs: Long) {
-        val settings = AppSettings.getInstance(appContext)
-        cpuIntervalFlow.value = settings.effectiveRefreshMs(settings.cpuRefreshMs).toLong()
-        gpuIntervalFlow.value = settings.effectiveRefreshMs(settings.gpuRefreshMs).toLong()
-        memIntervalFlow.value = settings.effectiveRefreshMs(settings.memoryRefreshMs).toLong()
-        batIntervalFlow.value = settings.effectiveRefreshMs(settings.batteryRefreshMs).toLong()
+        // ★ v3.4.1 (四轮审查): 统一结算 — 原 start 路径直接推 settings 原值, 绕过
+        //   paceOverride min 与省电封顶。旋转/主题变更等 Activity 重建 (onDispose 停 repo →
+        //   新组合 startMonitoring) 会把提频覆盖回慢节奏, 此前仅靠两处 DisposableEffect 的
+        //   源码书写顺序兜底 (脆弱未声明)。所有 interval writer 走同一结算 → 真正顺序无关。
+        //   baseMs 形参保留兼容既有调用点 (原实现本就未消费)。
+        pushPolicyAdjustedIntervals()
     }
 
     // Applies RefreshPolicy (省电模式封装，前后台不降频)
     private fun pushPolicyAdjustedIntervals() {
         val settings = AppSettings.getInstance(appContext)
         val tier = RefreshPolicy.Tier.NORMAL
-        cpuIntervalFlow.value = RefreshPolicy.effectiveMs(
-            settings.effectiveRefreshMs(settings.cpuRefreshMs).toLong(), tier)
-        gpuIntervalFlow.value = RefreshPolicy.effectiveMs(
-            settings.effectiveRefreshMs(settings.gpuRefreshMs).toLong(), tier)
-        memIntervalFlow.value = RefreshPolicy.effectiveMs(
-            settings.effectiveRefreshMs(settings.memoryRefreshMs).toLong(), tier)
-        batIntervalFlow.value = RefreshPolicy.effectiveMs(
-            settings.effectiveRefreshMs(settings.batteryRefreshMs).toLong(), tier)
+        // ★ paceOverride 结算: 每模块 min(eff, override) 只提速; 省电封顶不突破
+        //   (powerSave 时 eff ≥ BACKGROUND_CAP_MS, max 把 min 结果托回封顶线)
+        val powerSaveFloor = if (RefreshPolicy.powerSaveModeFlow.value) RefreshPolicy.BACKGROUND_CAP_MS else 0L
+        fun effMs(moduleMs: Int): Long {
+            val v = RefreshPolicy.effectiveMs(settings.effectiveRefreshMs(moduleMs).toLong(), tier)
+            return if (paceOverrideMs > 0L) maxOf(minOf(v, paceOverrideMs), powerSaveFloor) else v
+        }
+        cpuIntervalFlow.value = effMs(settings.cpuRefreshMs)
+        gpuIntervalFlow.value = effMs(settings.gpuRefreshMs)
+        memIntervalFlow.value = effMs(settings.memoryRefreshMs)
+        batIntervalFlow.value = effMs(settings.batteryRefreshMs)
+        intervalMs = cpuIntervalFlow.value  // 字段对齐 cpu 实际值, getIntervalMs() 语义保鲜
     }
 
     fun setIntervalMs(ms: Long) {
@@ -440,6 +447,30 @@ class DeviceRepository(context: Context) {
         batIntervalFlow.value = ms
     }
 
+    /**
+     * ★ 悬浮窗提频窗 (2026-09-03 三轮审查) — 提频下沉到 policy 推流层统一结算:
+     * setPaceOverride(baseTick) 后, 每次 pushPolicyAdjustedIntervals 对每模块
+     * min(settings×policy 真值, override) 只提速不降速; 省电封顶不突破。
+     *
+     * 为什么不用"提频时 setIntervalMs 统一推流 + 归还时回填":
+     *   1. startMonitoring 从停止态启动会 pushAllIntervalFlows(settings 原值) 覆盖
+     *      调用方刚写入的提频值 (磁贴先开/STICKY 重启/后台重显路径慢一拍复发的根因),
+     *      且 observer 异步初始推送还会再覆盖一次; 下沉后 observer 推送与
+     *      setPaceOverride 推送同值, 竞态免疫, 顺序无关。
+     *   2. 统一值会抹平用户 per-module 差异 (更快的模块被降速); min 语义只提速。
+     *   3. 悬浮窗期间省电开关变化 → policy 事件自动重结算 (含 min), 无需悬浮窗干预。
+     */
+    fun setPaceOverride(ms: Long) {
+        paceOverrideMs = ms
+        pushPolicyAdjustedIntervals()
+    }
+
+    /** 悬浮窗隐藏/销毁时归还 — 清 override 并按当前活配置重推四模块 */
+    fun clearPaceOverride() {
+        paceOverrideMs = 0L
+        pushPolicyAdjustedIntervals()
+    }
+
     fun getIntervalMs(): Long = intervalMs
 
     // ═══════ 电池脉冲事件 ═══════
@@ -449,22 +480,30 @@ class DeviceRepository(context: Context) {
     // ═══════ 分模块刷新间隔 getter/setter ═══════
     fun setCpuRefreshMs(ms: Long) {
         AppSettings.getInstance(appContext).cpuRefreshMs = ms.toInt()
-        cpuIntervalFlow.value = AppSettings.getInstance(appContext).effectiveRefreshMs(ms.toInt()).toLong()
+        // ★ v3.4.1: 统一结算 — 单 flow 裸推会绕过 paceOverride min/省电封顶
+        //   (悬浮窗显示中改模块间隔时, 悬浮窗节奏应仍不低于 override)
+        pushPolicyAdjustedIntervals()
     }
     fun getCpuRefreshMs(): Long = AppSettings.getInstance(appContext).cpuRefreshMs.toLong()
     fun setGpuRefreshMs(ms: Long) {
         AppSettings.getInstance(appContext).gpuRefreshMs = ms.toInt()
-        gpuIntervalFlow.value = AppSettings.getInstance(appContext).effectiveRefreshMs(ms.toInt()).toLong()
+        // ★ v3.4.1: 统一结算 — 单 flow 裸推会绕过 paceOverride min/省电封顶
+        //   (悬浮窗显示中改模块间隔时, 悬浮窗节奏应仍不低于 override)
+        pushPolicyAdjustedIntervals()
     }
     fun getGpuRefreshMs(): Long = AppSettings.getInstance(appContext).gpuRefreshMs.toLong()
     fun setMemoryRefreshMs(ms: Long) {
         AppSettings.getInstance(appContext).memoryRefreshMs = ms.toInt()
-        memIntervalFlow.value = AppSettings.getInstance(appContext).effectiveRefreshMs(ms.toInt()).toLong()
+        // ★ v3.4.1: 统一结算 — 单 flow 裸推会绕过 paceOverride min/省电封顶
+        //   (悬浮窗显示中改模块间隔时, 悬浮窗节奏应仍不低于 override)
+        pushPolicyAdjustedIntervals()
     }
     fun getMemoryRefreshMs(): Long = AppSettings.getInstance(appContext).memoryRefreshMs.toLong()
     fun setBatteryRefreshMs(ms: Long) {
         AppSettings.getInstance(appContext).batteryRefreshMs = ms.toInt()
-        batIntervalFlow.value = AppSettings.getInstance(appContext).effectiveRefreshMs(ms.toInt()).toLong()
+        // ★ v3.4.1: 统一结算 — 单 flow 裸推会绕过 paceOverride min/省电封顶
+        //   (悬浮窗显示中改模块间隔时, 悬浮窗节奏应仍不低于 override)
+        pushPolicyAdjustedIntervals()
     }
     fun getBatteryRefreshMs(): Long = AppSettings.getInstance(appContext).batteryRefreshMs.toLong()
 }

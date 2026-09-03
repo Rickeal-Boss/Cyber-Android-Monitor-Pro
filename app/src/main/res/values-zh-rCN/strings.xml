@@ -1243,6 +1243,7 @@
     <string name="float_bg_dark_red">深红</string>
     <string name="float_overlay_hint">提示: Android 14+ 需手动授予 &quot;显示在其他应用上层&quot; 权限</string>
     <string name="float_permission_toast">请授予悬浮窗权限</string>
+    <string name="float_tile_start_failed">悬浮窗启动失败</string>
     <string name="float_section_realtime">实时指标</string>
     <string name="float_refresh_hint">每 %dms 刷新</string>
     <string name="float_refresh_interval">刷新频率</string>

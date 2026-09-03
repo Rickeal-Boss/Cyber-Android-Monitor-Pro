@@ -122,9 +122,10 @@ class FloatWindowTileService : TileService() {
             // 回滚: 不留"开关已开但窗口未出现"的假状态
             FloatingWindowConfig.enabled = false
             runCatching {
+                // P3-① (2026-09-03 审查): 启动失败 ≠ 权限问题 — 专用文案, 不误导用户去查权限
                 Toast.makeText(
                     applicationContext,
-                    getString(R.string.float_permission_toast),
+                    getString(R.string.float_tile_start_failed),
                     Toast.LENGTH_SHORT
                 ).show()
             }
