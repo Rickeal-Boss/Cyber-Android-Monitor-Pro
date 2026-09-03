@@ -60,6 +60,11 @@ class FloatingWindowService : Service() {
 
     private lateinit var repo: DeviceRepository
 
+    // ★ P1 (2026-09-03 审查): 悬浮窗提频窗激活标记 — startDataCollection 置位,
+    //   隐藏/销毁时 clearPaceOverride 归还。v3.4: 提频下沉 repo paceOverride
+    //   (policy 推流层 min 结算), 竞态免疫 + per-module 只提速 + 省电封顶不突破。
+    private var repoBoostActive = false
+
     // ★ FPS 采集状态 — v3.1 滚动窗口版 (2026-09-02 修复档位恢复死锁)
     //   v1: 单帧瞬时频率(1e9/delta)逐帧直写 → 读数乱跳 + 60~120 次重绘/秒
     //   v2: 1s 固定窗口 + 边界刷新(1Hz) → 首值等满 1s
@@ -196,6 +201,7 @@ class FloatingWindowService : Service() {
                     removeAllWindows()
                     stopDataCollection()
                     stopFpsMonitor()  // ★ 与 stopDataCollection 对称: 隐藏态移除 Choreographer 回调, 消除空转
+                    restoreRepoInterval()  // ★ P1: 隐藏即归还提频 — 服务存活但不再显示, App 前台时主屏回原节奏
                     // ★ 采集真值表对齐: 隐藏时 App 已后台 → 无人消费数据, 停 repo 防孤儿轮询
                     //   (恢复显示时 startDataCollection 内的 repo.startMonitoring() 兜底自愈)
                     if (RefreshPolicy.state.value == RefreshPolicy.RefreshState.BACKGROUND) {
@@ -230,6 +236,7 @@ class FloatingWindowService : Service() {
             FloatingWindowConfig.setWindowY(key, lp.y)
         }
         stopDataCollection()
+        restoreRepoInterval()  // ★ P1: 销毁归还提频 (BACKGROUND 分支 stop 前清 override 重结算)
         // ★ 采集真值表对齐: 服务死亡时若 App 已后台(主界面不再消费数据) → 停 repo 防孤儿轮询;
         //   前台时不停 — 主界面仍需数据。STICKY 重启由 startDataCollection 的 repo.startMonitoring() 自愈
         if (RefreshPolicy.state.value == RefreshPolicy.RefreshState.BACKGROUND) {
@@ -297,6 +304,13 @@ class FloatingWindowService : Service() {
 
     @SuppressLint("MissingPermission")
     private fun createAllWindows() {
+        // ★ P2 (2026-09-03 审查) 幂等守卫: 服务运行中裸 intent 重复 start 会二次建窗 —
+        //   makeItem 内 addView 直挂 WindowManager, 旧 view 引用被 map 覆盖成孤儿 (无法移除)。
+        //   UI 开关为边沿触发不可达, 但磁贴/通知/未来入口共用裸 intent 路径, 函数级防御兜底。
+        if (windows.isNotEmpty()) {
+            Log.w(TAG, "createAllWindows: 已有 ${windows.size} 个窗口, 跳过重复创建")
+            return
+        }
         itemDefs.forEach { (key, create) ->
             try {
                 val view = create()
@@ -397,17 +411,24 @@ class FloatingWindowService : Service() {
      *    调小被 repo 轮询 interval(NORMAL 2000ms) 封底 → 悬浮窗整体节奏恒 2s 一跳。
      *    v3 (2026-09-02 用户反馈"全部慢一拍") 补提频守卫: 悬浮窗在跑时轮询频率
      *    不低于 baseTickMs — 用户调小间隔立即生效; 调大仍由闸门节流, 双向闭环。
-     *    注: setIntervalMs 直接推四模块 interval flows, 只提频不降频, 不覆盖设置页
-     *    模块间隔的降频意图; interval 变更回调会 stop/start 本函数 → 每轮重审自愈。
+     *    注: paceOverride 由 policy 推流层结算, 悬浮窗间隔调大调小都跟随 (对称拥有),
+     *    省电封顶内不提频; interval 变更回调会 stop/start 本函数 → 每轮重结算自愈。
+     * 4. v3.2 (P1) 补归还 → v3.4 (三轮) 提频下沉 repo paceOverride: policy 推流层
+     *    min(settings×policy, baseTick) 只提速; 修复 startMonitoring 停止态重启时
+     *    pushAllIntervalFlows 覆盖提频的慢一拍 (磁贴先开/STICKY/后台重显路径)。
      */
     private fun startDataCollection() {
         if (collectionJob?.isActive == true) return
         runCatching {
+            // ★ v3.4 (三轮审查): 顺序关键 — 先 startMonitoring 后 setPaceOverride。
+            //   startMonitoring 从停止态启动会 pushAllIntervalFlows(settings 原值),
+            //   先提频会被它覆盖 (磁贴先开/STICKY 重启/后台重显路径慢一拍复发的根因);
+            //   setPaceOverride 随后同步结算 min(settings×policy, baseTick) 只提速,
+            //   observer 异步初始推送同值 → 竞态免疫, 顺序无关。
             repo.startMonitoring(baseTickMs)
-            // ★ v3 提频守卫: App 已被前台 VM 以 NORMAL(2000ms) 启动时, startMonitoring
-            //   幂等 return 不重推 interval — 此处显式对齐, 悬浮窗节奏 = 用户设置
-            if (baseTickMs < repo.getIntervalMs()) repo.setIntervalMs(baseTickMs)
-        }.onFailure { Log.w(TAG, "repo.startMonitoring 兜底失败", it) }
+            repo.setPaceOverride(baseTickMs)
+            repoBoostActive = true
+        }.onFailure { Log.w(TAG, "repo.startMonitoring 提频失败", it) }
         collectionJob = serviceScope.launch {
             var lastEmitMs = 0L
             combine(
@@ -428,6 +449,19 @@ class FloatingWindowService : Service() {
         }
     }
 
+    /**
+     * ★ P1 (2026-09-03 审查) 归还提频 — 悬浮窗不再显示时恢复 repo 轮询节奏。
+     *   v3.4: clearPaceOverride 清 override 并重推 settings×policy 当前真值
+     *   (per-module 尊重 + 省电封顶内), observer 后续推送同语义, 无需快照。
+     *   幂等 (未提频空操作); 失败仅记日志 — 节奏残留属性能问题非正确性问题。
+     */
+    private fun restoreRepoInterval() {
+        if (!repoBoostActive) return
+        runCatching { repo.clearPaceOverride() }
+            .onFailure { Log.w(TAG, "归还 repo 节奏失败", it) }
+        repoBoostActive = false
+    }
+
     private fun stopDataCollection() {
         collectionJob?.cancel()
         collectionJob = null
@@ -443,10 +477,11 @@ class FloatingWindowService : Service() {
         setText("gpu_usage", if (gpuLoad >= 0) "$gpuLabel $gpuLoad%" else "$gpuLabel --%")
 
         val cpuTemp = if (!cpu.temperatureCelsius.isNaN()) cpu.temperatureCelsius else -1f
-        setText("cpu_temp", if (cpuTemp > 0) "$cpuLabel ${String.format("%.1f", cpuTemp)}°C" else "$cpuLabel --°C")
+        // P3-②: Locale.US — 防逗号小数语种 (de/fr) 把 "60.5" 显示成 "60,5"
+        setText("cpu_temp", if (cpuTemp > 0) "$cpuLabel ${String.format(java.util.Locale.US, "%.1f", cpuTemp)}°C" else "$cpuLabel --°C")
 
         val gpuTemp = if (!gpu.temperatureCelsius.isNaN()) gpu.temperatureCelsius else -1f
-        setText("gpu_temp", if (gpuTemp > 0) "$gpuLabel ${String.format("%.1f", gpuTemp)}°C" else "$gpuLabel --°C")
+        setText("gpu_temp", if (gpuTemp > 0) "$gpuLabel ${String.format(java.util.Locale.US, "%.1f", gpuTemp)}°C" else "$gpuLabel --°C")
 
         val allFreqs = cpu.cores.mapIndexed { idx, core ->
             val freqMHz = core.currentFreqKHz / 1000
@@ -463,7 +498,7 @@ class FloatingWindowService : Service() {
         } else "$ramLabel --%")
 
         val batTemp = if (!bat.temperatureCelsius.isNaN()) bat.temperatureCelsius else -1f
-        setText("battery_temp", if (batTemp > 0) "$batLabel ${String.format("%.1f", batTemp)}°C" else "$batLabel --°C")
+        setText("battery_temp", if (batTemp > 0) "$batLabel ${String.format(java.util.Locale.US, "%.1f", batTemp)}°C" else "$batLabel --°C")
 
         // ★ 仅使用 currentNowUA (微安→毫安) — 这是真正的电流值
         //   chargingPowerMw/dischargingPowerMw 是功率 (毫瓦)，不可显示为 mA!
@@ -479,7 +514,7 @@ class FloatingWindowService : Service() {
         val effV = bat.effectiveVoltage; val curUA = bat.currentNowUA
         if (effV > 0 && curUA != 0L) {
             val powerW = Math.abs(effV.toDouble() * curUA.toDouble()) / 1_000_000_000.0
-            setText("battery_pow", "$powerLabel ${"%.2f".format(powerW)}W" +
+            setText("battery_pow", "$powerLabel ${String.format(java.util.Locale.US, "%.2f", powerW)}W" +
                 if (bat.isCharging) " $powerUp" else " $powerDown")
         } else setText("battery_pow", "$powerLabel --W")
     }
