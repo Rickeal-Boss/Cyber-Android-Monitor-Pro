@@ -259,6 +259,29 @@ private const val HANDOFF_MIN_SURFACE = 0.35f
 /** 详情内容在收起末段的淡出窗口(占主时钟比例) —— 比表面窗口更窄、更靠后。 */
 private const val CONTENT_FADE_FRACTION = 0.10f
 
+/**
+ * 传感器详情覆盖层【实例】—— 支持多个并存, 这是"并行动画"的载体。
+ *
+ * 场景: 覆盖层 A 正在播"收回卡片 A"的收起动画时, 用户点了卡片 B →
+ *   A 实例继续推进自己的收起时钟, 同时新建 B 实例从卡片 B 长大到全屏,
+ *   两个动画【各自独立、同步推进】, 既不串行等待也不互相打断。
+ *
+ * 每个实例持有自己的: 传感器、起点矩形、几何时钟(progress)、压暗时钟(scrim)。
+ * ⚠️ 两条时钟必须是 Animatable 并且 per-instance —— 早期单实例实现里
+ *    progress/scrim 是组合级的单个 Animatable, 后一次点击必然打断前一次动画。
+ */
+private class SensorOverlay(
+    val sensor: com.rb.cybermonitorpro.data.model.SensorItemInfo,
+    val startRect: Rect?
+) {
+    /** 几何主时钟: 0f=贴合起点卡片矩形, 1f=全屏 */
+    val progress = Animatable(0f)
+    /** 压暗主时钟: 与 progress 并行推进(打开同步压暗/收起同步解除) */
+    val scrim = Animatable(0f)
+    /** 转场是否已稳定(容器已铺满) —— 仅此时才由根 Box 吃点击隔绝主界面 */
+    var settled by mutableStateOf(false)
+}
+
 /** 赛博风格线条矢量图标 — 与 Tab 含义一一对应 */
 private val topTabIcons = listOf(
     R.drawable.ic_cyber_dashboard,
@@ -346,8 +369,6 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
 
     var showSettings by remember { mutableStateOf(false) }
     var showFloatConfig by remember { mutableStateOf(false) }
-    var showSensorDetail by remember { mutableStateOf<Boolean>(false) }
-    var selectedSensorForDetail by remember { mutableStateOf<com.rb.cybermonitorpro.data.model.SensorItemInfo?>(null) }
     // ★ 2026-08-16: HDR 实验室（详情页二层 — 局部 EDR 真机验证）
     var showHdrLab by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -357,21 +378,20 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     val pagerState = rememberPagerState(pageCount = { topTabs.size })
     val scope = rememberCoroutineScope()
 
-    // GPS 智能开关状态 — 仅在需要时请求定位权限
+    // GPS 智能开关状态 — 仅在需要时定位权限
     var gpsTabActive by remember { mutableStateOf(false) }
 
-    val overlayVisible = showSettings || showFloatConfig || showSensorDetail || showHdrLab
+    // ── 传感器详情覆盖层: 【多实例并存】形态 (并行动画) ──
+    //   旧实现是组合级的单个 Animatable 三元组(progress/scrim/alive), 因此"收起途中点新卡片"
+    //   只能互相打断 —— 新的 animateTo 会取消旧的, 视觉上变成"一个容器半途改道"。
+    //   现在每次打开都新建一个 SensorOverlay 实例(自带两条时钟), 渲染时逐个绘制:
+    //   A 继续播"收回卡片 A", B 同时播"从卡片 B 长大到全屏", 两动画各自推进、互不干扰。
+    //   渲染遍历读实例列表(组合期), 主时钟 progress/scrim 仍只在 layout/draw lambda 内读 → 零重组。
+    val sensorOverlays = remember { mutableStateListOf<SensorOverlay>() }
+    // 渲染条件/返回键接管都改看列表是否为空
+    val sensorAlive = sensorOverlays.isNotEmpty()
 
-    // ── F5: 传感器详情统一主时钟 — Animatable<Float>, 0f=收起 1f=展开 ──
-    //   进入: animateTo(1f, ENTRY_SPRING) / 预测返回: snapTo 跟手 /
-    //   手势取消: animateTo(1f) 回弹 / 完成或返回键: animateTo(0f) 后移出组合。
-    //   渲染条件用 sensorAlive(keepAlive 守卫)，绝不读 sensorProgress.value 组合判断 → 零重组。
-    //   scrim(sensorScrim) 与容器进度仍是两个 Animatable(预测返回各自 snapTo), 但打开时【并行】推进:
-    //   卡片长大的同时背景同步压暗 (容器变换二轮, 对齐参考效果); 关闭时两时钟【并行】解除, 返回键即时响应。
-    val sensorProgress = remember { Animatable(0f) }
-    // scrim 主时钟: 打开/关闭均与 sensorProgress 并行 animateTo (返回键即时响应)
-    val sensorScrim = remember { Animatable(0f) }
-    var sensorAlive by remember { mutableStateOf(false) }
+    val overlayVisible = showSettings || showFloatConfig || sensorAlive || showHdrLab
 
     // ── F3-flow: 传感器/HDR 覆盖层"一镜到底"转场起点 ──
     //   sensorRevealRect/hdrRevealRect = 触发卡片(或入口行)的窗口矩形 boundsInWindow;
@@ -387,52 +407,49 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     var hdrRevealRect by remember { mutableStateOf<Rect?>(null) }
     var overlayRootInWindow by remember { mutableStateOf(Offset.Zero) }
 
-    // ── 背景静态模糊开关(仅传感器/HDR 转场期间用) ──
+    // ── 背景模糊开关(仅 HDR 侧需要显式维护; 传感器侧由实例列表的 settled 直接推导) ──
     //   只有"背景确实可见"时才开, 避免给被不透明容器完全遮挡的场景白付 GPU 开销:
-    //   传感器/HDR 容器长大铺满后背景不可见 → 关掉; 收起动画开始 → 再打开。
+    //   容器长大铺满后背景不可见 → 关掉; 收起动画开始 → 再打开。
     //   设置/悬浮窗覆盖层是 0.85 半透明, 背景全程可见 → 由其 showXxx/isRevealing 直接判(见背景模糊 gate)。
-    var bgBlurActive by remember { mutableStateOf(false) }
+    var hdrBlurActive by remember { mutableStateOf(false) }
 
     // ── 可打断过渡: 转场是否【已稳定】(容器已铺满、动画播完) ──
     //   true 时才由覆盖层根 Box 吃掉点击、隔绝主界面(既有 P1 行为);
     //   false(转场进行中) 不拦截 → 底层卡片可响应点击并打断当前动画,
     //   与设置/悬浮窗覆盖层(半透明、无点击吸收层, 转场中可穿透点击)行为保持一致。
-    var sensorSettled by remember { mutableStateOf(false) }
+    //   ⚠️ 传感器侧已迁到 SensorOverlay 实例内(每个实例各自记录 settled), 这里只剩 HDR。
     var hdrSettled by remember { mutableStateOf(false) }
 
+    // ── 并行动画: 打开 = 新建实例(不动已在播的其它实例), 关闭 = 只收起【最新】那个实例 ──
     fun openSensorDetail(sensor: com.rb.cybermonitorpro.data.model.SensorItemInfo) {
-        selectedSensorForDetail = sensor
-        showSensorDetail = true
-        sensorAlive = true
-        sensorSettled = false                                                   // ★ 转场中: 不拦截点击 → 可被打断
-        bgBlurActive = true                                                     // ★ 转场期间背后主界面静态模糊
+        // ★ 关键: 不复用/打断既有实例。每次打开都新建独立实例(自带 progress/scrim),
+        //   因此"覆盖层 A 正在收回卡片 A"时点卡片 B, A 继续播自己的收起动画、
+        //   B 从卡片 B 长大到全屏, 两动画同步推进(而非串行或互相打断)。
+        val ov = SensorOverlay(sensor = sensor, startRect = sensorRevealRect)
+        sensorOverlays.add(ov)
         scope.launch {
-            // ★ 容器变换二轮(F3-flow): 两时钟【并行】—— 背景压暗与卡片长大同步进行,
-            //   对齐参考效果"卡片从原位放大的同时背景逐渐压暗"。旧实现串行(容器先展开→scrim 后到位)
-            //   叠加容器 bg 跟 scrim 的旧设计, 导致长大过程容器全透明 → 观感退化为"内容从底部升起"。
-            val geo = launch { sensorProgress.animateTo(1f, CARD_ENTRY_SPEC) }   // ① 容器从卡片矩形长大
-            val dim = launch { sensorScrim.animateTo(1f, CARD_ENTRY_SPEC) }      // ② 背景同步压暗
+            // 两时钟【并行】: 背景压暗与卡片长大同步进行 (打开期间背景可见 → 模糊由 !settled 推导)
+            val geo = launch { ov.progress.animateTo(1f, CARD_ENTRY_SPEC) }   // ① 容器从卡片矩形长大
+            val dim = launch { ov.scrim.animateTo(1f, CARD_ENTRY_SPEC) }      // ② 背景同步压暗
             geo.join(); dim.join()
-            bgBlurActive = false    // 容器已铺满全屏, 背后不可见 → 关掉模糊, 省 GPU 与电量
-            sensorSettled = true    // 转场稳定 → 恢复点击隔绝
+            ov.settled = true    // 该实例转场稳定 → 恢复点击隔绝 (且不再需要背景模糊)
         }
     }
 
     fun closeSensorDetail() {
-        sensorSettled = false       // ★ 收起过程中同样不拦截 → 可被打断
-        bgBlurActive = true         // 收起过程中背景重新露出 → 开模糊
+        // ★ 只收起【最新】那个实例: 若此刻还有更早的实例正在收回, 它不受影响, 继续播完自己的动画。
+        val ov = sensorOverlays.lastOrNull() ?: return
+        ov.settled = false       // 收起过程中不拦截 → 可被打断; 同时重新需要背景模糊
         scope.launch {
             // ★ 返回键即时响应: 两时钟【并行】。旧实现串行(scrim 先 450ms → 容器再 450ms),
             //   而容器铺满时 scrim 在它背后、根本不可见 → 按下返回键后有约 450ms 视觉上毫无反应(像卡顿)。
             //   并行后容器在按下当帧就开始收起; scrim 同步淡出, 背景随容器收缩而逐渐露出(对齐参考效果)。
-            val dim = launch { sensorScrim.animateTo(0f, CARD_EXIT_SPEC) }   // 背景同步解除压暗
-            val geo = launch { sensorProgress.animateTo(0f, CARD_EXIT_SPEC) } // 容器收回到起点矩形
+            val dim = launch { ov.scrim.animateTo(0f, CARD_EXIT_SPEC) }   // 背景同步解除压暗
+            val geo = launch { ov.progress.animateTo(0f, CARD_EXIT_SPEC) } // 容器收回到起点矩形
             dim.join(); geo.join()
-            showSensorDetail = false
-            selectedSensorForDetail = null
-            sensorAlive = false
-            sensorRevealRect = null                         // ③ 收起完成, 清起点矩形
-            bgBlurActive = false                            // ④ 收起结束, 关模糊
+            // 收起完成 → 只移除【本实例】; 其它实例(可能正在长大或正在收回)完全不受影响
+            sensorOverlays.remove(ov)
+            // 起点矩形不再需要全局清理: 它已在创建实例时被快照进 ov.startRect
         }
     }
 
@@ -453,13 +470,13 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         hdrAlive = true
         hdrSurfacesVisible = false
         hdrSettled = false                                                      // ★ 同传感器: 转场中不拦截点击
-        bgBlurActive = true                                                     // ★ 同上(传感器)
+        hdrBlurActive = true                                                    // ★ 转场期间背景可见 → 开模糊
         scope.launch {
             // ★ 容器变换二轮: 与 openSensorDetail 同款并行编排 (几何与压暗同步)。
             val geo = launch { hdrProgress.animateTo(1f, CARD_ENTRY_SPEC) }      // ① 容器从入口行矩形长大
             val dim = launch { hdrScrim.animateTo(1f, CARD_ENTRY_SPEC) }         // ② 背景同步压暗
             geo.join(); dim.join()
-            bgBlurActive = false    // 容器已铺满, 关模糊
+            hdrBlurActive = false   // 容器已铺满, 关模糊
             hdrSettled = true       // 转场稳定 → 恢复点击隔绝
             hdrSurfacesVisible = true   // 两个动画都完成后才挂载 SurfaceView, 防 punch-through 突跳
         }
@@ -468,7 +485,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     fun closeHdrLab() {
         hdrSurfacesVisible = false     // 先卸载, 再播退出遮罩
         hdrSettled = false             // ★ 收起过程中不拦截 → 可被打断
-        bgBlurActive = true            // 收起过程中背景重新露出 → 开模糊
+        hdrBlurActive = true           // 收起过程中背景重新露出 → 开模糊
         scope.launch {
             // ★ 返回键即时响应: 与 closeSensorDetail 同款并行编排(几何与压暗同步)。
             val dim = launch { hdrScrim.animateTo(0f, CARD_EXIT_SPEC) }      // 背景同步解除压暗
@@ -477,7 +494,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             showHdrLab = false
             hdrAlive = false
             hdrRevealRect = null                            // ③ 收起完成, 清起点矩形
-            bgBlurActive = false                            // ④ 收起结束, 关模糊
+            hdrBlurActive = false                           // ④ 收起结束, 关模糊
         }
     }
 
@@ -535,23 +552,26 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     PredictiveBackHandler(enabled = overlayVisible) { progress: Flow<BackEventCompat> ->
         val settingsStart = if (showSettings) settingsReveal.progress.value else 0f
         val floatStart = if (showFloatConfig) floatReveal.progress.value else 0f
-        val sensorStart = if (showSensorDetail) sensorProgress.value else 0f
+        // 传感器: 只对【最新】实例做跟手与收尾 —— 更早的实例(若仍在播)不受返回手势影响
+        val sensorTop = sensorOverlays.lastOrNull()
+        val sensorStart = sensorTop?.progress?.value ?: 0f
         val hdrStart = if (showHdrLab) hdrProgress.value else 0f
         try {
             var receivedProgress = false      // ★ 是否收到过跟手进度事件
             // ★ 跟手拖拽期间背景可见 → 同样开模糊(半径随拖拽进度渐变, 与按钮返回/打开收起体验一致,
             //   避免同一转场在"按钮返回"与"手势返回"两种路径下模糊表现割裂)。
-            //   若无进度事件(ROM 不支持)会走下方 closeXxx/close 分支, 该处会再次置位/复位, 无副作用。
-            bgBlurActive = true
+            //   传感器侧模糊由"实例 !settled"推导(collect 里会把实例置为未稳定), 故这里只需 HDR 的显式开关。
+            hdrBlurActive = true
             progress.collect { event ->
                 receivedProgress = true
                 backProgress.snapTo(event.progress)
                 val t = 1f - event.progress
                 if (showSettings) settingsReveal.progress.snapTo((settingsStart * t).coerceIn(0f, 1f))
                 if (showFloatConfig) floatReveal.progress.snapTo((floatStart * t).coerceIn(0f, 1f))
-                if (showSensorDetail) {
-                    sensorProgress.snapTo((sensorStart * t).coerceIn(0f, 1f))
-                    sensorScrim.snapTo((sensorStart * t * t).coerceIn(0f, 1f))   // 关闭拖拽: scrim 先行解除隔绝
+                if (sensorTop != null) {
+                    sensorTop.settled = false   // 拖拽期不拦截点击 + 重新需要背景模糊
+                    sensorTop.progress.snapTo((sensorStart * t).coerceIn(0f, 1f))
+                    sensorTop.scrim.snapTo((sensorStart * t * t).coerceIn(0f, 1f))   // 关闭拖拽: scrim 先行解除隔绝
                 }
                 if (showHdrLab) {
                     hdrProgress.snapTo((hdrStart * t).coerceIn(0f, 1f))
@@ -563,7 +583,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             if (!receivedProgress) {
                 backProgress.snapTo(0f)
                 when {
-                    showSensorDetail -> closeSensorDetail()   // scrim→0 后 progress→0, 容器收回卡片
+                    sensorTop != null -> closeSensorDetail()  // 收起最新实例(两时钟并行), 容器收回其起点矩形
                     showHdrLab -> closeHdrLab()
                     showSettings -> showSettings = false      // LaunchedEffect 触发 settingsReveal.collapse()
                     showFloatConfig -> showFloatConfig = false
@@ -573,15 +593,12 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             // 手势完成 — 各覆盖层已被手指拖到收缩态, 直接收尾(动画已由跟手过程播完)
             backProgress.snapTo(0f)
             when {
-                showSensorDetail -> {
-                    sensorProgress.snapTo(0f)
-                    sensorScrim.snapTo(0f)
-                    showSensorDetail = false
-                    selectedSensorForDetail = null
-                    sensorAlive = false
-                    sensorSettled = false
-                    bgBlurActive = false      // 覆盖层已移除, 关模糊
-                    sensorRevealRect = null   // 关闭后清起点矩形, 防下次冷开复用陈旧矩形
+                sensorTop != null -> {
+                    // 跟手已把该实例拖到收缩态 → 直接归零并移除(只动这一个实例)
+                    sensorTop.progress.snapTo(0f)
+                    sensorTop.scrim.snapTo(0f)
+                    sensorTop.settled = false
+                    sensorOverlays.remove(sensorTop)
                 }
                 showHdrLab -> {
                     hdrSurfacesVisible = false
@@ -590,7 +607,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     showHdrLab = false
                     hdrAlive = false
                     hdrSettled = false
-                    bgBlurActive = false      // 覆盖层已移除, 关模糊
+                    hdrBlurActive = false     // 覆盖层已移除, 关模糊
                     hdrRevealRect = null      // 同上
                 }
                 showSettings -> {
@@ -607,16 +624,17 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             backProgress.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy))
             if (showSettings) settingsReveal.progress.animateTo(1f, tween(400))
             if (showFloatConfig) floatReveal.progress.animateTo(1f, tween(400))
-            if (showSensorDetail) {
-                sensorProgress.animateTo(1f, CARD_ENTRY_SPEC)
-                sensorScrim.animateTo(1f, CARD_ENTRY_SPEC)
+            if (sensorTop != null) {
+                sensorTop.progress.animateTo(1f, CARD_ENTRY_SPEC)
+                sensorTop.scrim.animateTo(1f, CARD_ENTRY_SPEC)
+                sensorTop.settled = true    // 回弹完成 → 容器重新铺满, 恢复点击隔绝(且不再需要模糊)
             }
             if (showHdrLab) {
                 hdrProgress.animateTo(1f, CARD_ENTRY_SPEC)
                 hdrScrim.animateTo(1f, CARD_ENTRY_SPEC)
             }
-            // 回弹完成 → 容器重新铺满, 背景不可见 → 关模糊 (bgBlurActive 会在下次拖拽/收起时再开)
-            bgBlurActive = false
+            // 回弹完成 → 容器重新铺满, 背景不可见 → 关模糊 (hdrBlurActive 会在下次拖拽/收起时再开)
+            hdrBlurActive = false
         }
     }
 
@@ -652,12 +670,15 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         val p = when {
                             showSettings || settingsReveal.isRevealing -> settingsReveal.progress.value
                             showFloatConfig || floatReveal.isRevealing -> floatReveal.progress.value
-                            showSensorDetail || sensorAlive -> sensorProgress.value
+                            // 传感器: 取最新实例的主时钟(多实例并存时模糊随"前景那个"的转场渐变)
+                            sensorAlive -> sensorOverlays.lastOrNull()?.progress?.value ?: 0f
                             showHdrLab || hdrAlive -> hdrProgress.value
                             else -> 0f
                         }
-                        // 传感器/HDR 容器铺满后由 bgBlurActive=false 兜底, 不给不可见背景白付 GPU
-                        val gate = bgBlurActive || showSettings || settingsReveal.isRevealing ||
+                        // 传感器/HDR 容器铺满后不再需要模糊(背景不可见), 不给白付 GPU:
+                        //   传感器 → 任一实例 unsettled 即需要; HDR → 显式开关 hdrBlurActive
+                        val gate = sensorOverlays.any { !it.settled } || hdrBlurActive ||
+                            showSettings || settingsReveal.isRevealing ||
                             showFloatConfig || floatReveal.isRevealing
                         val radiusPx = if (gate) BG_BLUR_MAX_DP.toPx() * p.coerceIn(0f, 1f) else 0f
                         // 量化到 0.5px: 减少每帧新建 RenderEffect 对象的分配
@@ -863,34 +884,40 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             //   起点矩形 = 卡片窗口矩形 sensorRevealRect(boundsInWindow) - 覆盖层宿主原点 overlayRootInWindow,
             //   无来源(null)时退化为居中 0.3 倍矩形(等价旧观感); 内层圆角 20dp→0 随 *Progress 收口 + clip 裁剪内容。
             //   容器背景(CyberCardStart ×0.92)自 p=0 首段 15% 渐入后恒定不透明(容器变换二轮) —
-            //   起始态即被点卡片本身, 随几何一起长大; 黑色 scrim 仍由 sensorScrim 驱动并与几何并行压暗,
+            //   起始态即被点卡片本身, 随几何一起长大; 黑色 scrim 由【本实例的 scrim】驱动并与几何并行压暗,
             //   打开=容器长大 + 背景同步压暗; 关闭=容器收起 + 背景同步解除(两时钟并行, 返回键即时响应);
             //   关闭=容器收起与背景解除同步进行(两时钟并行); 0.22 scrim 与 bg 同源 (均跟 *Scrim)
             //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由容器尺寸先行、内容跟进;
-            //   渲染条件读 sensorAlive State; 主时钟 sensorProgress.value 只在 layout/draw 内读, 绝不在组合期读。
-            if (sensorAlive || showSensorDetail) {
-                val sensor = selectedSensorForDetail
-                if (sensor != null) {
+            //   渲染条件 = 实例列表非空(sensorAlive); 各实例主时钟只在 layout/draw 内读, 绝不在组合期读。
+            //   ★ 并行动画: 逐【实例】绘制 —— 每个 SensorOverlay 自带 progress/scrim/起点矩形,
+            //     因此"旧的正在收回卡片 A"与"新的正从卡片 B 长大"可同时存在于列表中、各自独立推进。
+            //     渲染遍历读实例列表(组合期); 各实例主时钟仍只在 layout/draw lambda 内读 → 零重组。
+            sensorOverlays.forEach { ov ->
+                run {
+                    val sensor = ov.sensor
                     val density = LocalDensity.current
                     // P1: 覆盖层根 Box 消费点击, 隔绝主界面触摸 (内部交互仍由子节点优先消费)
-                    // ★ 可打断过渡: 同上, 仅在 sensorSettled(转场已稳定) 时才吃点击。
+                    // ★ 可打断过渡: 仅在【该实例】已稳定(转场播完)时才吃点击 —— 转场中不拦截,
+                    //   底层卡片可响应点击(正是"并行动画"的触发条件)。
                     Box(Modifier.fillMaxSize()
-                        .then(if (sensorSettled) Modifier.pointerInput(Unit) { detectTapGestures { } } else Modifier)
+                        .then(if (ov.settled) Modifier.pointerInput(Unit) { detectTapGestures { } } else Modifier)
                     ) {
-                        // ① scrim: 全屏压暗层 (alpha 由 sensorScrim 驱动, 二次曲线半透明; 打开时与 sensorProgress【并行】压暗, 关闭时两时钟【并行】解除, 返回键即时响应)
+                        // ① scrim: 全屏压暗层 (alpha 由本实例 scrim 驱动, 二次曲线半透明; 与 progress 并行推进)
                         //   pre12 修复: 同 HDR scrim, 改 drawBehind 直接以目标 alpha 画黑矩形, 根除黑闪。
                         Box(Modifier.fillMaxSize()
                             .drawBehind {
                                 drawRect(
                                     color = Color.Black,
-                                    alpha = (sensorScrim.value * sensorScrim.value) * 0.22f
+                                    alpha = (ov.scrim.value * ov.scrim.value) * 0.22f
                                 )
                             }
                         )
                         // ② 卡片容器: 外层只负责"摆位置"(布局期矩形插值), 内层自身尺寸 = 插值矩形尺寸;
                         //   背景(CyberCardStart ×0.92) 自 p=0 首段 15% 渐入后恒定不透明(容器变换二轮, 详见内层注释):
                         //   打开=容器长大与背景压暗同步进行; 关闭=容器收起与背景解除同步进行
-                        val sensorStartLocal: Rect = sensorRevealRect?.let {
+                        // 起点矩形取【本实例】在创建时快照的 startRect —— 多实例并存时各画各的终点,
+                        //   这正是"旧的收回卡片 A / 新的从卡片 B 长大"能同时成立的前提。
+                        val sensorStartLocal: Rect = ov.startRect?.let {
                             Rect(
                                 it.left - overlayRootInWindow.x, it.top - overlayRootInWindow.y,
                                 it.right - overlayRootInWindow.x, it.bottom - overlayRootInWindow.y
@@ -899,7 +926,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         Box(Modifier.fillMaxSize()
                             .layout { measurable, constraints ->
                                 // 布局期读主时钟: 只致 layout 失效, 零重组 (与旧 graphicsLayer 内读法同源)
-                                val p = sensorProgress.value
+                                val p = ov.progress.value
                                 val maxW = constraints.maxWidth
                                 val maxH = constraints.maxHeight
                                 val target = Rect(0f, 0f, maxW.toFloat(), maxH.toFloat())
@@ -927,7 +954,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             //   仍用 drawBehind 直接画(非层属性 alpha), pre12 黑闪结论不变。
                             Box(Modifier.fillMaxSize()
                                 .graphicsLayer {
-                                    val p = sensorProgress.value
+                                    val p = ov.progress.value
                                     shape = RoundedCornerShape(androidx.compose.ui.unit.lerp(20.dp, 0.dp, p))
                                     clip = true
                                 }
@@ -938,14 +965,14 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                     drawRect(
                                         color = CyberCardStart,
                                         alpha = 0.92f - (0.92f - HANDOFF_MIN_SURFACE) *
-                                            ((1f - sensorProgress.value / HANDOFF_FRACTION).coerceIn(0f, 1f))
+                                            ((1f - ov.progress.value / HANDOFF_FRACTION).coerceIn(0f, 1f))
                                     )
                                 }
                             ) {
                                 // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组) — 原样保留
                                 Box(Modifier.fillMaxSize()
                                     .graphicsLayer {
-                                        val p = sensorProgress.value
+                                        val p = ov.progress.value
                                         // ★ 交还=画面叠加(对齐参考): 内容【全程保持可见】, 只在最后 CONTENT_FADE
                                         //   快速淡出 —— 此时表面已半透明、真卡片已透出, 不会出现空壳。
                                         //   旧写法 (p-0.10)/0.90 * (p/0.18) 会让内容在中段就很淡, 末段直接消失,
@@ -960,7 +987,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 ) {
                                     SensorDetailContent(
                                         sensor = sensor,
-                                        progress = sensorProgress,
+                                        progress = ov.progress,
                                         density = density,
                                         onBack = { closeSensorDetail() }
                                     )
