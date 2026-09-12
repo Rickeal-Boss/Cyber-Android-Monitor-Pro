@@ -397,10 +397,10 @@ private fun SensorItemCard(
 ) {
     val meta = SensorTypeMeta.fromTypeId(sensor.type)
     val ctx = LocalContext.current
-    // F3: 卡片中心触点（boundsInRoot; RIPPLE-04: 偏移异常时降级 positionInWindow 换算）— 仍供水波纹使用
-    var cardCenter by remember { mutableStateOf(Offset.Zero) }
     // F3-flow: 卡片窗口矩形（boundsInWindow）— 覆盖层"一镜到底"转场的起点矩形
-    //   与覆盖层根节点 positionInWindow() 同一坐标系，MainActivity 减出局部矩形做插值
+    //   与覆盖层根节点 positionInWindow() 同一坐标系，MainActivity 减出局部矩形做插值。
+    //   ★ 评审 P2-1: 原 cardCenter(boundsInRoot().center, Offset) 已删除 —— F3-flow 把水波纹的点击回调
+    //   改为传本矩形后, 它只剩写入、无任何读取点(只写死状态); CardRipple 仅消费 onClick/inset。
     var cardRect by remember { mutableStateOf(Rect.Zero) }
 
     // 搜索定位脉冲: scale 微弹 + 辉光淡出
@@ -432,7 +432,6 @@ private fun SensorItemCard(
     val cardModifier = Modifier
         .fillMaxWidth()
         .onGloballyPositioned {
-            cardCenter = it.boundsInRoot().center
             cardRect = it.boundsInWindow()
             onCardPositioned(it.boundsInRoot().top)
         }
