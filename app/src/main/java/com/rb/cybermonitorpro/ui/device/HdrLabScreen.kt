@@ -417,15 +417,26 @@ fun HdrLabScreen(onBack: () -> Unit = {}, surfaceVisible: Boolean = true) {
             // SurfaceView 默认置于窗口内容之下，Compose 控件绘制于其上（可点击）；
             // 整屏 PQ 白场会触发面板高亮，ratio>1.01 即确凿点亮。
             Box(Modifier.fillMaxSize()) {
-                AndroidView(
-                    factory = { c ->
-                        HdrTestSurfaceView(c).also {
-                            fsView.value = it
-                            it.applyRequestedHeadroom(fsHeadroom)
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                // ★ CAMP 修复(F3-flow 配套): 与上方 140dp 对比块同款 surfaceVisible 门控 ——
+                //   覆盖层容器改「真实尺寸矩形插值」后（非旧 graphicsLayer 缩放），转场期宿主每帧 resize；
+                //   SurfaceView 是独立图层，既不受容器 clip=true 约束、也不吃父层变换，
+                //   故必须在 surfaceVisible=false（进入动画未完成 / 退出动画已开始）时卸载，
+                //   否则 10-bit PQ 表面会在跟手/收尾期逐帧重建 buffer（punch-through 突跳 / 黑帧风险）。
+                //   用户侧无感：能点到「全屏验证」按钮时进入动画早已完成（surfaceVisible=true）。
+                if (surfaceVisible) {
+                    AndroidView(
+                        factory = { c ->
+                            HdrTestSurfaceView(c).also {
+                                fsView.value = it
+                                it.applyRequestedHeadroom(fsHeadroom)
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    // 占位块: 与 140dp 对比块同款静态底色（避免空块布局跳动/白场残留）
+                    Box(Modifier.fillMaxSize().background(CyberCardStart.copy(alpha = 0.6f)))
+                }
                 // 顶部控制条（半透明背景，确保白底上可读）
                 Column(
                     Modifier
