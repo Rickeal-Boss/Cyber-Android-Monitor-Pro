@@ -344,6 +344,20 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     val sensorScrim = remember { Animatable(0f) }
     var sensorAlive by remember { mutableStateOf(false) }
 
+    // ── F3-flow: 传感器/HDR 覆盖层"一镜到底"转场起点 ──
+    //   sensorRevealRect/hdrRevealRect = 触发卡片(或入口行)的窗口矩形 boundsInWindow;
+    //   overlayRootInWindow            = 覆盖层宿主(Scaffold 内容 Box)的窗口原点 positionInWindow();
+    //   两者相减得到覆盖层局部坐标系里的起点矩形, 交给容器外层 Modifier.layout 做逐帧矩形插值。
+    //   null = 无卡片来源(冷开/来源未上报) → 容器退化为居中 0.3 倍起点(等价旧中心缩放观感)。
+    //   ★ 这三个都是普通 State(非 Animatable), 可在组合期读; 主时钟 sensorProgress/hdrProgress 仍只在 layout/draw 内读。
+    //   ★ 原 pre7 起"只写不读"的死状态(Offset 版 reveal origin)已删除, 由 sensorRevealRect 取代。
+    //   ★ 声明位置硬约束: 必须早于下方四个局部函数(openSensorDetail/closeSensorDetail/openHdrLab/closeHdrLab)。
+    //     Kotlin 局部函数只能引用其"之前"声明的局部变量, 而 closeSensorDetail/closeHdrLab 体内
+    //     会写 sensorRevealRect/hdrRevealRect 做收起清场 → 声明滞后即触发前向引用编译错误(CI pre1)。
+    var sensorRevealRect by remember { mutableStateOf<Rect?>(null) }
+    var hdrRevealRect by remember { mutableStateOf<Rect?>(null) }
+    var overlayRootInWindow by remember { mutableStateOf(Offset.Zero) }
+
     fun openSensorDetail(sensor: com.rb.cybermonitorpro.data.model.SensorItemInfo) {
         selectedSensorForDetail = sensor
         showSensorDetail = true
@@ -407,17 +421,6 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     val floatReveal = rememberCircularRevealState()
     var settingsOrigin by remember { mutableStateOf(Offset.Zero) }
     var floatOrigin by remember { mutableStateOf(Offset.Zero) }
-
-    // ── F3-flow: 传感器/HDR 覆盖层"一镜到底"转场起点 ──
-    //   sensorRevealRect/hdrRevealRect = 触发卡片(或入口行)的窗口矩形 boundsInWindow;
-    //   overlayRootInWindow            = 覆盖层宿主(Scaffold 内容 Box)的窗口原点 positionInWindow();
-    //   两者相减得到覆盖层局部坐标系里的起点矩形, 交给容器外层 Modifier.layout 做逐帧矩形插值。
-    //   null = 无卡片来源(冷开/来源未上报) → 容器退化为居中 0.3 倍起点(等价旧中心缩放观感)。
-    //   ★ 这三个都是普通 State(非 Animatable), 可在组合期读; 主时钟 sensorProgress/hdrProgress 仍只在 layout/draw 内读。
-    //   ★ 原 pre7 起"只写不读"的死状态(Offset 版 reveal origin)已删除, 由 sensorRevealRect 取代。
-    var sensorRevealRect by remember { mutableStateOf<Rect?>(null) }
-    var hdrRevealRect by remember { mutableStateOf<Rect?>(null) }
-    var overlayRootInWindow by remember { mutableStateOf(Offset.Zero) }
 
     // 兜底原点: 触发点未上报时从右上角按钮区展开（与悬浮窗/设置按钮同区, CAMP 二轮修复:
     //   原屏幕中心兜底导致冷启动首开圆形从中心展开, 与按钮位置脱节）
