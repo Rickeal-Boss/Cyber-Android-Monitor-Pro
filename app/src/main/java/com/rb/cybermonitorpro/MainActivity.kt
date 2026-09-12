@@ -245,11 +245,19 @@ private val CARD_EXIT_SPEC  = tween<Float>(durationMillis = 450, easing = FastOu
 private val BG_BLUR_MAX_DP = 10.dp
 
 /**
- * 卡片 ↔ 详情"交还"窗口(占主时钟的比例): 最后这一段里容器背景与内容【一起】溶解到 0,
- * 交还给底下真卡片。二者必须同步 —— 旧实现内容在 p<0.25 就归零而背景仍有 0.92 不透明度,
- * 于是最后阶段只剩一个不透明空壳盖在真卡片上("空壳无内容")。
+ * 卡片 ↔ 详情"交还"窗口(占主时钟的比例): 最后这一段里容器表面变【半透明】,
+ * 让底下真卡片/列表透出, 与仍完整可见的详情内容【画面叠加】(对齐参考效果的一镜到底收尾)。
+ * ⚠️ 不能让内容也一起淡掉 —— 那会把"叠加"变成"消失", 末段只剩空壳。
+ * 表面不必降到 0: 容器 p=0 时与真卡片同位同尺寸、且 CyberCardStart 与卡片色相同,
+ * 因此交还结束时容器直接移除也不会有色跳/闪变。
  */
 private const val HANDOFF_FRACTION = 0.18f
+
+/** 交还末段容器表面的【最低】不透明度(p=0 时), 其余线性回到 0.92。 */
+private const val HANDOFF_MIN_SURFACE = 0.35f
+
+/** 详情内容在收起末段的淡出窗口(占主时钟比例) —— 比表面窗口更窄、更靠后。 */
+private const val CONTENT_FADE_FRACTION = 0.10f
 
 /** 赛博风格线条矢量图标 — 与 Tab 含义一一对应 */
 private val topTabIcons = listOf(
@@ -531,6 +539,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         val hdrStart = if (showHdrLab) hdrProgress.value else 0f
         try {
             var receivedProgress = false      // ★ 是否收到过跟手进度事件
+            // ★ 跟手拖拽期间背景可见 → 同样开模糊(半径随拖拽进度渐变, 与按钮返回/打开收起体验一致,
+            //   避免同一转场在"按钮返回"与"手势返回"两种路径下模糊表现割裂)。
+            //   若无进度事件(ROM 不支持)会走下方 closeXxx/close 分支, 该处会再次置位/复位, 无副作用。
+            bgBlurActive = true
             progress.collect { event ->
                 receivedProgress = true
                 backProgress.snapTo(event.progress)
@@ -568,6 +580,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     selectedSensorForDetail = null
                     sensorAlive = false
                     sensorSettled = false
+                    bgBlurActive = false      // 覆盖层已移除, 关模糊
                     sensorRevealRect = null   // 关闭后清起点矩形, 防下次冷开复用陈旧矩形
                 }
                 showHdrLab -> {
@@ -577,6 +590,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     showHdrLab = false
                     hdrAlive = false
                     hdrSettled = false
+                    bgBlurActive = false      // 覆盖层已移除, 关模糊
                     hdrRevealRect = null      // 同上
                 }
                 showSettings -> {
@@ -601,6 +615,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 hdrProgress.animateTo(1f, CARD_ENTRY_SPEC)
                 hdrScrim.animateTo(1f, CARD_ENTRY_SPEC)
             }
+            // 回弹完成 → 容器重新铺满, 背景不可见 → 关模糊 (bgBlurActive 会在下次拖拽/收起时再开)
+            bgBlurActive = false
         }
     }
 
@@ -810,10 +826,11 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 clip = true
                             }
                             .drawBehind {
-                                // 与传感器覆盖层同款: 首段 HANDOFF 渐入(让入口行透出) → 中段恒定不透明 → 收尾渐出交还。
+                                // 与传感器覆盖层同款: 末段 HANDOFF 内表面 0.92 → 0.35 半透明, 让目标画面透出叠加。
                                 drawRect(
                                     color = CyberCardStart,
-                                    alpha = 0.92f * ((hdrProgress.value / HANDOFF_FRACTION).coerceIn(0f, 1f))
+                                    alpha = 0.92f - (0.92f - HANDOFF_MIN_SURFACE) *
+                                        ((1f - hdrProgress.value / HANDOFF_FRACTION).coerceIn(0f, 1f))
                                 )
                             }
                         ) {
@@ -821,9 +838,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             Box(Modifier.fillMaxSize()
                                 .graphicsLayer {
                                     val p = hdrProgress.value
-                                    // ★ 同传感器: 内容与 bg 在【同一个 HANDOFF 窗口】一起溶解, 避免收起末段出现不透明空壳。
-                                    val handoff = (p / HANDOFF_FRACTION).coerceIn(0f, 1f)
-                                    val ca = ((p - 0.10f) / 0.90f).coerceIn(0f, 1f) * handoff
+                                    // ★ 同传感器: 内容全程可见, 仅最后 10% 快速淡出 → 收尾是"叠加"而非"消失"。
+                                    val ca = ((p - 0.06f) / 0.10f).coerceIn(0f, 1f) *
+                                        ((p / CONTENT_FADE_FRACTION).coerceIn(0f, 1f))
                                     alpha = ca
                                     translationY = (1f - ca) * 24.dp.toPx()
                                 }
@@ -915,12 +932,13 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                     clip = true
                                 }
                                 .drawBehind {
-                                    // bg alpha = 首段 HANDOFF 内快速升满, 之后恒定 —— p=0 时 alpha=0 让真卡片透出
-                                    // (容器此时正好与卡片同位同尺寸), 随后表面接管; 收起时反向在最后 HANDOFF 交还卡片。
-                                    // 中段恒定不透明 = "卡片本身在长大", 而非内容悬浮在列表上。
+                                    // bg alpha = 首段 HANDOFF 内升满(0.35→0.92, 起点半透明让真卡片透出, 同色无色跳);
+                                    // 末段 HANDOFF 内 0.92 → 0.35(半透明) —— 让底下目标画面透出与内容【叠加】,
+                                    // 表面不降到 0: p=0 时容器与真卡片同位同尺寸同色, 直接移除也不闪变。
                                     drawRect(
                                         color = CyberCardStart,
-                                        alpha = 0.92f * ((sensorProgress.value / HANDOFF_FRACTION).coerceIn(0f, 1f))
+                                        alpha = 0.92f - (0.92f - HANDOFF_MIN_SURFACE) *
+                                            ((1f - sensorProgress.value / HANDOFF_FRACTION).coerceIn(0f, 1f))
                                     )
                                 }
                             ) {
@@ -928,11 +946,14 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 Box(Modifier.fillMaxSize()
                                     .graphicsLayer {
                                         val p = sensorProgress.value
-                                        // ★ 修"最后阶段空壳": 内容 alpha 必须与容器 bg 在【同一个 HANDOFF 窗口】一起溶解。
-                                        //   旧实现内容在 p<0.25 就归零、而 bg 仍有 0.92 不透明度 →
-                                        //   收起末段只剩一个不透明空壳盖在真卡片上, 看起来"卡片里是空的"。
-                                        val handoff = (p / HANDOFF_FRACTION).coerceIn(0f, 1f)
-                                        val ca = ((p - 0.10f) / 0.90f).coerceIn(0f, 1f) * handoff
+                                        // ★ 交还=画面叠加(对齐参考): 内容【全程保持可见】, 只在最后 CONTENT_FADE
+                                        //   快速淡出 —— 此时表面已半透明、真卡片已透出, 不会出现空壳。
+                                        //   旧写法 (p-0.10)/0.90 * (p/0.18) 会让内容在中段就很淡, 末段直接消失,
+                                        //   叠加感全无(用户实测否决)。
+                                        // 进场: p=0.06 起淡入, p=0.16 即全亮(表面此时恰已不透明, 无空壳窗口);
+                                        // 出场: 仅最后 10% 快速淡出(表面已半透明、真卡片已透出)。
+                                        val ca = ((p - 0.06f) / 0.10f).coerceIn(0f, 1f) *
+                                            ((p / CONTENT_FADE_FRACTION).coerceIn(0f, 1f))
                                         alpha = ca
                                         translationY = (1f - ca) * 24.dp.toPx()
                                     }
