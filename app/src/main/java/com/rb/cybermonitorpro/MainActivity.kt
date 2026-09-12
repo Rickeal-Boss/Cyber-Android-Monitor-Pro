@@ -35,8 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.BlurredEdgeTreatment
+import android.graphics.RenderEffect
+import android.graphics.Shader
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -234,12 +234,19 @@ private val CARD_ENTRY_SPEC = tween<Float>(durationMillis = 550, easing = FastOu
 private val CARD_EXIT_SPEC  = tween<Float>(durationMillis = 450, easing = FastOutSlowInEasing)
 
 /**
- * 转场期间"其它地方"的【静态模糊】半径 —— 固定强度, 不随动画进度插值(故称静态)。
- * 目的: 卡片/覆盖层长大展开时, 背后主界面退为模糊背景, 视觉焦点落在正在展开的那一块。
- * 依赖: Compose 的 Modifier.blur 底层是 Android 12(API 31)+ 的 RenderEffect; API < 31 为 no-op,
- *       自动降级为"仅 scrim 压暗", 不影响功能(作用处已用 Build.VERSION.SDK_INT 显式守卫)。
+ * 转场期间"其它地方"的模糊【最大】半径 —— 实际半径由过渡主时钟插值 0 → 本值(即随动画渐变, 非固定强度)。
+ * 依赖: RenderEffect(Android 12 / API 31+); API < 31 不挂层, 自动降级为仅 scrim 压暗。
+ * 实现: 必须走 graphicsLayer{ renderEffect } 而非 Modifier.blur —— 后者是 modifier 参数,
+ *       改强度要重组(会打断转场); 前者在 draw 阶段按帧改半径, 零重组。
  */
-private val BG_BLUR_RADIUS = 16.dp
+private val BG_BLUR_MAX_DP = 10.dp
+
+/**
+ * 卡片 ↔ 详情"交还"窗口(占主时钟的比例): 最后这一段里容器背景与内容【一起】溶解到 0,
+ * 交还给底下真卡片。二者必须同步 —— 旧实现内容在 p<0.25 就归零而背景仍有 0.92 不透明度,
+ * 于是最后阶段只剩一个不透明空壳盖在真卡片上("空壳无内容")。
+ */
+private const val HANDOFF_FRACTION = 0.18f
 
 /** 赛博风格线条矢量图标 — 与 Tab 含义一一对应 */
 private val topTabIcons = listOf(
@@ -372,13 +379,21 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     // ── 背景静态模糊开关(仅传感器/HDR 转场期间用) ──
     //   只有"背景确实可见"时才开, 避免给被不透明容器完全遮挡的场景白付 GPU 开销:
     //   传感器/HDR 容器长大铺满后背景不可见 → 关掉; 收起动画开始 → 再打开。
-    //   设置/悬浮窗覆盖层是 0.85 半透明, 背景全程可见 → 由 showSettings/showFloatConfig 直接判(见 bgBlurVisible)。
+    //   设置/悬浮窗覆盖层是 0.85 半透明, 背景全程可见 → 由其 showXxx/isRevealing 直接判(见背景模糊 gate)。
     var bgBlurActive by remember { mutableStateOf(false) }
+
+    // ── 可打断过渡: 转场是否【已稳定】(容器已铺满、动画播完) ──
+    //   true 时才由覆盖层根 Box 吃掉点击、隔绝主界面(既有 P1 行为);
+    //   false(转场进行中) 不拦截 → 底层卡片可响应点击并打断当前动画,
+    //   与设置/悬浮窗覆盖层(半透明、无点击吸收层, 转场中可穿透点击)行为保持一致。
+    var sensorSettled by remember { mutableStateOf(false) }
+    var hdrSettled by remember { mutableStateOf(false) }
 
     fun openSensorDetail(sensor: com.rb.cybermonitorpro.data.model.SensorItemInfo) {
         selectedSensorForDetail = sensor
         showSensorDetail = true
         sensorAlive = true
+        sensorSettled = false                                                   // ★ 转场中: 不拦截点击 → 可被打断
         bgBlurActive = true                                                     // ★ 转场期间背后主界面静态模糊
         scope.launch {
             // ★ 容器变换二轮(F3-flow): 两时钟【并行】—— 背景压暗与卡片长大同步进行,
@@ -388,10 +403,12 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             val dim = launch { sensorScrim.animateTo(1f, CARD_ENTRY_SPEC) }      // ② 背景同步压暗
             geo.join(); dim.join()
             bgBlurActive = false    // 容器已铺满全屏, 背后不可见 → 关掉模糊, 省 GPU 与电量
+            sensorSettled = true    // 转场稳定 → 恢复点击隔绝
         }
     }
 
     fun closeSensorDetail() {
+        sensorSettled = false       // ★ 收起过程中同样不拦截 → 可被打断
         bgBlurActive = true         // 收起过程中背景重新露出 → 开模糊
         scope.launch {
             sensorScrim.animateTo(0f, CARD_EXIT_SPEC)       // ① 先移除隔绝
@@ -420,6 +437,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         showHdrLab = true
         hdrAlive = true
         hdrSurfacesVisible = false
+        hdrSettled = false                                                      // ★ 同传感器: 转场中不拦截点击
         bgBlurActive = true                                                     // ★ 同上(传感器)
         scope.launch {
             // ★ 容器变换二轮: 与 openSensorDetail 同款并行编排 (几何与压暗同步)。
@@ -427,12 +445,14 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             val dim = launch { hdrScrim.animateTo(1f, CARD_ENTRY_SPEC) }         // ② 背景同步压暗
             geo.join(); dim.join()
             bgBlurActive = false    // 容器已铺满, 关模糊
+            hdrSettled = true       // 转场稳定 → 恢复点击隔绝
             hdrSurfacesVisible = true   // 两个动画都完成后才挂载 SurfaceView, 防 punch-through 突跳
         }
     }
 
     fun closeHdrLab() {
         hdrSurfacesVisible = false     // 先卸载, 再播退出遮罩
+        hdrSettled = false             // ★ 收起过程中不拦截 → 可被打断
         bgBlurActive = true            // 收起过程中背景重新露出 → 开模糊
         scope.launch {
             hdrScrim.animateTo(0f, CARD_EXIT_SPEC)          // ① 先移除隔绝
@@ -538,6 +558,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     showSensorDetail = false
                     selectedSensorForDetail = null
                     sensorAlive = false
+                    sensorSettled = false
                     sensorRevealRect = null   // 关闭后清起点矩形, 防下次冷开复用陈旧矩形
                 }
                 showHdrLab -> {
@@ -546,6 +567,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     hdrScrim.snapTo(0f)
                     showHdrLab = false
                     hdrAlive = false
+                    hdrSettled = false
                     hdrRevealRect = null      // 同上
                 }
                 showSettings -> {
@@ -595,15 +617,28 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             SharedTransitionLayout {
                 CompositionLocalProvider(LocalSharedTransitionScope provides this@SharedTransitionLayout) {
             // ★ 主 Tab 页始终保持在 composition 中，保留所有滚动状态
-            //   背景静态模糊: 转场进行中 / 半透明覆盖层打开时, 把主界面退为固定强度的模糊背景,
-            //   使视觉焦点落在正在长大的卡片(或正在展开的覆盖层)上。半径固定不插值(静态);
-            //   API < 31 无 RenderEffect → Modifier.blur 为 no-op, 自动降级为仅 scrim 压暗。
-            val bgBlurVisible = bgBlurActive || showSettings || showFloatConfig
+            //   背景模糊(随动画渐变): 把主界面包一层, 用 graphicsLayer + RenderEffect 按帧插值模糊半径,
+            //   使焦点随卡片长大/覆盖层展开而逐步转移到前景。半径 0 → BG_BLUR_MAX_DP, 非固定强度;
+            //   API < 31 无 RenderEffect → 整层不挂, 自动降级为仅 scrim 压暗。
             Box(
                 Modifier.fillMaxSize().then(
-                    if (bgBlurVisible && Build.VERSION.SDK_INT >= 31)
-                        Modifier.blur(BG_BLUR_RADIUS, BlurredEdgeTreatment.Unbounded)
-                    else Modifier
+                    if (Build.VERSION.SDK_INT >= 31) Modifier.graphicsLayer {
+                        // 各覆盖层取各自的过渡主时钟; isRevealing/Alive 用于覆盖"已置 showXxx=false 但仍在退场"的阶段
+                        val p = when {
+                            showSettings || settingsReveal.isRevealing -> settingsReveal.progress.value
+                            showFloatConfig || floatReveal.isRevealing -> floatReveal.progress.value
+                            showSensorDetail || sensorAlive -> sensorProgress.value
+                            showHdrLab || hdrAlive -> hdrProgress.value
+                            else -> 0f
+                        }
+                        // 传感器/HDR 容器铺满后由 bgBlurActive=false 兜底, 不给不可见背景白付 GPU
+                        val gate = bgBlurActive || showSettings || settingsReveal.isRevealing ||
+                            showFloatConfig || floatReveal.isRevealing
+                        val radiusPx = if (gate) BG_BLUR_MAX_DP.toPx() * p.coerceIn(0f, 1f) else 0f
+                        // 量化到 0.5px: 减少每帧新建 RenderEffect 对象的分配
+                        val q = (radiusPx * 2f).toInt() / 2f
+                        renderEffect = if (q > 0.5f) RenderEffect.createBlurEffect(q, q, Shader.TileMode.CLAMP) else null
+                    } else Modifier
                 )
             ) {
             MainTabs(
@@ -706,8 +741,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             //   渲染条件读 hdrAlive State; 预测返回手势 snapTo 跟手、取消回弹 1f。
             if (hdrAlive || showHdrLab) {
                 // P1: 覆盖层根 Box 消费点击, 隔绝主界面触摸 (内部交互仍由子节点优先消费)
+                // ★ 可打断过渡: 仅在 hdrSettled(转场已稳定/容器铺满) 时才吃点击 ——
+                //   转场进行中不拦截, 底层入口行/卡片可响应点击并打断当前动画(对齐设置/悬浮窗覆盖层行为)。
                 Box(Modifier.fillMaxSize()
-                    .pointerInput(Unit) { detectTapGestures { } }
+                    .then(if (hdrSettled) Modifier.pointerInput(Unit) { detectTapGestures { } } else Modifier)
                 ) {
                     // ① scrim: 全屏压暗层 (alpha 由 hdrScrim 驱动, 二次曲线半透明; 打开时与 hdrProgress【并行】压暗, 关闭时 scrim 先解除→容器后收起)
                     //   pre12 修复: 改 drawBehind 直接以目标 alpha 画黑矩形, 取代 "background(Color.Black)+graphicsLayer{alpha}" —
@@ -762,10 +799,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 clip = true
                             }
                             .drawBehind {
-                                // 与传感器覆盖层同款: 首段 15% 渐入(让入口行透出) → 中段恒定不透明 → 收尾渐出交还。
+                                // 与传感器覆盖层同款: 首段 HANDOFF 渐入(让入口行透出) → 中段恒定不透明 → 收尾渐出交还。
                                 drawRect(
                                     color = CyberCardStart,
-                                    alpha = 0.92f * ((hdrProgress.value / 0.15f).coerceIn(0f, 1f))
+                                    alpha = 0.92f * ((hdrProgress.value / HANDOFF_FRACTION).coerceIn(0f, 1f))
                                 )
                             }
                         ) {
@@ -773,7 +810,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             Box(Modifier.fillMaxSize()
                                 .graphicsLayer {
                                     val p = hdrProgress.value
-                                    val ca = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
+                                    // ★ 同传感器: 内容与 bg 在【同一个 HANDOFF 窗口】一起溶解, 避免收起末段出现不透明空壳。
+                                    val handoff = (p / HANDOFF_FRACTION).coerceIn(0f, 1f)
+                                    val ca = ((p - 0.10f) / 0.90f).coerceIn(0f, 1f) * handoff
                                     alpha = ca
                                     translationY = (1f - ca) * 24.dp.toPx()
                                 }
@@ -806,8 +845,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 if (sensor != null) {
                     val density = LocalDensity.current
                     // P1: 覆盖层根 Box 消费点击, 隔绝主界面触摸 (内部交互仍由子节点优先消费)
+                    // ★ 可打断过渡: 同上, 仅在 sensorSettled(转场已稳定) 时才吃点击。
                     Box(Modifier.fillMaxSize()
-                        .pointerInput(Unit) { detectTapGestures { } }
+                        .then(if (sensorSettled) Modifier.pointerInput(Unit) { detectTapGestures { } } else Modifier)
                     ) {
                         // ① scrim: 全屏压暗层 (alpha 由 sensorScrim 驱动, 二次曲线半透明; 打开时与 sensorProgress【并行】压暗, 关闭时 scrim 先解除→容器后收起)
                         //   pre12 修复: 同 HDR scrim, 改 drawBehind 直接以目标 alpha 画黑矩形, 根除黑闪。
@@ -864,12 +904,12 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                     clip = true
                                 }
                                 .drawBehind {
-                                    // bg alpha = 首段 15% 内快速升满, 之后恒定 —— p=0 时 alpha=0 让真卡片透出
-                                    // (容器此时正好与卡片同位同尺寸), 随后表面接管; 收起时反向在最后 15% 交还卡片。
+                                    // bg alpha = 首段 HANDOFF 内快速升满, 之后恒定 —— p=0 时 alpha=0 让真卡片透出
+                                    // (容器此时正好与卡片同位同尺寸), 随后表面接管; 收起时反向在最后 HANDOFF 交还卡片。
                                     // 中段恒定不透明 = "卡片本身在长大", 而非内容悬浮在列表上。
                                     drawRect(
                                         color = CyberCardStart,
-                                        alpha = 0.92f * ((sensorProgress.value / 0.15f).coerceIn(0f, 1f))
+                                        alpha = 0.92f * ((sensorProgress.value / HANDOFF_FRACTION).coerceIn(0f, 1f))
                                     )
                                 }
                             ) {
@@ -877,7 +917,11 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 Box(Modifier.fillMaxSize()
                                     .graphicsLayer {
                                         val p = sensorProgress.value
-                                        val ca = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
+                                        // ★ 修"最后阶段空壳": 内容 alpha 必须与容器 bg 在【同一个 HANDOFF 窗口】一起溶解。
+                                        //   旧实现内容在 p<0.25 就归零、而 bg 仍有 0.92 不透明度 →
+                                        //   收起末段只剩一个不透明空壳盖在真卡片上, 看起来"卡片里是空的"。
+                                        val handoff = (p / HANDOFF_FRACTION).coerceIn(0f, 1f)
+                                        val ca = ((p - 0.10f) / 0.90f).coerceIn(0f, 1f) * handoff
                                         alpha = ca
                                         translationY = (1f - ca) * 24.dp.toPx()
                                     }
