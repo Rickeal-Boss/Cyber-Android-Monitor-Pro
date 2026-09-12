@@ -37,6 +37,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import android.graphics.RenderEffect
 import android.graphics.Shader
+// ★ Compose 有自己的 RenderEffect 包装类型(androidx.compose.ui.graphics.RenderEffect),
+//   GraphicsLayerScope.renderEffect 要的是后者, 故 android.graphics 版需经此扩展转换。
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -637,7 +640,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         val radiusPx = if (gate) BG_BLUR_MAX_DP.toPx() * p.coerceIn(0f, 1f) else 0f
                         // 量化到 0.5px: 减少每帧新建 RenderEffect 对象的分配
                         val q = (radiusPx * 2f).toInt() / 2f
-                        renderEffect = if (q > 0.5f) RenderEffect.createBlurEffect(q, q, Shader.TileMode.CLAMP) else null
+                        renderEffect = if (q > 0.5f)
+                            RenderEffect.createBlurEffect(q, q, Shader.TileMode.CLAMP).asComposeRenderEffect()
+                        else null
                     } else Modifier
                 )
             ) {
