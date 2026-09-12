@@ -35,6 +35,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -231,6 +233,14 @@ private data class TopTabItem(val title: String, val iconRes: Int)
 private val CARD_ENTRY_SPEC = tween<Float>(durationMillis = 550, easing = FastOutSlowInEasing)
 private val CARD_EXIT_SPEC  = tween<Float>(durationMillis = 450, easing = FastOutSlowInEasing)
 
+/**
+ * 转场期间"其它地方"的【静态模糊】半径 —— 固定强度, 不随动画进度插值(故称静态)。
+ * 目的: 卡片/覆盖层长大展开时, 背后主界面退为模糊背景, 视觉焦点落在正在展开的那一块。
+ * 依赖: Compose 的 Modifier.blur 底层是 Android 12(API 31)+ 的 RenderEffect; API < 31 为 no-op,
+ *       自动降级为"仅 scrim 压暗", 不影响功能(作用处已用 Build.VERSION.SDK_INT 显式守卫)。
+ */
+private val BG_BLUR_RADIUS = 16.dp
+
 /** 赛博风格线条矢量图标 — 与 Tab 含义一一对应 */
 private val topTabIcons = listOf(
     R.drawable.ic_cyber_dashboard,
@@ -359,10 +369,17 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     var hdrRevealRect by remember { mutableStateOf<Rect?>(null) }
     var overlayRootInWindow by remember { mutableStateOf(Offset.Zero) }
 
+    // ── 背景静态模糊开关(仅传感器/HDR 转场期间用) ──
+    //   只有"背景确实可见"时才开, 避免给被不透明容器完全遮挡的场景白付 GPU 开销:
+    //   传感器/HDR 容器长大铺满后背景不可见 → 关掉; 收起动画开始 → 再打开。
+    //   设置/悬浮窗覆盖层是 0.85 半透明, 背景全程可见 → 由 showSettings/showFloatConfig 直接判(见 bgBlurVisible)。
+    var bgBlurActive by remember { mutableStateOf(false) }
+
     fun openSensorDetail(sensor: com.rb.cybermonitorpro.data.model.SensorItemInfo) {
         selectedSensorForDetail = sensor
         showSensorDetail = true
         sensorAlive = true
+        bgBlurActive = true                                                     // ★ 转场期间背后主界面静态模糊
         scope.launch {
             // ★ 容器变换二轮(F3-flow): 两时钟【并行】—— 背景压暗与卡片长大同步进行,
             //   对齐参考效果"卡片从原位放大的同时背景逐渐压暗"。旧实现串行(容器先展开→scrim 后到位)
@@ -370,10 +387,12 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             val geo = launch { sensorProgress.animateTo(1f, CARD_ENTRY_SPEC) }   // ① 容器从卡片矩形长大
             val dim = launch { sensorScrim.animateTo(1f, CARD_ENTRY_SPEC) }      // ② 背景同步压暗
             geo.join(); dim.join()
+            bgBlurActive = false    // 容器已铺满全屏, 背后不可见 → 关掉模糊, 省 GPU 与电量
         }
     }
 
     fun closeSensorDetail() {
+        bgBlurActive = true         // 收起过程中背景重新露出 → 开模糊
         scope.launch {
             sensorScrim.animateTo(0f, CARD_EXIT_SPEC)       // ① 先移除隔绝
             sensorProgress.animateTo(0f, CARD_EXIT_SPEC)    // ② 再播容器收起动画 (收起终点=起点矩形, 故此处不能提前清 rect)
@@ -381,6 +400,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             selectedSensorForDetail = null
             sensorAlive = false
             sensorRevealRect = null                         // ③ 收起完成, 清起点矩形
+            bgBlurActive = false                            // ④ 收起结束, 关模糊
         }
     }
 
@@ -400,23 +420,27 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         showHdrLab = true
         hdrAlive = true
         hdrSurfacesVisible = false
+        bgBlurActive = true                                                     // ★ 同上(传感器)
         scope.launch {
             // ★ 容器变换二轮: 与 openSensorDetail 同款并行编排 (几何与压暗同步)。
             val geo = launch { hdrProgress.animateTo(1f, CARD_ENTRY_SPEC) }      // ① 容器从入口行矩形长大
             val dim = launch { hdrScrim.animateTo(1f, CARD_ENTRY_SPEC) }         // ② 背景同步压暗
             geo.join(); dim.join()
+            bgBlurActive = false    // 容器已铺满, 关模糊
             hdrSurfacesVisible = true   // 两个动画都完成后才挂载 SurfaceView, 防 punch-through 突跳
         }
     }
 
     fun closeHdrLab() {
         hdrSurfacesVisible = false     // 先卸载, 再播退出遮罩
+        bgBlurActive = true            // 收起过程中背景重新露出 → 开模糊
         scope.launch {
             hdrScrim.animateTo(0f, CARD_EXIT_SPEC)          // ① 先移除隔绝
             hdrProgress.animateTo(0f, CARD_EXIT_SPEC)       // ② 再播容器收起动画 (收起终点=起点矩形, 故此处不能提前清 rect)
             showHdrLab = false
             hdrAlive = false
             hdrRevealRect = null                            // ③ 收起完成, 清起点矩形
+            bgBlurActive = false                            // ④ 收起结束, 关模糊
         }
     }
 
@@ -458,7 +482,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     //   设置/悬浮窗 → 水波纹圆形收缩 (settingsReveal/floatReveal.progress);
     //   传感器/HDR → 卡片矩形收缩 (sensorProgress/hdrProgress, 布局期矩形插值)。
     //   放开手: 完成 → 收缩到底并关闭; 中途取消 → 回弹至 1f。
-    //   不支持预测的 ROM flow 为空 → 立即完成, 等价普通 BackHandler。
+    //   ★ 无进度事件时(ROM 不支持/被阉割预测动画、或实体/导航栏返回键)不再 snapTo(0) 吞掉动画,
+    //     而是改走与"按返回键"完全相同的完整退场动画(closeXxx / circularReveal.collapse)。
     //
     //   国产 ROM (MIUI/ColorOS/OriginOS/HarmonyOS) 兼容性策略:
     //   1. AndroidManifest application+activity 均已声明 enableOnBackInvokedCallback="true"
@@ -476,7 +501,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         val sensorStart = if (showSensorDetail) sensorProgress.value else 0f
         val hdrStart = if (showHdrLab) hdrProgress.value else 0f
         try {
+            var receivedProgress = false      // ★ 是否收到过跟手进度事件
             progress.collect { event ->
+                receivedProgress = true
                 backProgress.snapTo(event.progress)
                 val t = 1f - event.progress
                 if (showSettings) settingsReveal.progress.snapTo((settingsStart * t).coerceIn(0f, 1f))
@@ -490,7 +517,19 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     hdrScrim.snapTo((hdrStart * t * t).coerceIn(0f, 1f))
                 }
             }
-            // 手势完成 — 各覆盖层收缩到底后关闭, 重置进度
+            // ★ 无预测性返回进度: ROM 不支持预测动画 / 被阉割 / 实体或导航栏返回键 →
+            //   绝不能把主时钟 snapTo(0) 直接吞掉动画, 必须播与"按返回键"完全一致的完整退场动画。
+            if (!receivedProgress) {
+                backProgress.snapTo(0f)
+                when {
+                    showSensorDetail -> closeSensorDetail()   // scrim→0 后 progress→0, 容器收回卡片
+                    showHdrLab -> closeHdrLab()
+                    showSettings -> showSettings = false      // LaunchedEffect 触发 settingsReveal.collapse()
+                    showFloatConfig -> showFloatConfig = false
+                }
+                return@PredictiveBackHandler
+            }
+            // 手势完成 — 各覆盖层已被手指拖到收缩态, 直接收尾(动画已由跟手过程播完)
             backProgress.snapTo(0f)
             when {
                 showSensorDetail -> {
@@ -556,6 +595,17 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             SharedTransitionLayout {
                 CompositionLocalProvider(LocalSharedTransitionScope provides this@SharedTransitionLayout) {
             // ★ 主 Tab 页始终保持在 composition 中，保留所有滚动状态
+            //   背景静态模糊: 转场进行中 / 半透明覆盖层打开时, 把主界面退为固定强度的模糊背景,
+            //   使视觉焦点落在正在长大的卡片(或正在展开的覆盖层)上。半径固定不插值(静态);
+            //   API < 31 无 RenderEffect → Modifier.blur 为 no-op, 自动降级为仅 scrim 压暗。
+            val bgBlurVisible = bgBlurActive || showSettings || showFloatConfig
+            Box(
+                Modifier.fillMaxSize().then(
+                    if (bgBlurVisible && Build.VERSION.SDK_INT >= 31)
+                        Modifier.blur(BG_BLUR_RADIUS, BlurredEdgeTreatment.Unbounded)
+                    else Modifier
+                )
+            ) {
             MainTabs(
                 pagerState = pagerState,
                 scope = scope,
@@ -579,6 +629,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     openHdrLab()
                 }
             )
+            } // end 背景静态模糊 Box
 
             // ── 覆盖层 (graphicsLayer 透明动画, 保持 composition 存活) ──
             // 使用 graphicsLayer.alpha 替代 AnimatedVisibility:
