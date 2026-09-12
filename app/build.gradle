@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace 'com.rb.cybermonitorpro'
-    compileSdk 36   // AGP9 上限 36.1；BOM 2025.06.00 + 内置 Kotlin 2.2.10 要求 compileSdk ≥ 36；targetSdk 同步 36（Android 16，满足 2026-08-31 Play 目标 API 截止）
+    compileSdk 36   // AGP9 上限 36.1；BOM 2025.11.01 (Compose 1.9.5) + 内置 Kotlin 2.2.10 要求 compileSdk ≥ 36；targetSdk 同步 36（Android 16，满足 2026-08-31 Play 目标 API 截止）
 
     // ★ 新增 (2026-08-07): NDK — Vulkan 真实扩展枚举探针 libcybervulkan.so
     //   显式 pin 版本，避免 CI 与本地 NDK 漂移导致的不可复现构建。
@@ -130,7 +130,10 @@ dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
     implementation 'io.insert-koin:koin-android:3.5.6'
     implementation 'io.insert-koin:koin-androidx-compose:3.5.6'
-    implementation platform('androidx.compose:compose-bom:2025.06.00')
+    // ★ Compose BOM 2025.11.01 = Compose 1.9.5 (compose.animation/foundation 1.9.5、compose.material3 1.4.0)。
+    //   选 2025.11.01 的理由: 这是本项目 minSdk 21 天花板内的最新一版 —— 再往上 (Compose 1.10.0 起)
+    //   默认 minSdk 抬到 23, 与本项目 minSdk 21 冲突。故此处不上探, 也不加任何 resolutionStrategy.force/strictly。
+    implementation platform('androidx.compose:compose-bom:2025.11.01')
     implementation 'androidx.compose.ui:ui'
     implementation 'androidx.compose.ui:ui-graphics'
     implementation 'androidx.compose.ui:ui-tooling-preview'
