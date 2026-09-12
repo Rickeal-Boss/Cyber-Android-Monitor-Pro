@@ -359,9 +359,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     //   手势取消: animateTo(1f) 回弹 / 完成或返回键: animateTo(0f) 后移出组合。
     //   渲染条件用 sensorAlive(keepAlive 守卫)，绝不读 sensorProgress.value 组合判断 → 零重组。
     //   scrim(sensorScrim) 与容器进度仍是两个 Animatable(预测返回各自 snapTo), 但打开时【并行】推进:
-    //   卡片长大的同时背景同步压暗 (容器变换二轮, 对齐参考效果); 关闭时 scrim 先解除→容器后收起。
+    //   卡片长大的同时背景同步压暗 (容器变换二轮, 对齐参考效果); 关闭时两时钟【并行】解除, 返回键即时响应。
     val sensorProgress = remember { Animatable(0f) }
-    // scrim 主时钟: 打开时与 sensorProgress 并行 animateTo; 关闭时先解除→容器后收起
+    // scrim 主时钟: 打开/关闭均与 sensorProgress 并行 animateTo (返回键即时响应)
     val sensorScrim = remember { Animatable(0f) }
     var sensorAlive by remember { mutableStateOf(false) }
 
@@ -414,8 +414,12 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         sensorSettled = false       // ★ 收起过程中同样不拦截 → 可被打断
         bgBlurActive = true         // 收起过程中背景重新露出 → 开模糊
         scope.launch {
-            sensorScrim.animateTo(0f, CARD_EXIT_SPEC)       // ① 先移除隔绝
-            sensorProgress.animateTo(0f, CARD_EXIT_SPEC)    // ② 再播容器收起动画 (收起终点=起点矩形, 故此处不能提前清 rect)
+            // ★ 返回键即时响应: 两时钟【并行】。旧实现串行(scrim 先 450ms → 容器再 450ms),
+            //   而容器铺满时 scrim 在它背后、根本不可见 → 按下返回键后有约 450ms 视觉上毫无反应(像卡顿)。
+            //   并行后容器在按下当帧就开始收起; scrim 同步淡出, 背景随容器收缩而逐渐露出(对齐参考效果)。
+            val dim = launch { sensorScrim.animateTo(0f, CARD_EXIT_SPEC) }   // 背景同步解除压暗
+            val geo = launch { sensorProgress.animateTo(0f, CARD_EXIT_SPEC) } // 容器收回到起点矩形
+            dim.join(); geo.join()
             showSensorDetail = false
             selectedSensorForDetail = null
             sensorAlive = false
@@ -429,7 +433,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     //   SurfaceView 延迟到进入动画完成后挂载(防 punch-through 突跳);
     //   预测返回: snapTo 跟手 / 取消回弹 1f / 完成 animateTo(0f) 后移出组合。
     //   scrim(hdrScrim) 与容器进度仍是两个 Animatable(预测返回各自 snapTo), 但打开时【并行】推进
-    //   (容器变换二轮, 同 openSensorDetail); 关闭时 scrim 先解除→容器后收起。
+    //   (容器变换二轮, 同 openSensorDetail); 关闭时两时钟【并行】解除, 返回键即时响应。
     val hdrProgress = remember { Animatable(0f) }
     // scrim 主时钟: 打开时与 hdrProgress 并行 animateTo (见 sensorScrim 注释)
     val hdrScrim = remember { Animatable(0f) }
@@ -458,8 +462,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         hdrSettled = false             // ★ 收起过程中不拦截 → 可被打断
         bgBlurActive = true            // 收起过程中背景重新露出 → 开模糊
         scope.launch {
-            hdrScrim.animateTo(0f, CARD_EXIT_SPEC)          // ① 先移除隔绝
-            hdrProgress.animateTo(0f, CARD_EXIT_SPEC)       // ② 再播容器收起动画 (收起终点=起点矩形, 故此处不能提前清 rect)
+            // ★ 返回键即时响应: 与 closeSensorDetail 同款并行编排(几何与压暗同步)。
+            val dim = launch { hdrScrim.animateTo(0f, CARD_EXIT_SPEC) }      // 背景同步解除压暗
+            val geo = launch { hdrProgress.animateTo(0f, CARD_EXIT_SPEC) }   // 容器收回到入口行矩形
+            dim.join(); geo.join()
             showHdrLab = false
             hdrAlive = false
             hdrRevealRect = null                            // ③ 收起完成, 清起点矩形
@@ -740,8 +746,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             //   无来源(null)时退化为居中 0.3 倍矩形(等价旧观感); 内层圆角 20dp→0 随 *Progress 收口 + clip 裁剪内容。
             //   容器背景(CyberCardStart ×0.92)自 p=0 首段 15% 渐入后恒定不透明(容器变换二轮) —
             //   起始态即被点入口行所在表面, 随几何一起长大; 黑色 scrim 仍由 hdrScrim 驱动并与几何并行压暗,
-            //   打开=容器长大 + 背景同步压暗, 关闭=scrim 先解除→容器后收起;
-            //   关闭=scrim 先解除(背景淡出)→容器后收起; 0.22 scrim 与 bg 同源 (均跟 *Scrim)
+            //   打开=容器长大 + 背景同步压暗; 关闭=容器收起 + 背景同步解除(两时钟并行, 返回键即时响应);
+            //   关闭=容器收起与背景解除同步进行(两时钟并行); 0.22 scrim 与 bg 同源 (均跟 *Scrim)
             //   (hdrSurfacesVisible 门控, 防 punch-through 突跳);
             //   渲染条件读 hdrAlive State; 预测返回手势 snapTo 跟手、取消回弹 1f。
             if (hdrAlive || showHdrLab) {
@@ -751,7 +757,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 Box(Modifier.fillMaxSize()
                     .then(if (hdrSettled) Modifier.pointerInput(Unit) { detectTapGestures { } } else Modifier)
                 ) {
-                    // ① scrim: 全屏压暗层 (alpha 由 hdrScrim 驱动, 二次曲线半透明; 打开时与 hdrProgress【并行】压暗, 关闭时 scrim 先解除→容器后收起)
+                    // ① scrim: 全屏压暗层 (alpha 由 hdrScrim 驱动, 二次曲线半透明; 打开时与 hdrProgress【并行】压暗, 关闭时两时钟【并行】解除, 返回键即时响应)
                     //   pre12 修复: 改 drawBehind 直接以目标 alpha 画黑矩形, 取代 "background(Color.Black)+graphicsLayer{alpha}" —
                     //   后者把实心黑填进离屏 alpha 层, 首帧离屏缓冲被清成不透明黑 → scrim 下出现全黑闪层。
                     Box(Modifier.fillMaxSize()
@@ -764,7 +770,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     )
                     // ② 卡片容器: 外层只负责"摆位置"(布局期矩形插值), 内层自身尺寸 = 插值矩形尺寸;
                     //   背景(CyberCardStart ×0.92) 自 p=0 首段 15% 渐入后恒定不透明(容器变换二轮, 详见内层注释):
-                    //   打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
+                    //   打开=容器长大与背景压暗同步进行; 关闭=容器收起与背景解除同步进行
                     val hdrStartLocal: Rect = hdrRevealRect?.let {
                         Rect(
                             it.left - overlayRootInWindow.x, it.top - overlayRootInWindow.y,
@@ -841,8 +847,8 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             //   无来源(null)时退化为居中 0.3 倍矩形(等价旧观感); 内层圆角 20dp→0 随 *Progress 收口 + clip 裁剪内容。
             //   容器背景(CyberCardStart ×0.92)自 p=0 首段 15% 渐入后恒定不透明(容器变换二轮) —
             //   起始态即被点卡片本身, 随几何一起长大; 黑色 scrim 仍由 sensorScrim 驱动并与几何并行压暗,
-            //   打开=容器长大 + 背景同步压暗, 关闭=scrim 先解除→容器后收起;
-            //   关闭=scrim 先解除(背景淡出)→容器后收起; 0.22 scrim 与 bg 同源 (均跟 *Scrim)
+            //   打开=容器长大 + 背景同步压暗; 关闭=容器收起 + 背景同步解除(两时钟并行, 返回键即时响应);
+            //   关闭=容器收起与背景解除同步进行(两时钟并行); 0.22 scrim 与 bg 同源 (均跟 *Scrim)
             //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由容器尺寸先行、内容跟进;
             //   渲染条件读 sensorAlive State; 主时钟 sensorProgress.value 只在 layout/draw 内读, 绝不在组合期读。
             if (sensorAlive || showSensorDetail) {
@@ -854,7 +860,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     Box(Modifier.fillMaxSize()
                         .then(if (sensorSettled) Modifier.pointerInput(Unit) { detectTapGestures { } } else Modifier)
                     ) {
-                        // ① scrim: 全屏压暗层 (alpha 由 sensorScrim 驱动, 二次曲线半透明; 打开时与 sensorProgress【并行】压暗, 关闭时 scrim 先解除→容器后收起)
+                        // ① scrim: 全屏压暗层 (alpha 由 sensorScrim 驱动, 二次曲线半透明; 打开时与 sensorProgress【并行】压暗, 关闭时两时钟【并行】解除, 返回键即时响应)
                         //   pre12 修复: 同 HDR scrim, 改 drawBehind 直接以目标 alpha 画黑矩形, 根除黑闪。
                         Box(Modifier.fillMaxSize()
                             .drawBehind {
@@ -866,7 +872,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                         )
                         // ② 卡片容器: 外层只负责"摆位置"(布局期矩形插值), 内层自身尺寸 = 插值矩形尺寸;
                         //   背景(CyberCardStart ×0.92) 自 p=0 首段 15% 渐入后恒定不透明(容器变换二轮, 详见内层注释):
-                        //   打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
+                        //   打开=容器长大与背景压暗同步进行; 关闭=容器收起与背景解除同步进行
                         val sensorStartLocal: Rect = sensorRevealRect?.let {
                             Rect(
                                 it.left - overlayRootInWindow.x, it.top - overlayRootInWindow.y,
