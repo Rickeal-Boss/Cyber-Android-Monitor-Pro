@@ -19,14 +19,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -51,10 +56,15 @@ import com.rb.cybermonitorpro.R
 fun DeviceScreen(
     viewModel: DeviceViewModel = koinViewModel(),
     oemViewModel: OemViewModel = koinViewModel(),
-    onOpenHdrLab: () -> Unit = {}
+    onOpenHdrLab: (Rect) -> Unit = {}
 ) {
     val detail by viewModel.detail.observeAsState()
     val oem by oemViewModel.oemInfo.observeAsState()
+
+    // F3-flow: HDR 实验室入口行的窗口矩形(boundsInWindow) — 覆盖层"一镜到底"转场的起点矩形。
+    //   提升到 DeviceScreen 作用域(本页是普通 Column + verticalScroll, 非 lazy item 回收),
+    //   由入口行 RowItemClickable 的 onBounds 回写; 只在点击时读, 不参与组合期读取 → 零额外重组。
+    var hdrEntryRect by remember { mutableStateOf(Rect.Zero) }
 
     // ★ 2026-08-07: BLUETOOTH_CONNECT 运行时权限 launcher
     //   授予后自动触发重采, 蓝牙名称即刻回填, 无需用户手动刷新。
@@ -264,11 +274,13 @@ fun DeviceScreen(
                     else -> detail?.touchscreenType ?: ""
                 })
                 // ★ 2026-08-16: HDR 实验室（局部 EDR 真机验证）二层页入口
+                //   F3-flow: onClick 上抛本行窗口矩形 → MainActivity 覆盖层从该行矩形一镜到底展开
                 RowItemClickable(
                     label = stringResource(R.string.device_hdr_lab_entry),
                     value = stringResource(R.string.device_hdr_lab_entry_value),
-                    onClick = onOpenHdrLab,
-                    valueColor = PorcelainGreenDeep
+                    onClick = { onOpenHdrLab(hdrEntryRect) },
+                    valueColor = PorcelainGreenDeep,
+                    onBounds = { hdrEntryRect = it }
                 )
             }
 }
@@ -766,17 +778,21 @@ private fun RowItem(label: String, value: String, valueColor: androidx.compose.u
     }
 }
 
-/** ★ 2026-08-07: 可点击的 RowItem —— 蓝牙「点击授权」入口 */
+/** ★ 2026-08-07: 可点击的 RowItem —— 蓝牙「点击授权」入口
+ *  F3-flow: onBounds 可选上报本行窗口矩形(boundsInWindow); 默认 null, 既有调用方(蓝牙/步数)零改动。 */
 @Composable
 private fun RowItemClickable(
     label: String,
     value: String,
     onClick: () -> Unit,
-    valueColor: androidx.compose.ui.graphics.Color = NeonPurpleBright
+    valueColor: androidx.compose.ui.graphics.Color = NeonPurpleBright,
+    onBounds: ((Rect) -> Unit)? = null
 ) {
     if (value.isNotBlank()) {
         Row(
-            Modifier.fillMaxWidth().padding(vertical = 2.dp).clickable { onClick() },
+            Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                .onGloballyPositioned { onBounds?.invoke(it.boundsInWindow()) }
+                .clickable { onClick() },
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(

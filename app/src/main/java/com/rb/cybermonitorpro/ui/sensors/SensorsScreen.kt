@@ -48,9 +48,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -82,12 +84,12 @@ import com.rb.cybermonitorpro.ui.effects.staggeredSwipe
 
 /**
  * 传感器列表页 — 现在通过回调将传感器选择上抛给 MainActivity 以全屏覆盖层展示
- * F3: 回调携带卡片中心触点坐标（boundsInRoot），覆盖层从卡片中心圆形展开
+ * F3: 回调携带被点击卡片的窗口矩形（boundsInWindow），覆盖层从该卡片矩形一镜到底长成全屏
  */
 @Composable
 fun SensorsScreen(
     viewModel: SensorsViewModel = koinViewModel(),
-    onNavigateToSensor: (SensorItemInfo, Offset) -> Unit = { _, _ -> }
+    onNavigateToSensor: (SensorItemInfo, Rect) -> Unit = { _, _ -> }
 ) {
     val sensors by viewModel.sensors.observeAsState(emptyList())
 
@@ -101,7 +103,7 @@ fun SensorsScreen(
 @Composable
 private fun SensorListContent(
     sensors: List<SensorItemInfo>,
-    onSensorClick: (SensorItemInfo, Offset) -> Unit,
+    onSensorClick: (SensorItemInfo, Rect) -> Unit,
     onRefreshSensors: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -389,14 +391,17 @@ private fun SensorItemCard(
     sensor: SensorItemInfo,
     highlighted: Boolean,
     pulseTick: Int,
-    onClick: (Offset) -> Unit,
+    onClick: (Rect) -> Unit,
     onCardPositioned: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val meta = SensorTypeMeta.fromTypeId(sensor.type)
     val ctx = LocalContext.current
-    // F3: 卡片中心触点（boundsInRoot; RIPPLE-04: 偏移异常时降级 positionInWindow 换算）
+    // F3: 卡片中心触点（boundsInRoot; RIPPLE-04: 偏移异常时降级 positionInWindow 换算）— 仍供水波纹使用
     var cardCenter by remember { mutableStateOf(Offset.Zero) }
+    // F3-flow: 卡片窗口矩形（boundsInWindow）— 覆盖层"一镜到底"转场的起点矩形
+    //   与覆盖层根节点 positionInWindow() 同一坐标系，MainActivity 减出局部矩形做插值
+    var cardRect by remember { mutableStateOf(Rect.Zero) }
 
     // 搜索定位脉冲: scale 微弹 + 辉光淡出
     // 改动 3(双计数器): 脉冲以独立 pulseTick 为 key, 由索引 LaunchedEffect 与 highlightedIdx 同批自增触发;
@@ -428,9 +433,10 @@ private fun SensorItemCard(
         .fillMaxWidth()
         .onGloballyPositioned {
             cardCenter = it.boundsInRoot().center
+            cardRect = it.boundsInWindow()
             onCardPositioned(it.boundsInRoot().top)
         }
-        .cardRipple(onClick = { onClick(cardCenter) })
+        .cardRipple(onClick = { onClick(cardRect) })
 
     val cardContent: @Composable ColumnScope.() -> Unit = {
         Column(Modifier.padding(16.dp)) {

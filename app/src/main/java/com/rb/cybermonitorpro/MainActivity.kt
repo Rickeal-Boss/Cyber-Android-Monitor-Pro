@@ -37,14 +37,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
+// F3-flow: 手写 container transform 用 —— layout 在布局期把内层摆到插值矩形;
+//   positionInWindow 取覆盖层宿主原点(与卡片 boundsInWindow 同坐标系, 减出局部起点矩形)。
+//   ★ 注意: androidx.compose.ui.geometry.lerp(Rect 重载) 与 androidx.compose.ui.unit.lerp(Dp 重载) 同名,
+//   本文件两者都用, 故一律写全限定名调用、不 import 任何一个, 避免同名 import 歧义。
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import android.content.Context
 import androidx.compose.ui.platform.LocalConfiguration
@@ -350,15 +357,16 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     fun closeSensorDetail() {
         scope.launch {
             sensorScrim.animateTo(0f, CARD_EXIT_SPEC)       // ① 先移除隔绝
-            sensorProgress.animateTo(0f, CARD_EXIT_SPEC)    // ② 再播容器收起动画
+            sensorProgress.animateTo(0f, CARD_EXIT_SPEC)    // ② 再播容器收起动画 (收起终点=起点矩形, 故此处不能提前清 rect)
             showSensorDetail = false
             selectedSensorForDetail = null
             sensorAlive = false
+            sensorRevealRect = null                         // ③ 收起完成, 清起点矩形
         }
     }
 
-    // ── F5 → CAMP 修复: HDR 实验室覆盖层 — scrim + 卡片中心缩放(可打断过渡, 主时钟 hdrProgress) ──
-    //   进入: animateTo(1f, CARD_ENTRY_SPEC) 550ms 中心锚定缩放展开;
+    // ── F5 → CAMP 修复: HDR 实验室覆盖层 — scrim + 入口行矩形一镜到底(可打断过渡, 主时钟 hdrProgress) ──
+    //   进入: animateTo(1f, CARD_ENTRY_SPEC) 550ms 从入口行矩形插值展开到全屏;
     //   SurfaceView 延迟到进入动画完成后挂载(防 punch-through 突跳);
     //   预测返回: snapTo 跟手 / 取消回弹 1f / 完成 animateTo(0f) 后移出组合。
     //   scrim(hdrScrim) 现已与容器进度解耦并独立排序: 打开时容器先展开→scrim 后到位; 关闭时 scrim 先解除→容器后收起。
@@ -383,9 +391,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         hdrSurfacesVisible = false     // 先卸载, 再播退出遮罩
         scope.launch {
             hdrScrim.animateTo(0f, CARD_EXIT_SPEC)          // ① 先移除隔绝
-            hdrProgress.animateTo(0f, CARD_EXIT_SPEC)       // ② 再播容器收起动画
+            hdrProgress.animateTo(0f, CARD_EXIT_SPEC)       // ② 再播容器收起动画 (收起终点=起点矩形, 故此处不能提前清 rect)
             showHdrLab = false
             hdrAlive = false
+            hdrRevealRect = null                            // ③ 收起完成, 清起点矩形
         }
     }
 
@@ -398,7 +407,17 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     val floatReveal = rememberCircularRevealState()
     var settingsOrigin by remember { mutableStateOf(Offset.Zero) }
     var floatOrigin by remember { mutableStateOf(Offset.Zero) }
-    var sensorRevealOrigin by remember { mutableStateOf(Offset.Zero) }
+
+    // ── F3-flow: 传感器/HDR 覆盖层"一镜到底"转场起点 ──
+    //   sensorRevealRect/hdrRevealRect = 触发卡片(或入口行)的窗口矩形 boundsInWindow;
+    //   overlayRootInWindow            = 覆盖层宿主(Scaffold 内容 Box)的窗口原点 positionInWindow();
+    //   两者相减得到覆盖层局部坐标系里的起点矩形, 交给容器外层 Modifier.layout 做逐帧矩形插值。
+    //   null = 无卡片来源(冷开/来源未上报) → 容器退化为居中 0.3 倍起点(等价旧中心缩放观感)。
+    //   ★ 这三个都是普通 State(非 Animatable), 可在组合期读; 主时钟 sensorProgress/hdrProgress 仍只在 layout/draw 内读。
+    //   ★ 原 pre7 起"只写不读"的死状态(Offset 版 reveal origin)已删除, 由 sensorRevealRect 取代。
+    var sensorRevealRect by remember { mutableStateOf<Rect?>(null) }
+    var hdrRevealRect by remember { mutableStateOf<Rect?>(null) }
+    var overlayRootInWindow by remember { mutableStateOf(Offset.Zero) }
 
     // 兜底原点: 触发点未上报时从右上角按钮区展开（与悬浮窗/设置按钮同区, CAMP 二轮修复:
     //   原屏幕中心兜底导致冷启动首开圆形从中心展开, 与按钮位置脱节）
@@ -426,7 +445,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     // activity-compose 1.9.0 中 PredictiveBackHandler 已稳定（无需 @OptIn）
     // CAMP 二轮修复: 手势进度直接驱动各自覆盖层的过渡主时钟 —
     //   设置/悬浮窗 → 水波纹圆形收缩 (settingsReveal/floatReveal.progress);
-    //   传感器/HDR → 卡片缩放收缩 (sensorProgress/hdrProgress)。
+    //   传感器/HDR → 卡片矩形收缩 (sensorProgress/hdrProgress, 布局期矩形插值)。
     //   放开手: 完成 → 收缩到底并关闭; 中途取消 → 回弹至 1f。
     //   不支持预测的 ROM flow 为空 → 立即完成, 等价普通 BackHandler。
     //
@@ -434,7 +453,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
     //   1. AndroidManifest application+activity 均已声明 enableOnBackInvokedCallback="true"
     //   2. Android 13+ 需用户在开发者选项开启"预测性返回动画"，14+ 默认开启，15+ 强制
     //   3. 国产 ROM 即使阉割预测动画，PredictiveBackHandler 的 flow 为空 → 立即完成
-    //      等价普通 BackHandler，覆盖层仍能正常关闭（仅无缩放进度动画）
+    //      等价普通 BackHandler，覆盖层仍能正常关闭（仅无跟手进度动画）
     //   4. 与 MainTabs 的 pager BackHandler 互斥: overlayVisible 时本回调启用，
     //      MainTabs BackHandler enabled = (currentPage!=0 && !overlayVisible) 为 false
     //   5. BackGestureCompat 工具在启动时输出诊断日志，辅助排查 ROM 兼容性问题
@@ -469,6 +488,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     showSensorDetail = false
                     selectedSensorForDetail = null
                     sensorAlive = false
+                    sensorRevealRect = null   // 关闭后清起点矩形, 防下次冷开复用陈旧矩形
                 }
                 showHdrLab -> {
                     hdrSurfacesVisible = false
@@ -476,6 +496,7 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     hdrScrim.snapTo(0f)
                     showHdrLab = false
                     hdrAlive = false
+                    hdrRevealRect = null      // 同上
                 }
                 showSettings -> {
                     settingsReveal.progress.snapTo(0f)
@@ -513,7 +534,12 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         //   (窗口级 layoutInDisplayCutoutMode 已由 enableEdgeToEdge() 设置, 此处仅补足 Compose inset)
         contentWindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout)
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize()) {
+        // F3-flow: 记录覆盖层宿主原点 —— 该 onGloballyPositioned 挂在链尾(最内), 上报的坐标即
+        //   Box 放置其子节点(各覆盖层)所用的坐标系原点, 与卡片 boundsInWindow 同在窗口坐标系,
+        //   相减即得覆盖层局部起点矩形(勿移到 .padding() 之前, 否则会多带一层 padding 偏移)。
+        Box(Modifier.padding(padding).fillMaxSize()
+            .onGloballyPositioned { overlayRootInWindow = it.positionInWindow() }
+        ) {
             // ★ F5-2: SharedTransitionLayout 包裹 — 传感器卡片 ↔ 详情标题 sharedElement 形变
             //   (CARD-01: 实验 API 必须 @OptIn; scope 经 CompositionLocal 下发, 调用方判空降级)
             SharedTransitionLayout {
@@ -533,11 +559,14 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                     showFloatConfig = true
                 },
                 onGpsTabChanged = { active -> gpsTabActive = active },
-                onOpenSensorDetail = { sensor, origin ->
-                    sensorRevealOrigin = origin
+                onOpenSensorDetail = { sensor, rect ->
+                    sensorRevealRect = rect
                     openSensorDetail(sensor)
                 },
-                onOpenHdrLab = { openHdrLab() }
+                onOpenHdrLab = { rect ->
+                    hdrRevealRect = rect
+                    openHdrLab()
+                }
             )
 
             // ── 覆盖层 (graphicsLayer 透明动画, 保持 composition 存活) ──
@@ -602,9 +631,12 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                 }
             }
 
-            // ── HDR 实验室（CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考）──
-            //   与传感器详情同款转场: 屏幕中心锚点缩放 0.42→1.0 + 起始位移 + 内容渐变;
-            //   容器背景(CyberCardStart ×0.92)由 hdrScrim 驱动 (s>0.6 收尾淡入), 与 hdrProgress(scale) 解耦 —
+            // ── HDR 实验室（F3-flow 三: 入口行矩形 → 全屏 一镜到底, 替代原"屏幕中心 0.3 倍缩放"）──
+            //   容器 = 「外层定位 + 内层尺寸」双节点: 外层 Modifier.layout 在布局期把内层摆到插值矩形 r,
+            //   内层自身尺寸即 r 的宽高 —— 小矩形长成全屏是真实布局尺寸变化(非位图级缩放), 文字不再被拉伸变形;
+            //   起点矩形 = 入口行窗口矩形 hdrRevealRect(boundsInWindow) - 覆盖层宿主原点 overlayRootInWindow,
+            //   无来源(null)时退化为居中 0.3 倍矩形(等价旧观感); 内层圆角 20dp→0 随 *Progress 收口 + clip 裁剪内容。
+            //   容器背景(CyberCardStart ×0.92)由 hdrScrim 驱动 (s>0.6 收尾淡入), 与 hdrProgress(几何) 解耦 —
             //   打开=容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 主界面被完全隔绝),
             //   关闭=scrim 先解除(背景淡出)→容器后收起; 0.22 scrim 与 bg 同源 (均跟 *Scrim)
             //   (hdrSurfacesVisible 门控, 防 punch-through 突跳);
@@ -625,53 +657,83 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             )
                         }
                     )
-                    // ② 卡片容器: scale 0.3→1.0 跟 hdrProgress; 背景(CyberCardStart ×0.92) 跟 hdrScrim —
-                    //   scale 与 bg 解耦: 打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
-                    val hdrP = hdrProgress.value
+                    // ② 卡片容器: 外层只负责"摆位置"(布局期矩形插值), 内层自身尺寸 = 插值矩形尺寸;
+                    //   背景(CyberCardStart ×0.92) 仍跟 hdrScrim —— 几何与 bg 解耦语义不变:
+                    //   打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
+                    val hdrStartLocal: Rect = hdrRevealRect?.let {
+                        Rect(
+                            it.left - overlayRootInWindow.x, it.top - overlayRootInWindow.y,
+                            it.right - overlayRootInWindow.x, it.bottom - overlayRootInWindow.y
+                        )
+                    } ?: Rect.Zero
                     Box(Modifier.fillMaxSize()
-                        .graphicsLayer {
-                            transformOrigin = TransformOrigin(0.5f, 0.5f)
-                            val s = 0.3f + 0.7f * hdrP
-                            scaleX = s
-                            scaleY = s
-                        }
-                        // pre12 修复: 容器背景 alpha 移出任何层属性, 改 drawBehind 直接画带 alpha 的 CyberCardStart,
-                        // 避免 bg 被卷入离屏层导致黑闪 (scale 仍保留在 graphicsLayer)。
-                        .drawBehind {
-                            drawRect(
-                                color = CyberCardStart,
-                                alpha = ((hdrScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f
-                            )
+                        .layout { measurable, constraints ->
+                            // 布局期读主时钟: 只致 layout 失效, 零重组 (与旧 graphicsLayer 内读法同源)
+                            val p = hdrProgress.value
+                            val maxW = constraints.maxWidth
+                            val maxH = constraints.maxHeight
+                            val target = Rect(0f, 0f, maxW.toFloat(), maxH.toFloat())
+                            val from = if (hdrStartLocal == Rect.Zero)
+                                Rect(maxW * 0.35f, maxH * 0.35f, maxW * 0.65f, maxH * 0.65f)
+                            else hdrStartLocal
+                            val r = androidx.compose.ui.geometry.lerp(from, target, p)
+                            // 用 toInt() 截断(亚像素差, 观感等同取整): 本项目约定不引 kotlin.math.roundToInt
+                            //   (同 BatteryScreen.snapTierIndex 的 (raw+0.5f).toInt() 规避, 见其注释)
+                            val w = r.width.toInt().coerceAtLeast(1)
+                            val h = r.height.toInt().coerceAtLeast(1)
+                            val placeable = measurable.measure(Constraints.fixed(w, h))
+                            layout(maxW, maxH) {
+                                placeable.place(r.left.toInt(), r.top.toInt())
+                            }
                         }
                     ) {
-                        // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载)
+                        // 内层: 自身尺寸 = 插值矩形尺寸 → 圆角 20dp 收口到 0 + clip 裁剪; 容器 bg 仍跟 hdrScrim
+                        // pre12 修复保留: 容器背景 alpha 移出任何层属性, 改 drawBehind 直接画带 alpha 的 CyberCardStart,
+                        // 避免 bg 被卷入离屏层导致黑闪 (圆角/裁剪留在 graphicsLayer, 不参与 alpha 合成)。
                         Box(Modifier.fillMaxSize()
                             .graphicsLayer {
                                 val p = hdrProgress.value
-                                val ca = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
-                                alpha = ca
-                                translationY = (1f - ca) * 24.dp.toPx()
+                                shape = RoundedCornerShape(androidx.compose.ui.unit.lerp(20.dp, 0.dp, p))
+                                clip = true
+                            }
+                            .drawBehind {
+                                drawRect(
+                                    color = CyberCardStart,
+                                    alpha = ((hdrScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f
+                                )
                             }
                         ) {
-                            HdrLabScreen(onBack = { closeHdrLab() }, surfaceVisible = hdrSurfacesVisible)
-                            LightCircleBackButton(
-                                onClick = { closeHdrLab() },
-                                btnSize = 48.dp,
-                                modifier = Modifier.padding(top = 8.dp, start = 16.dp).align(Alignment.TopStart)
-                            )
+                            // ③ 内容渐变 + 上移 (SurfaceView 由 surfaceVisible 门控延迟挂载) — 原样保留
+                            Box(Modifier.fillMaxSize()
+                                .graphicsLayer {
+                                    val p = hdrProgress.value
+                                    val ca = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
+                                    alpha = ca
+                                    translationY = (1f - ca) * 24.dp.toPx()
+                                }
+                            ) {
+                                HdrLabScreen(onBack = { closeHdrLab() }, surfaceVisible = hdrSurfacesVisible)
+                                LightCircleBackButton(
+                                    onClick = { closeHdrLab() },
+                                    btnSize = 48.dp,
+                                    modifier = Modifier.padding(top = 8.dp, start = 16.dp).align(Alignment.TopStart)
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            // ── 传感器详情 (CAMP 二轮: 卡片位移缩放+内容渐变可打断, 对齐 frames 逐帧参考) ──
-            //   容器: 屏幕中心锚点 TransformOrigin(0.5f,0.5f) + scale 0.3→1.0 + 起始位移至屏幕中上部 (背景仅 p>0.6 收尾淡入)
-            //   (0.25W, 0.15H) — 与 frames"小卡片→全屏"形态一致;
-            //   容器背景(CyberCardStart ×0.92)由 sensorScrim 驱动 (s>0.6 收尾淡入), 与 sensorProgress(scale) 解耦 —
+            // ── 传感器详情 (F3-flow: 卡片矩形 → 全屏 一镜到底, 替代原"屏幕中心 0.3 倍缩放") ──
+            //   容器 = 「外层定位 + 内层尺寸」双节点: 外层 Modifier.layout 布局期把内层摆到插值矩形 r,
+            //   内层自身尺寸即 r 的宽高 —— 卡片小矩形长成全屏是真实布局尺寸变化(非位图级缩放), 文字不再被拉伸变形;
+            //   起点矩形 = 卡片窗口矩形 sensorRevealRect(boundsInWindow) - 覆盖层宿主原点 overlayRootInWindow,
+            //   无来源(null)时退化为居中 0.3 倍矩形(等价旧观感); 内层圆角 20dp→0 随 *Progress 收口 + clip 裁剪内容。
+            //   容器背景(CyberCardStart ×0.92)由 sensorScrim 驱动 (s>0.6 收尾淡入), 与 sensorProgress(几何) 解耦 —
             //   打开=容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 主界面被完全隔绝),
             //   关闭=scrim 先解除(背景淡出)→容器后收起; 0.22 scrim 与 bg 同源 (均跟 *Scrim)
-            //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由卡片缩放先行、内容跟进;
-            //   渲染条件读 sensorAlive State, 绝不在组合期读 sensorProgress.value。
+            //   内容: alpha 渐变 (p>0.25 后) + 24dp 上移, 由容器尺寸先行、内容跟进;
+            //   渲染条件读 sensorAlive State; 主时钟 sensorProgress.value 只在 layout/draw 内读, 绝不在组合期读。
             if (sensorAlive || showSensorDetail) {
                 val sensor = selectedSensorForDetail
                 if (sensor != null) {
@@ -690,39 +752,67 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 )
                             }
                         )
-                        // ② 卡片容器: scale 0.3→1.0 跟 sensorProgress; 背景(CyberCardStart ×0.92) 跟 sensorScrim —
-                        //   scale 与 bg 解耦: 打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
-                        val sensorP = sensorProgress.value
+                        // ② 卡片容器: 外层只负责"摆位置"(布局期矩形插值), 内层自身尺寸 = 插值矩形尺寸;
+                        //   背景(CyberCardStart ×0.92) 仍跟 sensorScrim —— 几何与 bg 解耦语义不变:
+                        //   打开时容器先展开(背景透明可见主界面)→scrim 后到位(背景填充, 隔绝), 关闭反之
+                        val sensorStartLocal: Rect = sensorRevealRect?.let {
+                            Rect(
+                                it.left - overlayRootInWindow.x, it.top - overlayRootInWindow.y,
+                                it.right - overlayRootInWindow.x, it.bottom - overlayRootInWindow.y
+                            )
+                        } ?: Rect.Zero
                         Box(Modifier.fillMaxSize()
-                            .graphicsLayer {
-                                transformOrigin = TransformOrigin(0.5f, 0.5f)
-                                val s = 0.3f + 0.7f * sensorP
-                                scaleX = s
-                                scaleY = s
-                            }
-                            // pre12 修复: 容器背景 alpha 移出层属性, 改 drawBehind 直接画带 alpha 的 CyberCardStart。
-                            .drawBehind {
-                                drawRect(
-                                    color = CyberCardStart,
-                                    alpha = ((sensorScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f
-                                )
+                            .layout { measurable, constraints ->
+                                // 布局期读主时钟: 只致 layout 失效, 零重组 (与旧 graphicsLayer 内读法同源)
+                                val p = sensorProgress.value
+                                val maxW = constraints.maxWidth
+                                val maxH = constraints.maxHeight
+                                val target = Rect(0f, 0f, maxW.toFloat(), maxH.toFloat())
+                                val from = if (sensorStartLocal == Rect.Zero)
+                                    Rect(maxW * 0.35f, maxH * 0.35f, maxW * 0.65f, maxH * 0.65f)
+                                else sensorStartLocal
+                                val r = androidx.compose.ui.geometry.lerp(from, target, p)
+                                // 用 toInt() 截断(亚像素差, 观感等同取整): 本项目约定不引 kotlin.math.roundToInt
+                                //   (同 BatteryScreen.snapTierIndex 的 (raw+0.5f).toInt() 规避, 见其注释)
+                                val w = r.width.toInt().coerceAtLeast(1)
+                                val h = r.height.toInt().coerceAtLeast(1)
+                                val placeable = measurable.measure(Constraints.fixed(w, h))
+                                layout(maxW, maxH) {
+                                    placeable.place(r.left.toInt(), r.top.toInt())
+                                }
                             }
                         ) {
-                            // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组)
+                            // 内层: 自身尺寸 = 插值矩形尺寸 → 圆角 20dp 收口到 0 + clip 裁剪; 容器 bg 仍跟 sensorScrim
+                            // pre12 修复保留: 容器背景 alpha 移出层属性, 改 drawBehind 直接画带 alpha 的 CyberCardStart。
                             Box(Modifier.fillMaxSize()
                                 .graphicsLayer {
                                     val p = sensorProgress.value
-                                    val ca = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
-                                    alpha = ca
-                                    translationY = (1f - ca) * 24.dp.toPx()
+                                    shape = RoundedCornerShape(androidx.compose.ui.unit.lerp(20.dp, 0.dp, p))
+                                    clip = true
+                                }
+                                .drawBehind {
+                                    drawRect(
+                                        color = CyberCardStart,
+                                        alpha = ((sensorScrim.value - 0.6f) / 0.4f).coerceIn(0f, 1f) * 0.92f
+                                    )
                                 }
                             ) {
-                                SensorDetailContent(
-                                    sensor = sensor,
-                                    progress = sensorProgress,
-                                    density = density,
-                                    onBack = { closeSensorDetail() }
-                                )
+                                // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组) — 原样保留
+                                Box(Modifier.fillMaxSize()
+                                    .graphicsLayer {
+                                        val p = sensorProgress.value
+                                        val ca = ((p - 0.25f) / 0.75f).coerceIn(0f, 1f)
+                                        alpha = ca
+                                        translationY = (1f - ca) * 24.dp.toPx()
+                                    }
+                                ) {
+                                    SensorDetailContent(
+                                        sensor = sensor,
+                                        progress = sensorProgress,
+                                        density = density,
+                                        onBack = { closeSensorDetail() }
+                                    )
+                                }
                             }
                         }
                     }
@@ -743,8 +833,8 @@ private fun MainTabs(
     onOpenSettings: (Offset) -> Unit,
     onOpenFloat: (Offset) -> Unit,
     onGpsTabChanged: (Boolean) -> Unit = {},
-    onOpenSensorDetail: (com.rb.cybermonitorpro.data.model.SensorItemInfo, Offset) -> Unit = { _, _ -> },
-    onOpenHdrLab: () -> Unit = {}
+    onOpenSensorDetail: (com.rb.cybermonitorpro.data.model.SensorItemInfo, Rect) -> Unit = { _, _ -> },
+    onOpenHdrLab: (Rect) -> Unit = {}
 ) {
     val topTabs = rememberTopTabs()
     // 智能 GPS: 仅"网络" (index 5) 和 "GPS" (index 6) Tab 启用定位
