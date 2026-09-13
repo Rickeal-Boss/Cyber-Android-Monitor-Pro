@@ -109,42 +109,43 @@ fun LineChart(
         .graphicsLayer { }
 
     Canvas(modifier = chartModifier) {
-        val w = size.width; val h = size.height; val pad = 8.dp.toPx()
-        val cw = w - pad * 2; val ch = h - pad * 2
+        // pad 拆分: padX=0 让折线水平顶满卡片边(图表槽已无水平 padding), padY 保留 8dp 垂直节奏
+        val w = size.width; val h = size.height; val padY = 8.dp.toPx(); val padX = 0f
+        val cw = w - padX * 2; val ch = h - padY * 2
 
         // 网格线
         if (gridCache != null) {
             val (lines, divColor) = gridCache
             repeat(lines + 1) { i ->
-                val y = pad + (ch / lines) * i
-                drawLine(divColor, Offset(pad, y), Offset(w - pad, y), 1f)
+                val y = padY + (ch / lines) * i
+                drawLine(divColor, Offset(padX, y), Offset(w - padX, y), 1f)
             }
         }
 
         // 单点兜底
         if (data.size == 1) {
             val safeV = sanitize(data[0])
-            drawCircle(lineColor, 4f, Offset(pad + cw / 2f, pad + ch - safeV.safeCoerceIn(0f, 1f) * ch))
+            drawCircle(lineColor, 4f, Offset(padX + cw / 2f, padY + ch - safeV.safeCoerceIn(0f, 1f) * ch))
             return@Canvas
         }
 
         // ★ 直接在 FloatArray 中计算坐标，零对象分配
         val xStep = cw / (data.size - 1).coerceAtLeast(1).toFloat()
         for (i in 0 until visibleCount) {
-            xs[i] = pad + xStep * i
-            ys[i] = pad + ch - sanitize(data[i]).safeCoerceIn(0f, 1f) * ch
+            xs[i] = padX + xStep * i
+            ys[i] = padY + ch - sanitize(data[i]).safeCoerceIn(0f, 1f) * ch
         }
 
         // 面积填充
         if (visibleCount > 1) {
             areaPath.reset()
-            areaPath.moveTo(xs[0], h - pad)
+            areaPath.moveTo(xs[0], h - padY)
             areaPath.lineTo(xs[0], ys[0])
             for (i in 1 until visibleCount) {
                 val cx = xs[i - 1] + (xs[i] - xs[i - 1]) * 0.5f
                 areaPath.cubicTo(cx, ys[i - 1], cx, ys[i], xs[i], ys[i])
             }
-            areaPath.lineTo(xs[visibleCount - 1], h - pad)
+            areaPath.lineTo(xs[visibleCount - 1], h - padY)
             areaPath.close()
             drawPath(areaPath, areaBrush)
         }
@@ -218,14 +219,15 @@ fun DualLineChart(
         .fillMaxWidth().height(120.dp)
         .graphicsLayer { }
     ) {
-        val w = size.width; val h = size.height; val pad = 8.dp.toPx()
-        val cw = w - pad * 2; val ch = h - pad * 2
+        // pad 拆分: padX=0 水平顶满卡片边, padY 保留 8dp 垂直节奏 (与 LineChart 同构)
+        val w = size.width; val h = size.height; val padY = 8.dp.toPx(); val padX = 0f
+        val cw = w - padX * 2; val ch = h - padY * 2
 
         if (gridCache != null) {
             val (lines, divColor) = gridCache
             repeat(lines + 1) { i ->
-                val y = pad + (ch / lines) * i
-                drawLine(divColor, Offset(pad, y), Offset(w - pad, y), 1f)
+                val y = padY + (ch / lines) * i
+                drawLine(divColor, Offset(padX, y), Offset(w - padX, y), 1f)
             }
         }
 
@@ -234,12 +236,12 @@ fun DualLineChart(
         // 原代码 drawOneLine 内部各自计算 xStep = cw/(pointCount-1)，
         // 两条线数据量不同时 X 分布不同，导致同一时间点坐标错位。
         val xStep = cw / (maxLen - 1).coerceAtLeast(1).toFloat()
-        drawOneLine(data1, visibleCount, brush1, lineColor1, xs, ys, pad, cw, ch, path, xStep)
-        drawOneLine(data2, visibleCount, brush2, lineColor2, xs, ys, pad, cw, ch, path, xStep)
+        drawOneLine(data1, visibleCount, brush1, lineColor1, xs, ys, padX, padY, cw, ch, path, xStep)
+        drawOneLine(data2, visibleCount, brush2, lineColor2, xs, ys, padX, padY, cw, ch, path, xStep)
     }
 }
 
-/** 绘制单条折线 — FloatArray 零分配 */
+/** 绘制单条折线 — FloatArray 零分配 (pad 拆分后横/纵内缩分别传 padX/padY) */
 private fun DrawScope.drawOneLine(
     rawData: List<Float>,
     visibleCount: Int,
@@ -247,13 +249,14 @@ private fun DrawScope.drawOneLine(
     color: Color,
     xs: FloatArray,
     ys: FloatArray,
-    pad: Float, cw: Float, ch: Float,
+    padX: Float, padY: Float,
+    cw: Float, ch: Float,
     path: Path,
     xStep: Float,  // unified xStep for dual-line alignment
 ) {
     if (rawData.size == 1) {
         val safeV = sanitize(rawData[0])
-        drawCircle(color, 4f, Offset(pad + cw / 2f, pad + ch - safeV.safeCoerceIn(0f, 1f) * ch))
+        drawCircle(color, 4f, Offset(padX + cw / 2f, padY + ch - safeV.safeCoerceIn(0f, 1f) * ch))
         return
     }
 
@@ -261,8 +264,8 @@ private fun DrawScope.drawOneLine(
     val take = visibleCount.safeCoerceIn(1, pointCount)
 
     for (i in 0 until take) {
-        xs[i] = pad + xStep * i
-        ys[i] = pad + ch - sanitize(rawData[i]).safeCoerceIn(0f, 1f) * ch
+        xs[i] = padX + xStep * i
+        ys[i] = padY + ch - sanitize(rawData[i]).safeCoerceIn(0f, 1f) * ch
     }
 
     if (take > 1) {
