@@ -285,10 +285,9 @@ private class SensorOverlay(
     val scrim = Animatable(0f)
     /** 转场是否已稳定(容器已铺满) —— 仅此时才由根 Box 吃点击隔绝主界面 */
     var settled by mutableStateOf(false)
-    /** 弹起时钟: 1f=静止, 收尾弹起 1→PULSE_SCALE→1 (装饰性层属性, 非转场几何) */
+    /** 弹起时钟: 1f=静止; 打开起步播正向弹起(快弹/慢回), 收尾播反向弹回(慢弹/快落) —— 两者互为时间反演。
+     *  装饰性层属性(非转场几何), 在内层 graphicsLayer 内读(零重组)。 */
     val bounce = Animatable(1f)
-    /** 弹起辉光: 0→1→0, drawBehind 直接带 alpha 画(不进层 alpha, 避离屏层黑闪) */
-    val glow = Animatable(0f)
     /** 收尾幂等标志: 普通 var(非 State), 仅协程侧读写, 组合期零读 */
     var finalizing = false
 }
@@ -439,20 +438,28 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         val ov = SensorOverlay(sensor = sensor, startRect = sensorRevealRect)
         sensorOverlays.add(ov)
         scope.launch {
-            // 两时钟【并行】: 背景压暗与卡片长大同步进行 (打开期间背景可见 → 模糊由 !settled 推导)
+            // 三时钟【并行】: 背景压暗与卡片长大同步进行 (打开期间背景可见 → 模糊由 !settled 推导)
             val geo = launch { ov.progress.animateTo(1f, CARD_ENTRY_SPEC) }   // ① 容器从卡片矩形长大
             val dim = launch { ov.scrim.animateTo(1f, CARD_ENTRY_SPEC) }      // ② 背景同步压暗
+            // ③ 起步弹起(正向: 快弹起/慢回落, 与收尾的"弹回"互为时间反演): 卡片被"拿起"展开时先微微弹起;
+            //    若中途转关闭, finishClose 的弹回 animateTo 经 MutatorMutex 取消本动画后接管, 无状态残留
+            launch {
+                ov.bounce.animateTo(PULSE_SCALE, tween(PULSE_UP_MS))
+                ov.bounce.animateTo(1f, tween(PULSE_DOWN_MS))
+            }
             geo.join(); dim.join()
             ov.settled = true    // 该实例转场稳定 → 恢复点击隔绝 (且不再需要背景模糊)
+                                 // (起步弹起不 join: 纯装饰动画, 不拖延稳定判定)
         }
     }
 
     /**
-     * 收尾弹起: 容器收回到起点矩形(p=0, 与真卡片同位同尺寸)后, 覆盖层"卡片内容层"顶上
-     * 演一段与列表页搜索脉冲同款的微弹(辉光 0→1→0 + scale 1→1.04→1), 播完才把实例移出列表。
+     * 收尾弹回: 容器收回到起点矩形(p=0, 与真卡片同位同尺寸)后, 覆盖层"卡片内容层"顶上
+     * 演一段【反向】弹回(时间反演: 慢弹起 PULSE_DOWN_MS / 快落定 PULSE_UP_MS, 与打开起步的
+     * 正向弹起互为镜像, 无辉光), 播完才把实例移出列表。
      *
      * 幂等: finalizing 普通标志挡住重复触发(返回键连按/预测返回完成分支撞上已在收尾的实例);
-     * 预测返回【取消】分支会把 finalizing 清回 false 并 snapTo 复位两时钟 → 进行中的 animateTo
+     * 预测返回【取消】分支会把 finalizing 清回 false 并 snapTo 复位弹起时钟 → 进行中的 animateTo
      * 抛 CancellationException, 本函数 finally 读到标志已清 → 不移除, 实例"复活"继续服务。
      *
      * ⚠️ 声明位置硬约束: 必须在 sensorOverlays 之后、closeSensorDetail 之前 ——
@@ -464,16 +471,12 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         ov.finalizing = true
         scope.launch {
             try {
-                // 辉光与弹起并行: 辉光与弹起 scale 同用 180/420 节奏(PULSE_UP_MS/PULSE_DOWN_MS);
-                // 列表页 glow 降段为 600ms(SensorsScreen tween(600)), 此处有意取短 —— 收尾场景短促一闪即可
-                launch {
-                    ov.glow.animateTo(1f, tween(PULSE_UP_MS))
-                    ov.glow.animateTo(0f, tween(PULSE_DOWN_MS))
-                }
-                ov.bounce.animateTo(PULSE_SCALE, tween(PULSE_UP_MS))
-                ov.bounce.animateTo(1f, tween(PULSE_DOWN_MS))
+                // 反向弹回: 慢弹起/快落定(与打开正向弹起的快弹起/慢回落互为时间反演);
+                // 若打开起步弹起仍在播, 本 animateTo 经 MutatorMutex 取消它后接管, 无状态残留
+                ov.bounce.animateTo(PULSE_SCALE, tween(PULSE_DOWN_MS))
+                ov.bounce.animateTo(1f, tween(PULSE_UP_MS))
             } finally {
-                // 弹起播完(或被取消回弹合法中断)才移除实例;
+                // 弹回播完(或被取消回弹合法中断)才移除实例;
                 // 若已被取消分支复活(finalizing=false), 保留实例继续服务
                 if (ov.finalizing) sensorOverlays.remove(ov)
             }
@@ -670,11 +673,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             if (showSettings) settingsReveal.progress.animateTo(1f, tween(400))
             if (showFloatConfig) floatReveal.progress.animateTo(1f, tween(400))
             if (sensorTop != null) {
-                // 取消回弹前先"复活"实例: 若它正处于收尾弹起(finalizing), 清标志 + snapTo 复位两时钟
+                // 取消回弹前先"复活"实例: 若它正处于收尾弹回(finalizing), 清标志 + snapTo 复位弹起时钟
                 // → 进行中的 finishClose animateTo 抛 CancellationException, 其 finally 见标志已清 → 不移除
                 sensorTop.finalizing = false
                 sensorTop.bounce.snapTo(1f)
-                sensorTop.glow.snapTo(0f)
                 // 既有回弹编排保持不动: progress 已被跟手 snapTo 收缩, animateTo 拉回全屏,
                 // 卡片内容层 alpha 是 p 的纯函数 → 自动淡出, 无需额外处理
                 sensorTop.progress.animateTo(1f, CARD_ENTRY_SPEC)
@@ -996,29 +998,6 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 }
                             }
                         ) {
-                            // 弹起辉光(收尾装饰): 与 SensorItemCard 的搜索脉冲 halo 逐参数同款 ——
-                            //   向外扩 8dp 画在卡面之下(z 序更低、先组合), 无 clip、可出界,
-                            //   收起完成后的微弹期间闪一次(NeonPurpleBright ×0.35, 跟 glow 时钟);
-                            //   drawBehind 直接带 alpha 画, 不进层 alpha(pre12 黑闪结论同样适用)。
-                            //   仅收尾弹起期 glow>0, 平时零绘制开销。
-                            //   z 序不变量: 辉光 z 序实际在 scrim 之上, 无可见差异 ——
-                            //     glow>0 ⇔ 本实例 scrim 已归零(finishClose 前置 dim.join()/snapTo(0) 保证;
-                            //     取消回弹分支 glow 先 snapTo(0)), 两者从不同时可见。
-                            Box(Modifier.fillMaxSize()
-                                .drawBehind {
-                                    val g = ov.glow.value
-                                    if (g > 0f) {
-                                        val inflate = 8.dp.toPx()
-                                        drawRoundRect(
-                                            color = NeonPurpleBright,
-                                            alpha = g * 0.35f,
-                                            topLeft = Offset(-inflate, -inflate),
-                                            size = Size(size.width + inflate * 2, size.height + inflate * 2),
-                                            cornerRadius = CornerRadius(20.dp.toPx() + inflate)
-                                        )
-                                    }
-                                }
-                            )
                             // 内层: 自身尺寸 = 插值矩形尺寸 → 圆角 20dp 收口到 0 + clip 裁剪。
                             // ★ 容器变换二轮(F3-flow): bg 自 p=0 起【恒定不透明】—— 起始态就是被点卡片本身,
                             //   随几何一起从卡片长到全屏。旧实现 bg alpha 跟 sensorScrim(s>0.6 才淡入),
