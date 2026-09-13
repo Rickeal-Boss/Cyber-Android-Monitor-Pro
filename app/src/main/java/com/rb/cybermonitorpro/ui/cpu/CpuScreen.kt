@@ -277,8 +277,9 @@ private fun ClusterCard(name: String, subtitle: String, frequency: String, freqD
     Card(modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        // 外层去水平 padding，频率图表全宽顶边；文本 header 单独补回边距
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                     Text(subtitle, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -287,6 +288,7 @@ private fun ClusterCard(name: String, subtitle: String, frequency: String, freqD
             }
             Spacer(Modifier.height(12.dp))
             LineChart(data = freqData, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainBlue)
+            Spacer(Modifier.height(16.dp))
         }
     }
 }
