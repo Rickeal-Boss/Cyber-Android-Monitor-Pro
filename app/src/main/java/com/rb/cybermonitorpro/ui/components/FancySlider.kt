@@ -65,6 +65,9 @@ import kotlin.math.abs
  *   emptyList() = 显式关闭；非空 = 显式档位），nearestStopIndex 变更即 HapticUtils.stepTick
  *   （内置 50ms 节流 + 震动开关判断）；effect 启动时 refreshSettings 同步缓存，
  *   修 cachedEnabled 初值恒 true、冷启动后缓存态错误的既有缺陷。
+ * SLIDER-07：轨道绘制两端各外扩一个端帽半径（trackHeight/2）——M3 把 thumb 中心放在轨道槽位
+ *   端点上，不外扩则圆钮半悬在胶囊之外；外扩后端帽圆心与两端圆钮圆心重合，圆钮嵌进圆角内
+ *   与轨道视觉融合（对齐参考截图）。已选段右边界恒等于圆钮中心。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -174,22 +177,33 @@ fun FancySlider(
                         ((state.value - valueRange.start) /
                             (valueRange.endInclusive - valueRange.start)).coerceIn(0f, 1f)
                     } else 0f
+                    // SLIDER-07: 轨道两端各外扩一个端帽半径(=trackHeight/2)，使端帽圆心与
+                    // fraction=0/1 的 thumb 圆心重合 —— 圆钮嵌进端帽、与圆角视觉融合（对齐参考截图），
+                    // 消除旧版"圆钮半悬在轨道端点之外"的脱离感。M3 布局把 thumb 中心放在
+                    // 轨道槽位端点上(L829)，外扩量 = 端帽半径即恰好同心。DrawScope 无裁剪，越界绘制可见。
+                    val ext = size.height / 2f                  // 外扩量 = 端帽半径
+                    val left = -ext
+                    val totalWidth = size.width + 2f * ext
                     val cap = size.height / 2f
-                    val activeWidth = size.width * trackFraction
-                    drawRoundRect(  // 未选段
+                    // 已选段右边界 = thumb(圆钮)中心：槽位坐标 f*size.width，换算到外扩坐标 +ext
+                    val activeWidth = (ext + trackFraction * size.width).coerceIn(0f, totalWidth)
+                    drawRoundRect(  // 未选段（外扩后的整条胶囊）
                         color = inactiveTrackColor,
+                        topLeft = Offset(left, 0f),
+                        size = Size(totalWidth, size.height),
                         cornerRadius = CornerRadius(cap),
                     )
-                    drawRoundRect(  // 已选段
+                    drawRoundRect(  // 已选段：外扩左端 → 圆钮中心
                         color = activeTrackColor,
-                        size = Size(activeWidth.coerceIn(0f, size.width), size.height),
+                        topLeft = Offset(left, 0f),
+                        size = Size(activeWidth, size.height),
                         cornerRadius = CornerRadius(cap),
                     )
                     val stroke = 2.dp.toPx()  // 描边
                     drawRoundRect(
                         color = borderColor,
-                        topLeft = Offset(stroke / 2, stroke / 2),
-                        size = Size(size.width - stroke, size.height - stroke),
+                        topLeft = Offset(left + stroke / 2, stroke / 2),
+                        size = Size(totalWidth - stroke, size.height - stroke),
                         cornerRadius = CornerRadius(cap - stroke / 2),
                         style = Stroke(width = stroke),
                     )
