@@ -89,8 +89,13 @@ import com.rb.cybermonitorpro.ui.gps.GpsScreen
 import com.rb.cybermonitorpro.ui.gpu.GpuScreen
 import com.rb.cybermonitorpro.ui.memory.MemoryScreen
 import com.rb.cybermonitorpro.ui.network.NetworkScreen
+import com.rb.cybermonitorpro.ui.sensors.SensorCardBody
 import com.rb.cybermonitorpro.ui.sensors.SensorDetailContent
 import com.rb.cybermonitorpro.ui.sensors.SensorsScreen
+// 弹起节奏参数单一来源(与 SensorItemCard 搜索脉冲同款): finishClose 收尾弹起引用
+import com.rb.cybermonitorpro.ui.sensors.PULSE_UP_MS
+import com.rb.cybermonitorpro.ui.sensors.PULSE_DOWN_MS
+import com.rb.cybermonitorpro.ui.sensors.PULSE_SCALE
 import com.rb.cybermonitorpro.ui.settings.SettingsScreen
 import com.rb.cybermonitorpro.ui.effects.LocalSharedTransitionScope
 import com.rb.cybermonitorpro.ui.effects.StaggeredPageProvider
@@ -280,6 +285,12 @@ private class SensorOverlay(
     val scrim = Animatable(0f)
     /** 转场是否已稳定(容器已铺满) —— 仅此时才由根 Box 吃点击隔绝主界面 */
     var settled by mutableStateOf(false)
+    /** 弹起时钟: 1f=静止, 收尾弹起 1→PULSE_SCALE→1 (装饰性层属性, 非转场几何) */
+    val bounce = Animatable(1f)
+    /** 弹起辉光: 0→1→0, drawBehind 直接带 alpha 画(不进层 alpha, 避离屏层黑闪) */
+    val glow = Animatable(0f)
+    /** 收尾幂等标志: 普通 var(非 State), 仅协程侧读写, 组合期零读 */
+    var finalizing = false
 }
 
 /** 赛博风格线条矢量图标 — 与 Tab 含义一一对应 */
@@ -436,6 +447,39 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
         }
     }
 
+    /**
+     * 收尾弹起: 容器收回到起点矩形(p=0, 与真卡片同位同尺寸)后, 覆盖层"卡片内容层"顶上
+     * 演一段与列表页搜索脉冲同款的微弹(辉光 0→1→0 + scale 1→1.04→1), 播完才把实例移出列表。
+     *
+     * 幂等: finalizing 普通标志挡住重复触发(返回键连按/预测返回完成分支撞上已在收尾的实例);
+     * 预测返回【取消】分支会把 finalizing 清回 false 并 snapTo 复位两时钟 → 进行中的 animateTo
+     * 抛 CancellationException, 本函数 finally 读到标志已清 → 不移除, 实例"复活"继续服务。
+     *
+     * ⚠️ 声明位置硬约束: 必须在 sensorOverlays 之后、closeSensorDetail 之前 ——
+     *   Kotlin 局部函数/局部变量只能引用"之前"声明者(CI pre1 前向引用教训);
+     *   closeSensorDetail 体内调用本函数, 放其后即前向引用编译错误。
+     */
+    fun finishClose(ov: SensorOverlay) {
+        if (ov.finalizing) return          // 返回键连按/预测完成重复触发 → 幂等
+        ov.finalizing = true
+        scope.launch {
+            try {
+                // 辉光与弹起并行: 辉光与弹起 scale 同用 180/420 节奏(PULSE_UP_MS/PULSE_DOWN_MS);
+                // 列表页 glow 降段为 600ms(SensorsScreen tween(600)), 此处有意取短 —— 收尾场景短促一闪即可
+                launch {
+                    ov.glow.animateTo(1f, tween(PULSE_UP_MS))
+                    ov.glow.animateTo(0f, tween(PULSE_DOWN_MS))
+                }
+                ov.bounce.animateTo(PULSE_SCALE, tween(PULSE_UP_MS))
+                ov.bounce.animateTo(1f, tween(PULSE_DOWN_MS))
+            } finally {
+                // 弹起播完(或被取消回弹合法中断)才移除实例;
+                // 若已被取消分支复活(finalizing=false), 保留实例继续服务
+                if (ov.finalizing) sensorOverlays.remove(ov)
+            }
+        }
+    }
+
     fun closeSensorDetail() {
         // ★ 只收起【最新】那个实例: 若此刻还有更早的实例正在收回, 它不受影响, 继续播完自己的动画。
         val ov = sensorOverlays.lastOrNull() ?: return
@@ -447,8 +491,9 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             val dim = launch { ov.scrim.animateTo(0f, CARD_EXIT_SPEC) }   // 背景同步解除压暗
             val geo = launch { ov.progress.animateTo(0f, CARD_EXIT_SPEC) } // 容器收回到起点矩形
             dim.join(); geo.join()
-            // 收起完成 → 只移除【本实例】; 其它实例(可能正在长大或正在收回)完全不受影响
-            sensorOverlays.remove(ov)
+            // 收起完成 → 弹起收尾: 辉光闪一次 + 卡片内容层原地微弹, 播完才移除【本实例】;
+            // 其它实例(可能正在长大或正在收回)完全不受影响
+            finishClose(ov)
             // 起点矩形不再需要全局清理: 它已在创建实例时被快照进 ov.startRect
         }
     }
@@ -594,11 +639,11 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             backProgress.snapTo(0f)
             when {
                 sensorTop != null -> {
-                    // 跟手已把该实例拖到收缩态 → 直接归零并移除(只动这一个实例)
+                    // 跟手已把该实例拖到收缩态 → 直接归零并收尾弹起(只动这一个实例)
                     sensorTop.progress.snapTo(0f)
                     sensorTop.scrim.snapTo(0f)
                     sensorTop.settled = false
-                    sensorOverlays.remove(sensorTop)
+                    finishClose(sensorTop)   // 辉光+微弹播完才移除, 收尾与"按返回键"路径同款衔接
                 }
                 showHdrLab -> {
                     hdrSurfacesVisible = false
@@ -625,6 +670,13 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
             if (showSettings) settingsReveal.progress.animateTo(1f, tween(400))
             if (showFloatConfig) floatReveal.progress.animateTo(1f, tween(400))
             if (sensorTop != null) {
+                // 取消回弹前先"复活"实例: 若它正处于收尾弹起(finalizing), 清标志 + snapTo 复位两时钟
+                // → 进行中的 finishClose animateTo 抛 CancellationException, 其 finally 见标志已清 → 不移除
+                sensorTop.finalizing = false
+                sensorTop.bounce.snapTo(1f)
+                sensorTop.glow.snapTo(0f)
+                // 既有回弹编排保持不动: progress 已被跟手 snapTo 收缩, animateTo 拉回全屏,
+                // 卡片内容层 alpha 是 p 的纯函数 → 自动淡出, 无需额外处理
                 sensorTop.progress.animateTo(1f, CARD_ENTRY_SPEC)
                 sensorTop.scrim.animateTo(1f, CARD_ENTRY_SPEC)
                 sensorTop.settled = true    // 回弹完成 → 容器重新铺满, 恢复点击隔绝(且不再需要模糊)
@@ -944,6 +996,29 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                 }
                             }
                         ) {
+                            // 弹起辉光(收尾装饰): 与 SensorItemCard 的搜索脉冲 halo 逐参数同款 ——
+                            //   向外扩 8dp 画在卡面之下(z 序更低、先组合), 无 clip、可出界,
+                            //   收起完成后的微弹期间闪一次(NeonPurpleBright ×0.35, 跟 glow 时钟);
+                            //   drawBehind 直接带 alpha 画, 不进层 alpha(pre12 黑闪结论同样适用)。
+                            //   仅收尾弹起期 glow>0, 平时零绘制开销。
+                            //   z 序不变量: 辉光 z 序实际在 scrim 之上, 无可见差异 ——
+                            //     glow>0 ⇔ 本实例 scrim 已归零(finishClose 前置 dim.join()/snapTo(0) 保证;
+                            //     取消回弹分支 glow 先 snapTo(0)), 两者从不同时可见。
+                            Box(Modifier.fillMaxSize()
+                                .drawBehind {
+                                    val g = ov.glow.value
+                                    if (g > 0f) {
+                                        val inflate = 8.dp.toPx()
+                                        drawRoundRect(
+                                            color = NeonPurpleBright,
+                                            alpha = g * 0.35f,
+                                            topLeft = Offset(-inflate, -inflate),
+                                            size = Size(size.width + inflate * 2, size.height + inflate * 2),
+                                            cornerRadius = CornerRadius(20.dp.toPx() + inflate)
+                                        )
+                                    }
+                                }
+                            )
                             // 内层: 自身尺寸 = 插值矩形尺寸 → 圆角 20dp 收口到 0 + clip 裁剪。
                             // ★ 容器变换二轮(F3-flow): bg 自 p=0 起【恒定不透明】—— 起始态就是被点卡片本身,
                             //   随几何一起从卡片长到全屏。旧实现 bg alpha 跟 sensorScrim(s>0.6 才淡入),
@@ -955,6 +1030,10 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                             Box(Modifier.fillMaxSize()
                                 .graphicsLayer {
                                     val p = ov.progress.value
+                                    // 收尾弹起 scale(装饰性层属性, 非转场几何): 1f=静止, 弹起 1→1.04→1,
+                                    // TransformOrigin 默认中心, 与 shape/clip 同 lambda 零重组
+                                    scaleX = ov.bounce.value
+                                    scaleY = ov.bounce.value
                                     shape = RoundedCornerShape(androidx.compose.ui.unit.lerp(20.dp, 0.dp, p))
                                     clip = true
                                 }
@@ -969,6 +1048,36 @@ fun SystemMonitorApp(appViewModel: AppViewModel? = null) {
                                     )
                                 }
                             ) {
+                                // 卡片内容层: 收起末段(最后 CONTENT_FADE_FRACTION=10%)从透明淡入到完全显示,
+                                // p=0 时与真卡片逐像素同构(surface 卡面 + SensorCardBody 同源内容 + 20dp 圆角),
+                                // 弹起期的"卡片"即本层 —— 详情内容淡出与卡片内容淡入共窗口交叉, 画面不再落空成空壳。
+                                // z 序: 先组合在详情内容之下, 详情内容淡出时它已在底下接住画面。
+                                // 卡面: colorScheme.surface(与真卡片 containerColor 同色) + 20dp 圆角,
+                                // alpha 随 p 末段 10% 内 0→1; 实心面走 drawBehind 直接带 alpha 画(黑闪禁令), 不进层 alpha ——
+                                //   surface 色在组合期取值闭包捕获(drawBehind 内不能调组合期 MaterialTheme API);
+                                // 文字: SensorCardBody 经层 alpha(有先例: 详情内容层同手法), 卡面不属实心面不进层。
+                                // 修饰符顺序: drawBehind 在 graphicsLayer 之前(更外层) → 卡面画在层外直出,
+                                //   层 alpha 只作用于 SensorCardBody 内容。
+                                val cardSurface = MaterialTheme.colorScheme.surface
+                                Box(Modifier.fillMaxSize()
+                                    .drawBehind {
+                                        val cIn = 1f - (ov.progress.value / CONTENT_FADE_FRACTION).coerceIn(0f, 1f)
+                                        if (cIn > 0f) {
+                                            drawRoundRect(
+                                                color = cardSurface,
+                                                alpha = cIn,
+                                                cornerRadius = CornerRadius(20.dp.toPx())
+                                            )
+                                        }
+                                    }
+                                    .graphicsLayer {
+                                        val cIn = 1f - (ov.progress.value / CONTENT_FADE_FRACTION).coerceIn(0f, 1f)
+                                        alpha = cIn   // p 的纯函数在 lambda 内直读, 零重组
+                                    }
+                                ) {
+                                    // 16dp padding 由 SensorCardBody 内部自带(与真卡片同源), 此处不再加 padding
+                                    SensorCardBody(sensor = sensor)
+                                }
                                 // ③ 内容渐变 + 上移 (draw 阶段驱动, 零重组) — 原样保留
                                 Box(Modifier.fillMaxSize()
                                     .graphicsLayer {
