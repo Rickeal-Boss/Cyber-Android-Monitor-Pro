@@ -243,6 +243,7 @@ private fun RefreshIntervalCard() {
                     FloatingWindowConfig.refreshIntervalMs = snapped
                 },
                 valueRange = refreshStepOptions.first().toFloat()..refreshStepOptions.last().toFloat(),
+                tickStops = refreshStepOptions.map { it.toFloat() },  // SLIDER-05: 显式档位过档震动
                 modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
             )
 

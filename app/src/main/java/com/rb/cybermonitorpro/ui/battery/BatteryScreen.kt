@@ -765,6 +765,7 @@ private fun BatteryCurrentMultiplierCard(
                     },
                     valueRange = 0f..(CURRENT_MULTIPLIER_TIERS.size - 1).toFloat(),
                     steps = 0,
+                    tickStops = List(CURRENT_MULTIPLIER_TIERS.size) { it.toFloat() },  // SLIDER-05: 4 挡过档震动
                     enabled = enabled,
                     modifier = Modifier.fillMaxWidth(),
                     // 原版已选段用 NeonPurpleBright 高亮，保持一致
