@@ -1,16 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Adaptive Icon 安全区包装器 — OEM 包装层适配 (v3)
-  
-  2026-06-19 更新:
-  - PNG 已做 1.20x 中心缩放，透明白边已裁净
-  - 无需再预留大量呼吸空间给白边
-  - 14dp inset = 80dp 内容区，介于 66dp 安全区与 108dp 全视口之间
-  - 多出的 14dp 在外 OEM 遮罩自然裁切，MIUI/HyperOS 实测可用
+  Adaptive Icon 安全区包装器 — 天青瓷 logo 整贴片适配 (v4)
+
+  2026-09-13 重写（图标全量更换轮，chart-icon 线）:
+  - 方案改为「整贴片」：五档 mipmap 前景 PNG 直接由 432px 天青瓷 logo 母版产出，
+    贴片自身不透明（四角 #F5F5F5）、无透明白边问题，v3 的"1.20x 中心缩放/14dp=80dp 内容区"
+    旧表述随旧图一并作废。
+  - inset 依 R1 字标安全区门禁实测而定（432 母版，阈值 R,G,B≥246 且 alpha=255 的
+    白色字标全组件并集，已排除玻璃球高光与四角贴片底色）：
+    实测字标最大离心距离 u = 153.0px / 432 = 0.3541 > 0.3055，
+    按 66dp 安全区公式 u×(108−2i)≤33 取 i = ceil((108−33/0.3541)/2) = 8dp；
+    复核 0.3541×92 = 32.58dp ≤ 33dp 达标，7dp 时 33.29dp 超标，故 8dp 为最小合规值。
+  - 被收进来的 8dp 环带由 ic_launcher_background_new 的天青径向渐变补底，
+    正常遮罩下观感即图标底色延伸（见该文件"防御层"注释）。
 -->
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
     android:drawable="@mipmap/ic_launcher_foreground"
-    android:insetLeft="14dp"
-    android:insetTop="14dp"
-    android:insetRight="14dp"
-    android:insetBottom="14dp" />
+    android:insetLeft="8dp"
+    android:insetTop="8dp"
+    android:insetRight="8dp"
+    android:insetBottom="8dp" />

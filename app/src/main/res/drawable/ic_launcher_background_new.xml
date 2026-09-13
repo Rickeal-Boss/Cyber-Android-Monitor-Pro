@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 天青径向渐变底（图标全量更换轮 2026-09-13 换色）：3-stop 结构与 centerX/Y=54/radius=76 沿用不动，仅配色由暗紫黑系换为「镜瓷白·天青」系。防御层：前景已是整贴片不透明 logo，正常遮罩下本层完全不可见，仅防极端 OEM 遮罩（如超方/大圆角裁穿 8dp inset 环带）时露边兜底。 -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android">
     <gradient
         android:type="radial"
         android:centerX="54"
         android:centerY="54"
         android:gradientRadius="76"
-        android:startColor="#1A1028"
-        android:centerColor="#0D0818"
-        android:endColor="#05030A"/>
+        android:startColor="#E9F5F8"
+        android:centerColor="#CBE7EF"
+        android:endColor="#A6CBD6"/>
 </shape>
