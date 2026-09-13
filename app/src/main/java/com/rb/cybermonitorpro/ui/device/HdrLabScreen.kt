@@ -56,10 +56,12 @@ import com.rb.cybermonitorpro.ui.theme.NeonCyan
 import com.rb.cybermonitorpro.ui.theme.NeonMagentaPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurple
 import com.rb.cybermonitorpro.ui.theme.NeonPurpleBright
+import com.rb.cybermonitorpro.ui.theme.NeonPurpleDeep
 import com.rb.cybermonitorpro.ui.theme.NeonSteelBlue
 import com.rb.cybermonitorpro.ui.theme.SuccessNeon
 import com.rb.cybermonitorpro.ui.theme.TextPrimary
 import com.rb.cybermonitorpro.ui.theme.TextSecondary
+import com.rb.cybermonitorpro.ui.theme.TextOnPrimary
 import com.rb.cybermonitorpro.ui.theme.WarningNeon
 import kotlinx.coroutines.delay
 
@@ -296,9 +298,11 @@ fun HdrLabScreen(onBack: () -> Unit = {}, surfaceVisible: Boolean = true) {
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(horizontal = 8.dp),
-                                // SLIDER-06: disabled 态用钢蓝降透明度; enabled 态对齐全仓新配色 (White 齿轮 thumb / NeonMagentaPurple 轨道)
-                                thumbColor = if (canControl) Color.White
-                                    else NeonSteelBlue.copy(alpha = 0.4f),
+                                // SLIDER-06: enabled 态对齐全仓新配色 (TextOnPrimary 齿轮 thumb / NeonMagentaPurple 轨道)
+                                // SLIDER-04: 图标色两态恒为 TextOnPrimary 保证可读（半透明图标画在实心同色钮上会完全隐形）；
+                                //   disabled 弱化感由钮色承担 —— knobColor 从 NeonPurpleDeep 降为 NeonSteelBlue（实心非 alpha）
+                                thumbColor = TextOnPrimary,
+                                knobColor = if (canControl) NeonPurpleDeep else NeonSteelBlue,
                                 activeTrackColor = if (canControl) NeonMagentaPurple
                                     else NeonSteelBlue.copy(alpha = 0.3f),
                                 inactiveTrackColor = if (canControl) NeonSteelBlue.copy(alpha = 0.3f)

@@ -317,6 +317,7 @@ private fun ModuleIntervalCard(cfg: ModuleIntervalConfig, viewModel: SettingsVie
                 },
                 valueRange = 500f..5000f,
                 steps = 0,  // 自由滑动，档次由 onValueChangeFinished snap 处理
+                tickStops = refreshOptions.map { it.toFloat() },  // SLIDER-05: 显式档位过档震动
                 modifier = Modifier.fillMaxWidth(),
             )
 
