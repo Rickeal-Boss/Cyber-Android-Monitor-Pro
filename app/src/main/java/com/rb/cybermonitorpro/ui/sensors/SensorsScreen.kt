@@ -395,8 +395,6 @@ private fun SensorItemCard(
     onCardPositioned: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val meta = SensorTypeMeta.fromTypeId(sensor.type)
-    val ctx = LocalContext.current
     // F3-flow: 卡片窗口矩形（boundsInWindow）— 覆盖层"一镜到底"转场的起点矩形
     //   与覆盖层根节点 positionInWindow() 同一坐标系，MainActivity 减出局部矩形做插值。
     //   ★ 评审 P2-1: 原 cardCenter(boundsInRoot().center, Offset) 已删除 —— F3-flow 把水波纹的点击回调
@@ -412,8 +410,8 @@ private fun SensorItemCard(
     LaunchedEffect(pulseTick) {
         if (highlighted) {
             launch {
-                pulse.animateTo(1.04f, tween(180))
-                pulse.animateTo(1f, tween(420))
+                pulse.animateTo(PULSE_SCALE, tween(PULSE_UP_MS))
+                pulse.animateTo(1f, tween(PULSE_DOWN_MS))
             }
             launch {
                 glow.animateTo(1f, tween(180))
@@ -438,53 +436,7 @@ private fun SensorItemCard(
         .cardRipple(onClick = { onClick(cardRect) })
 
     val cardContent: @Composable ColumnScope.() -> Unit = {
-        Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    SensorTypeMeta.getDisplayName(sensor.type, ctx, sensor.stringType),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                // 可监控标识
-                if (meta != null) {
-                    Text(
-                        "\u25B6",
-                        fontSize = 14.sp,
-                        color = NeonPurpleBright
-                    )
-                }
-            }
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(
-                    sensor.vendor.ifEmpty { sensor.name.split(" ").firstOrNull() ?: stringResource(R.string.sensor_unknown_vendor) },
-                    fontSize = 13.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (sensor.isWakeUp) {
-                        Text(
-                            stringResource(R.string.sensor_tag_wakeup),
-                            fontSize = 11.sp,
-                            color = WarningNeon
-                        )
-                    }
-                    if (sensor.isDynamic) {
-                        Text(
-                            stringResource(R.string.sensor_tag_dynamic),
-                            fontSize = 11.sp,
-                            color = SuccessNeon
-                        )
-                    }
-                }
-            }
-            Text(
-                stringResource(R.string.sensor_range_label, sensor.maxRange, meta?.unit?.takeIf { it.isNotEmpty() } ?: ""),
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-            )
-        }
+        SensorCardBody(sensor)
     }
 
     // 外包 Box 承载脉冲 scale + 辉光; 水波纹修饰符在 Card 内部
@@ -515,6 +467,74 @@ private fun SensorItemCard(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
             content = cardContent
+        )
+    }
+}
+
+// ── 脉冲/弹起参数单一来源 ──
+//   搜索定位脉冲(SensorItemCard)与覆盖层收尾弹起(MainActivity.finishClose)共用同一组节奏参数,
+//   保证"卡片原地微弹"在列表页与覆盖层收尾两处观感一致; 改这里即全局生效。
+internal const val PULSE_UP_MS = 180
+internal const val PULSE_DOWN_MS = 420
+internal const val PULSE_SCALE = 1.04f
+
+/**
+ * 传感器卡片内容 — SensorItemCard 与 MainActivity 覆盖层"卡片内容层"的【同源】渲染体。
+ *
+ * 提取自 SensorItemCard 原 cardContent lambda, 渲染结果逐像素等价:
+ * 覆盖层收起末段(p<10%)从透明淡入的本层, 在 p=0 时与真卡片完全同构
+ * (surface 卡面 + 本内容 + 20dp 圆角), 弹起期用户看到的"卡片"即覆盖层里的它。
+ * meta/ctx 等在函数内自取, 不依赖调用方作用域。
+ */
+@Composable
+internal fun SensorCardBody(sensor: SensorItemInfo) {
+    val meta = SensorTypeMeta.fromTypeId(sensor.type)
+    val ctx = LocalContext.current
+    Column(Modifier.padding(16.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                SensorTypeMeta.getDisplayName(sensor.type, ctx, sensor.stringType),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            // 可监控标识
+            if (meta != null) {
+                Text(
+                    "\u25B6",
+                    fontSize = 14.sp,
+                    color = NeonPurpleBright
+                )
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                sensor.vendor.ifEmpty { sensor.name.split(" ").firstOrNull() ?: stringResource(R.string.sensor_unknown_vendor) },
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (sensor.isWakeUp) {
+                    Text(
+                        stringResource(R.string.sensor_tag_wakeup),
+                        fontSize = 11.sp,
+                        color = WarningNeon
+                    )
+                }
+                if (sensor.isDynamic) {
+                    Text(
+                        stringResource(R.string.sensor_tag_dynamic),
+                        fontSize = 11.sp,
+                        color = SuccessNeon
+                    )
+                }
+            }
+        }
+        Text(
+            stringResource(R.string.sensor_range_label, sensor.maxRange, meta?.unit?.takeIf { it.isNotEmpty() } ?: ""),
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         )
     }
 }
