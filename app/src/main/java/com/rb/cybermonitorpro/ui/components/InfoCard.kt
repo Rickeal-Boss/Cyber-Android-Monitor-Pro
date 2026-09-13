@@ -1,5 +1,6 @@
 package com.rb.cybermonitorpro.ui.components
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +13,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,6 +76,7 @@ fun MetricCard(
     valueColor: Color = NeonPurpleBright, subtitle: String = "",
     progress: Float = -1f, showProgress: Boolean = false,
     borderColor: Color? = null,
+    @DrawableRes titleIconRes: Int? = null,
     chart: @Composable () -> Unit = NoChart
 ) {
     Card(
@@ -89,10 +92,17 @@ fun MetricCard(
             // 外层接管底部 18dp；文本区单独留 18dp 水平边距，图表槽(chart)水平零 padding 全宽顶边
             Column(Modifier.padding(bottom = 18.dp)) {
                 Column(Modifier.padding(horizontal = 18.dp).padding(top = 18.dp)) {
-                    Text(
-                        text = title, fontSize = 11.sp, color = TextSecondary,
-                        letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal
-                    )
+                    // 标题行: 文本占满剩余宽度, 可选嵌瓷图标钉在右侧(取值色 tint 保持同卡同色系)
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = title, fontSize = 11.sp, color = TextSecondary,
+                            letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (titleIconRes != null) {
+                            Icon(painterResource(titleIconRes), null, Modifier.size(16.dp), tint = valueColor)
+                        }
+                    }
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = value, fontSize = 22.sp, color = valueColor, letterSpacing = 1.5.sp

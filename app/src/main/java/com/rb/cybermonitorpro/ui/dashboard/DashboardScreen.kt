@@ -364,13 +364,15 @@ private fun MetricCardByType(
     when (id) {
         "cpu_temp" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_cpu_temp), value = cpuTemp,
-            valueColor = PorcelainRedDeep, modifier = Modifier.fillMaxWidth()
+            valueColor = PorcelainRedDeep, modifier = Modifier.fillMaxWidth(),
+            titleIconRes = R.drawable.ic_cyber_cpu
         ) { LineChart(data = cpuTempChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainRed) }
 
         "mem_usage" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_mem_usage), value = memUsed,
             valueColor = memValueColor, modifier = Modifier.fillMaxWidth(), subtitle = "/ $memTotal",
-            progress = memProgress, showProgress = true
+            progress = memProgress, showProgress = true,
+            titleIconRes = R.drawable.ic_cyber_memory
         ) {
             // MetricCard 的 chart 槽已水平零 padding，文本内容自行补回 18dp 水平边距
             Column(Modifier.padding(horizontal = 18.dp)) {
@@ -412,7 +414,8 @@ private fun MetricCardByType(
         "battery_level" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_battery_level), value = batteryLevel,
             valueColor = SuccessNeon, modifier = Modifier.fillMaxWidth(), subtitle = batterySubtitle,
-            borderColor = batteryTempBorder
+            borderColor = batteryTempBorder,
+            titleIconRes = R.drawable.ic_cyber_battery
         ) {
             // MetricCard 的 chart 槽已水平零 padding，文本内容自行补回 18dp 水平边距
             Column(Modifier.padding(horizontal = 18.dp)) {
@@ -438,7 +441,8 @@ private fun MetricCardByType(
 
         "gpu_load" -> MetricCard(
             title = stringResource(R.string.dashboard_metric_gpu_load), value = gpuLoadText,
-            valueColor = PorcelainVioletDeep, modifier = Modifier.fillMaxWidth()
+            valueColor = PorcelainVioletDeep, modifier = Modifier.fillMaxWidth(),
+            titleIconRes = R.drawable.ic_cyber_gpu
         ) { LineChart(data = gpuLoadChart, modifier = Modifier.fillMaxWidth(), lineColor = PorcelainViolet) }
     }
 }
