@@ -67,7 +67,9 @@ import kotlin.math.abs
  *   修 cachedEnabled 初值恒 true、冷启动后缓存态错误的既有缺陷。
  * SLIDER-07：轨道绘制两端各外扩一个端帽半径（trackHeight/2）——M3 把 thumb 中心放在轨道槽位
  *   端点上，不外扩则圆钮半悬在胶囊之外；外扩后端帽圆心与两端圆钮圆心重合，圆钮嵌进圆角内
- *   与轨道视觉融合（对齐参考截图）。已选段右边界恒等于圆钮中心。
+ *   与轨道视觉融合（对齐参考截图）。
+ * SLIDER-08：已选段右边界 = 圆钮描边右缘（中心+半径）——已选色完整包裹圆钮、未选段自圆钮
+ *   右缘开始；右端帽圆与圆钮圆重合，无缝隙无灰角。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -185,15 +187,19 @@ fun FancySlider(
                     val left = -ext
                     val totalWidth = size.width + 2f * ext
                     val cap = size.height / 2f
-                    // 已选段右边界 = thumb(圆钮)中心：槽位坐标 f*size.width，换算到外扩坐标 +ext
-                    val activeWidth = (ext + trackFraction * size.width).coerceIn(0f, totalWidth)
+                    // SLIDER-08: 已选段右边界 = 圆钮描边右缘（圆钮中心+半径）——已选色完整包裹
+                    // 圆钮、未选段自圆钮右缘开始；已选段右端帽圆(圆心=圆钮圆心, r=轨道高/2)与
+                    // 圆钮圆(knobDiameter 默认=轨道高)完全重合，无缝隙无灰角
+                    val knobRadius = knobDiameter.toPx() / 2f
+                    val activeWidth = (ext + trackFraction * size.width + knobRadius)
+                        .coerceIn(0f, totalWidth)
                     drawRoundRect(  // 未选段（外扩后的整条胶囊）
                         color = inactiveTrackColor,
                         topLeft = Offset(left, 0f),
                         size = Size(totalWidth, size.height),
                         cornerRadius = CornerRadius(cap),
                     )
-                    drawRoundRect(  // 已选段：外扩左端 → 圆钮中心
+                    drawRoundRect(  // 已选段：外扩左端 → 圆钮右缘（包裹圆钮）
                         color = activeTrackColor,
                         topLeft = Offset(left, 0f),
                         size = Size(activeWidth, size.height),
