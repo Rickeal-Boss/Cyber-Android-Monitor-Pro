@@ -86,30 +86,33 @@ fun MetricCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(CardGradient)) {
-            Column(Modifier.padding(18.dp)) {
-                Text(
-                    text = title, fontSize = 11.sp, color = TextSecondary,
-                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = value, fontSize = 22.sp, color = valueColor, letterSpacing = 1.5.sp
-                )
-                if (showProgress && progress >= 0f) {
-                    Spacer(Modifier.height(10.dp))
-                    LinearProgressIndicator(
-                        progress = { progress.coerceIn(0f, 1f) },
-                        modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(2.5.dp)),
-                        color = valueColor, trackColor = CyberMuted
-                    )
-                }
-                if (subtitle.isNotBlank()) {
+            // 外层接管底部 18dp；文本区单独留 18dp 水平边距，图表槽(chart)水平零 padding 全宽顶边
+            Column(Modifier.padding(bottom = 18.dp)) {
+                Column(Modifier.padding(horizontal = 18.dp).padding(top = 18.dp)) {
                     Text(
-                        text = subtitle, fontSize = 12.sp,
-                        color = TextSecondary.copy(alpha = 0.7f), letterSpacing = 0.5.sp
+                        text = title, fontSize = 11.sp, color = TextSecondary,
+                        letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal
                     )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = value, fontSize = 22.sp, color = valueColor, letterSpacing = 1.5.sp
+                    )
+                    if (showProgress && progress >= 0f) {
+                        Spacer(Modifier.height(10.dp))
+                        LinearProgressIndicator(
+                            progress = { progress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(2.5.dp)),
+                            color = valueColor, trackColor = CyberMuted
+                        )
+                    }
+                    if (subtitle.isNotBlank()) {
+                        Text(
+                            text = subtitle, fontSize = 12.sp,
+                            color = TextSecondary.copy(alpha = 0.7f), letterSpacing = 0.5.sp
+                        )
+                    }
                 }
-                chart()
+                if (chart !== NoChart) chart()
             }
         }
     }

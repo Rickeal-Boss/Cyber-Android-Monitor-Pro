@@ -107,7 +107,8 @@ fun GpuScreen(
         MetricCard(modifier = Modifier.staggeredSwipe(cardIdx++), title = "GPU load", value = load, valueColor = PorcelainVioletDeep,
             subtitle = loadSource ?: "") {
             if (effectiveUtil != null && !effectiveUtil.isNaN()) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                // MetricCard 的 chart 槽已水平零 padding，文本行自行补回 18dp 水平边距(LineChart 保持全宽)
+                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text(stringResource(R.string.gpu_effective_util_label), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("%.0f%%".format(effectiveUtil), fontSize = 12.sp, color = SuccessNeon)
                 }

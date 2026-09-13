@@ -372,37 +372,40 @@ private fun MetricCardByType(
             valueColor = memValueColor, modifier = Modifier.fillMaxWidth(), subtitle = "/ $memTotal",
             progress = memProgress, showProgress = true
         ) {
-            if (hasSwapZram) {
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.memory_swap_zram_title),
-                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
-                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal
-                )
-                Spacer(Modifier.height(3.dp))
-                val szText = FormatUtils.formatBytes(swapzramUsedKB * 1024)
-                Text(
-                    text = "$szText ${stringResource(R.string.common_in_use)}",
-                    fontSize = 16.sp, color = memValueColor,
-                    fontWeight = FontWeight.SemiBold
-                )
-                if (swapzramPct >= 0f) {
-                    Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { swapzramPct },
-                        modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-                        color = memValueColor.copy(alpha = 0.75f), trackColor = CyberMuted
+            // MetricCard 的 chart 槽已水平零 padding，文本内容自行补回 18dp 水平边距
+            Column(Modifier.padding(horizontal = 18.dp)) {
+                if (hasSwapZram) {
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.memory_swap_zram_title),
+                        fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
+                        letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    val szText = FormatUtils.formatBytes(swapzramUsedKB * 1024)
+                    Text(
+                        text = "$szText ${stringResource(R.string.common_in_use)}",
+                        fontSize = 16.sp, color = memValueColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (swapzramPct >= 0f) {
+                        Spacer(Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { swapzramPct },
+                            modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                            color = memValueColor.copy(alpha = 0.75f), trackColor = CyberMuted
+                        )
+                    }
+                    val szTotalText = FormatUtils.formatBytes(swapzramTotalKB * 1024)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.memory_swap_total, szTotalText),
+                        fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.6f),
+                        fontWeight = FontWeight.Normal
                     )
                 }
-                val szTotalText = FormatUtils.formatBytes(swapzramTotalKB * 1024)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = stringResource(R.string.memory_swap_total, szTotalText),
-                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.6f),
-                    fontWeight = FontWeight.Normal
-                )
             }
         }
 
@@ -411,22 +414,25 @@ private fun MetricCardByType(
             valueColor = SuccessNeon, modifier = Modifier.fillMaxWidth(), subtitle = batterySubtitle,
             borderColor = batteryTempBorder
         ) {
-            // 利用卡片下部剩余空间显示电池温度（与 mem_usage 的 SWAP/ZRAM 区块同构）
-            if (batteryTemp != "---") {
-                Spacer(Modifier.height(10.dp))
-                HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.dashboard_metric_battery_temp),
-                    fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
-                    letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal
-                )
-                Spacer(Modifier.height(3.dp))
-                Text(
-                    text = batteryTemp,
-                    fontSize = 16.sp, color = SuccessNeon,
-                    fontWeight = FontWeight.SemiBold
-                )
+            // MetricCard 的 chart 槽已水平零 padding，文本内容自行补回 18dp 水平边距
+            Column(Modifier.padding(horizontal = 18.dp)) {
+                // 利用卡片下部剩余空间显示电池温度（与 mem_usage 的 SWAP/ZRAM 区块同构）
+                if (batteryTemp != "---") {
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(thickness = 0.5.dp, color = CyberMuted.copy(alpha = 0.4f))
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(R.string.dashboard_metric_battery_temp),
+                        fontSize = 11.sp, color = TextSecondary.copy(alpha = 0.7f),
+                        letterSpacing = 0.5.sp, fontWeight = FontWeight.Normal
+                    )
+                    Spacer(Modifier.height(3.dp))
+                    Text(
+                        text = batteryTemp,
+                        fontSize = 16.sp, color = SuccessNeon,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
         }
 
